@@ -90,3 +90,14 @@ export const ENGINE_MODEL_SETTING = "higgsfield_model";
 export async function resolveEngineModel(env: Env): Promise<string> {
   return (await getSetting(env, ENGINE_MODEL_SETTING)) || env.HIGGSFIELD_MODEL || "nano-banana-pro";
 }
+
+export const OPENAI_KEY_SETTING = "openai_api_key";
+
+/** OpenAI credential: a Worker secret wins, otherwise the key saved from the app. */
+export async function resolveOpenAIKey(
+  env: Env,
+): Promise<{ key: string | null; source: EngineKeySource }> {
+  if (env.OPENAI_API_KEY) return { key: env.OPENAI_API_KEY, source: "secret" };
+  const stored = await getSetting(env, OPENAI_KEY_SETTING);
+  return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
+}

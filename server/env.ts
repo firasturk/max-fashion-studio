@@ -5,6 +5,7 @@ export interface Env {
   HIGGSFIELD_MODEL: string;
   HIGGSFIELD_BASE_URL: string;
   GEMINI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
   INVITE_CODE?: string;
   SESSION_SECRET?: string;
   WEBHOOK_TOKEN?: string;

@@ -33,7 +33,7 @@ app.post("/api/hooks/engine", async (c) => {
   const batch = c.req.query("batch");
   if (!c.env.WEBHOOK_TOKEN || !token || token !== c.env.WEBHOOK_TOKEN || !batch)
     return c.json({ ok: false }, 403);
-  c.executionCtx.waitUntil(advanceBatch(c.env, batch));
+  c.executionCtx.waitUntil(advanceBatch(c.env, batch, (p) => c.executionCtx.waitUntil(p)));
   return c.json({ ok: true });
 });
 

@@ -14,7 +14,8 @@ import { StudioError, errorMessage, isFatalEngineError } from "./errors";
 import { buildPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
-import { resolveEngineKey, resolveEngineModel } from "./settings";
+import { resolveEngineKey, resolveEngineModel, resolveOpenAIKey } from "./settings";
+import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
 interface BatchRow {
   id: string;
@@ -50,6 +51,7 @@ interface SourceRow {
 
 const SUBMIT_TIMEOUT_MS = 10 * 60 * 1000; // processing without a request id for this long = lost
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
+const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
 const MAX_AUTO_ATTEMPTS = 2; // one automatic retry for transient engine failures / off-centre
 
 export function keyLooksValid(key: string | null | undefined): key is string {
@@ -83,8 +85,24 @@ function webhookUrl(env: Env, batchId: string): string | undefined {
   return u.toString();
 }
 
-/** Advance one batch as far as it can go right now. Safe to call concurrently. */
-export async function advanceBatch(env: Env, batchId: string): Promise<void> {
+export type Background = (p: Promise<unknown>) => void;
+
+export async function makeOpenAIClient(env: Env, key?: string): Promise<OpenAIImageClient> {
+  const apiKey = key ?? (await resolveOpenAIKey(env)).key;
+  if (!apiKey)
+    throw new StudioError("OpenAI is not connected. Add the API key in Connection.", 428, true);
+  return new OpenAIImageClient(apiKey);
+}
+
+/**
+ * Advance one batch as far as it can go right now. Safe to call concurrently.
+ * `background` (waitUntil) lets synchronous engines finish after the HTTP response; without it they run inline.
+ */
+export async function advanceBatch(
+  env: Env,
+  batchId: string,
+  background?: Background,
+): Promise<void> {
   const batch = await first<BatchRow>(
     env.DB,
     "SELECT id, owner, config, state FROM batches WHERE id = ?",
@@ -96,7 +114,7 @@ export async function advanceBatch(env: Env, batchId: string): Promise<void> {
   await finalizeInFlight(env, batch, config);
 
   if (batch.state === "running") {
-    await submitNext(env, batch, config);
+    await submitNext(env, batch, config, background);
     await settleIdle(env, batch, config);
   }
 }
@@ -115,6 +133,17 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
     if (!task.request_id) {
       if (age > SUBMIT_TIMEOUT_MS)
         await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
+      continue;
+    }
+    if (task.request_id.startsWith("openai:")) {
+      // Synchronous engine: the background job finalises the task itself; only guard against a lost isolate.
+      if (age > OPENAI_TIMEOUT_MS)
+        await failTask(
+          env,
+          task,
+          "The OpenAI generation did not finish in time. Retry this image.",
+          task.output,
+        );
       continue;
     }
     if (!client) continue;
@@ -173,7 +202,17 @@ async function storeResult(
   task: TaskRow,
   url: string,
 ): Promise<void> {
-  const result = await downloadImage(url);
+  await storeResultBytes(env, batch, config, task, await downloadImage(url), url);
+}
+
+async function storeResultBytes(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+  result: ImageBytes,
+  url: string | null,
+): Promise<void> {
   const key = `${batch.owner}/${batch.id}/output/${task.id}/${uuid()}.png`;
   await env.BUCKET.put(key, result.bytes, {
     httpMetadata: { contentType: result.mime || "image/png" },
@@ -305,8 +344,23 @@ async function eligibleQueued(
   return out;
 }
 
-async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<void> {
-  if (!(await engineConfigured(env))) {
+async function submitNext(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  background?: Background,
+): Promise<void> {
+  const openai = isOpenAIModel(config.model);
+  if (openai) {
+    if (!(await resolveOpenAIKey(env)).key) {
+      await pauseBatch(
+        env,
+        batch.id,
+        "OpenAI is not connected. Add the API key in Connection and resume.",
+      );
+      return;
+    }
+  } else if (!(await engineConfigured(env))) {
     await pauseBatch(
       env,
       batch.id,
@@ -322,7 +376,7 @@ async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<vo
   const slots = concurrency(env) - (processing?.n ?? 0);
   if (slots <= 0) return;
   const candidates = await eligibleQueued(env, batch, config, slots);
-  const client = await makeClient(env, undefined, config.model);
+  const client = openai ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
     const token = uuid();
@@ -336,7 +390,9 @@ async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<vo
     );
     if (!claimed) continue;
     try {
-      const requestId = await submitTask(env, client, batch, config, task);
+      const requestId = client
+        ? await submitTask(env, client, batch, config, task)
+        : await submitOpenAITask(env, batch, config, task, token, background);
       await run(
         env.DB,
         "UPDATE tasks SET request_id = ?, updated = ? WHERE id = ? AND lease = ?",
@@ -470,6 +526,116 @@ async function submitTask(
     webhookUrl: webhookUrl(env, batch.id),
   };
   return client.submit(job);
+}
+
+/** Bytes of the inference reference for a source (downsized JPEG when available). */
+async function sourceBytes(env: Env, source: SourceRow): Promise<ImageBytes> {
+  const obj =
+    (await env.BUCKET.get(source.reference_key || source.key)) ??
+    (await env.BUCKET.get(source.key));
+  if (!obj) throw new StudioError("Original unavailable.", 404);
+  return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || source.mime };
+}
+
+async function outputBytes(env: Env, task: Pick<TaskRow, "output">): Promise<ImageBytes> {
+  if (!task.output) throw new StudioError("Result unavailable.", 404);
+  const obj = await env.BUCKET.get(task.output);
+  if (!obj) throw new StudioError("Result unavailable.", 404);
+  return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || "image/png" };
+}
+
+/**
+ * OpenAI edits are synchronous, so the generation runs as a background job that finalises
+ * the task itself. The returned request id marks the task as in flight for the finaliser.
+ */
+async function submitOpenAITask(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+  lease: string,
+  background?: Background,
+): Promise<string> {
+  const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
+  if (!source) throw new StudioError("Original unavailable.", 404);
+  const images: ImageBytes[] = [await sourceBytes(env, source)];
+  const roles = { identity: false, firstCard: false, revision: false };
+
+  if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
+    const firstCard = await first<TaskRow>(
+      env.DB,
+      "SELECT id, output, output_engine_url FROM tasks WHERE batch = ? AND source = ? AND card = 1",
+      batch.id,
+      task.source,
+    );
+    if (!firstCard?.output)
+      throw new StudioError(
+        "Generate lifestyle card 1 first to establish the model identity.",
+        409,
+      );
+    images.push(await outputBytes(env, firstCard));
+    roles.firstCard = true;
+  }
+  const edit = task.edit?.trim() ?? "";
+  if ((edit || task.recenter) && task.output) {
+    images.push(await outputBytes(env, task));
+    roles.revision = true;
+  }
+
+  let prompt = buildPrompt(config, task.card, edit, roles);
+  if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
+  await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
+
+  const requestId = `openai:${uuid()}`;
+  // Record the id before the slow call so a concurrent driver sees the task as in flight.
+  await run(
+    env.DB,
+    "UPDATE tasks SET request_id = ?, updated = ? WHERE id = ? AND lease = ?",
+    requestId,
+    now(),
+    task.id,
+    lease,
+  );
+
+  const client = await makeOpenAIClient(env);
+  const job = (async () => {
+    try {
+      const result = await client.edit({
+        model: config.model!,
+        prompt,
+        images,
+        aspectRatio: config.ratio,
+        size: config.size,
+      });
+      const claimed = await run(
+        env.DB,
+        "UPDATE tasks SET status = 'finalizing', updated = ? WHERE id = ? AND status = 'processing' AND request_id = ?",
+        now(),
+        task.id,
+        requestId,
+      );
+      if (!claimed) return;
+      await storeResultBytes(
+        env,
+        batch,
+        config,
+        { ...task, status: "finalizing", request_id: requestId },
+        result,
+        null,
+      );
+    } catch (e) {
+      await failTask(
+        env,
+        { ...task, status: "processing", request_id: requestId },
+        errorMessage(e, "Generation failed."),
+        task.output,
+      );
+      if (isFatalEngineError(e)) await pauseBatch(env, batch.id, errorMessage(e));
+    }
+  })();
+  if (background) background(job);
+  else await job;
+  return requestId;
 }
 
 /** A running batch goes back to idle when nothing is in flight and nothing else can start (e.g. cards 2-5 whose card 1 failed). */

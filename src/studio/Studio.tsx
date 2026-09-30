@@ -47,6 +47,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     model: "",
     configured: false,
     source: "none",
+    openai: "none",
     review: false,
   });
   const [tab, setTab] = useState("sources");
@@ -234,7 +235,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }
 
   async function start() {
-    if (!engine.configured) {
+    if (!engine.configured && engine.openai === "none") {
       setConnection(true);
       return;
     }
@@ -352,14 +353,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </nav>
         <div className="top-actions">
           <span className="engine-tag">
-            <Sparkles size={15} /> Higgsfield · {engine.model || "…"}
+            <Sparkles size={15} /> {engine.model || "…"}
           </span>
           <button
-            className={`connection-button ${engine.configured ? "connected" : ""}`}
+            className={`connection-button ${engine.configured || engine.openai !== "none" ? "connected" : ""}`}
             onClick={() => setConnection(true)}
           >
             <KeyRound size={16} />
-            {engine.configured ? "Connected" : "Not connected"}
+            {engine.configured || engine.openai !== "none" ? "Connected" : "Not connected"}
           </button>
           <button className="user-button" onClick={() => void signOut()} title={user.email}>
             <LogOut size={15} /> {user.name}
@@ -591,7 +592,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                             ) : (
                               <KeyRound size={17} />
                             )}
-                            {engine.configured ? startLabel : "Connect & generate"}
+                            {engine.configured || engine.openai !== "none"
+                              ? startLabel
+                              : "Connect & generate"}
                           </button>
                         )}
                         <button

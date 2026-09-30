@@ -3,7 +3,14 @@ import { z } from "zod";
 import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
-import { advanceBatch, engineConfigured, makeClient, keyLooksValid } from "./engine";
+import {
+  advanceBatch,
+  engineConfigured,
+  makeClient,
+  makeOpenAIClient,
+  keyLooksValid,
+} from "./engine";
+import { OPENAI_MODELS } from "./openai";
 import {
   resolveEngineKey,
   resolveEngineModel,
@@ -12,6 +19,8 @@ import {
   deleteSetting,
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
+  OPENAI_KEY_SETTING,
+  resolveOpenAIKey,
 } from "./settings";
 import {
   configSchema,
@@ -93,9 +102,28 @@ studioRoutes.get("/state", async (c) => {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
       source: engineKey.source,
+      openai: (await resolveOpenAIKey(c.env)).source,
       review: !!c.env.GEMINI_API_KEY,
     },
   });
+});
+
+/** Save an OpenAI key from the app after checking it against the Models endpoint. */
+studioRoutes.post("/engine/openai-key", async (c) => {
+  if (c.env.OPENAI_API_KEY)
+    throw new StudioError("The OpenAI key is managed as a Worker secret on this deployment.", 409);
+  const { key } = await body(c, z.object({ key: z.string().trim().min(10).max(400) }));
+  const check = await (await makeOpenAIClient(c.env, key)).verify();
+  if (!check.ok) throw new StudioError(`OpenAI rejected this key: ${check.message}`, 400);
+  await setSetting(c.env, OPENAI_KEY_SETTING, key);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/openai-key", async (c) => {
+  await deleteSetting(c.env, OPENAI_KEY_SETTING);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true });
 });
 
 /** Known image models on the Higgsfield API. Each is probed (no generation) and cached for an hour. */
@@ -111,7 +139,6 @@ const MODEL_CANDIDATES: { slug: string; name: string }[] = [
 const MODELS_CACHE = "engine_models_cache";
 
 studioRoutes.get("/engine/models", async (c) => {
-  if (!(await engineConfigured(c.env))) return c.json({ models: [] });
   const refresh = c.req.query("refresh") === "1";
   if (!refresh) {
     const cached = await getSetting(c.env, MODELS_CACHE);
@@ -121,19 +148,46 @@ studioRoutes.get("/engine/models", async (c) => {
         return c.json({ models: parsed.models, cached: true });
     }
   }
-  const client = await makeClient(c.env);
-  const models = await Promise.all(
-    MODEL_CANDIDATES.map(async (m) => {
-      try {
-        const r = await client.probeModel(m.slug);
-        const code = r.detail.trim().toLowerCase();
-        const enabled = r.status !== 404 && code !== "model_not_found" && code !== "model_disabled";
-        return { ...m, enabled, reason: enabled ? "" : code || `HTTP ${r.status}` };
-      } catch (e) {
-        return { ...m, enabled: false, reason: errorMessage(e) };
+  const models: { slug: string; name: string; enabled: boolean; reason: string }[] = [];
+  const openaiKey = (await resolveOpenAIKey(c.env)).key;
+  if (openaiKey) {
+    try {
+      const oa = await makeOpenAIClient(c.env, openaiKey);
+      for (const m of OPENAI_MODELS) {
+        const ok = await oa.hasModel(m.slug);
+        models.push({
+          ...m,
+          enabled: ok,
+          reason: ok ? "" : "not available on this OpenAI account",
+        });
       }
-    }),
-  );
+    } catch (e) {
+      for (const m of OPENAI_MODELS) models.push({ ...m, enabled: false, reason: errorMessage(e) });
+    }
+  } else {
+    for (const m of OPENAI_MODELS)
+      models.push({ ...m, enabled: false, reason: "add an OpenAI key" });
+  }
+  if (await engineConfigured(c.env)) {
+    const client = await makeClient(c.env);
+    const probed = await Promise.all(
+      MODEL_CANDIDATES.map(async (m) => {
+        try {
+          const r = await client.probeModel(m.slug);
+          const code = r.detail.trim().toLowerCase();
+          const enabled =
+            r.status !== 404 && code !== "model_not_found" && code !== "model_disabled";
+          return { ...m, enabled, reason: enabled ? "" : code || `HTTP ${r.status}` };
+        } catch (e) {
+          return { ...m, enabled: false, reason: errorMessage(e) };
+        }
+      }),
+    );
+    models.push(...probed);
+  } else {
+    for (const m of MODEL_CANDIDATES)
+      models.push({ ...m, enabled: false, reason: "add a Higgsfield key" });
+  }
   // Never cache a scan in which nothing answered (network trouble), so the next open re-probes.
   if (models.some((m) => m.enabled))
     await setSetting(c.env, MODELS_CACHE, JSON.stringify({ at: now(), models }));
@@ -186,6 +240,13 @@ studioRoutes.get("/engine/probe", async (c) => {
 studioRoutes.post("/engine/model", async (c) => {
   const { model } = await body(c, z.object({ model: z.string().trim().min(1).max(120) }));
   if (!/^[\w./-]+$/.test(model)) throw new StudioError("Invalid model slug.");
+  if (OPENAI_MODELS.some((m) => m.slug === model)) {
+    const oa = await makeOpenAIClient(c.env);
+    if (!(await oa.hasModel(model)))
+      throw new StudioError(`"${model}" is not available on your OpenAI account.`);
+    await setSetting(c.env, ENGINE_MODEL_SETTING, model);
+    return c.json({ ok: true, message: `Model "${model}" is available.` });
+  }
   const probe = await (await makeClient(c.env)).probeModel(model);
   const code = probe.detail.trim().toLowerCase();
   if (probe.status === 404 || code === "model_not_found")
@@ -407,7 +468,7 @@ studioRoutes.post("/start", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id);
+  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -426,7 +487,7 @@ studioRoutes.post("/pause", async (c) => {
 studioRoutes.post("/tick", async (c) => {
   const { batch } = await body(c, batchRef);
   const b = await ownedBatch(c.env, c.get("user"), batch);
-  await advanceBatch(c.env, b.id);
+  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -445,7 +506,7 @@ studioRoutes.post("/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id);
+  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -470,7 +531,7 @@ studioRoutes.post("/revise", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id);
+  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -505,6 +566,6 @@ studioRoutes.post("/task/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id);
+  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });

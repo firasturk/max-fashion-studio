@@ -9,7 +9,12 @@ import {
   type Config,
 } from "../shared/config";
 
-const base: Config = { ...DEFAULT_CONFIG, mode: "1", input: "mannequin", category: "Jeans & Jeggings" };
+const base: Config = {
+  ...DEFAULT_CONFIG,
+  mode: "1",
+  input: "mannequin",
+  category: "Jeans & Jeggings",
+};
 
 describe("prompts", () => {
   it("mode 1: lifestyle first, studio cards 2-5 tied to card 1, fabric last", () => {
@@ -30,7 +35,9 @@ describe("prompts", () => {
     expect(buildPrompt({ ...base, mode: "2", input: "model" }, 1)).toContain(
       "DIFFERENT photorealistic adult model face",
     );
-    expect(buildPrompt({ ...base, mode: "3", input: "model" }, 2)).toContain("New pose: Three-quarter view");
+    expect(buildPrompt({ ...base, mode: "3", input: "model" }, 2)).toContain(
+      "New pose: Three-quarter view",
+    );
     const p4 = buildPrompt({ ...base, mode: "4", input: "model", count: 3 }, 2);
     expect(p4).toContain("Replace ONLY the background");
     expect(p4).toContain("New background for this image: Modern glass-and-concrete");
@@ -48,7 +55,8 @@ describe("prompts", () => {
     expect(RECENTER_SUFFIX).toMatch(/x=50%/);
   });
   it("builds a prompt for every category", () => {
-    for (const category of CATEGORIES) expect(buildPrompt({ ...base, category }, 1)).toContain(category);
+    for (const category of CATEGORIES)
+      expect(buildPrompt({ ...base, category }, 1)).toContain(category);
   });
 });
 

@@ -73,6 +73,7 @@ export interface StateResponse {
     model: string;
     configured: boolean;
     source: "secret" | "stored" | "none";
+    openai: "secret" | "stored" | "none";
     review: boolean;
   };
 }

@@ -14,6 +14,7 @@ export interface EngineInfo {
   model: string;
   configured: boolean;
   source: "secret" | "stored" | "none";
+  openai: "secret" | "stored" | "none";
   review: boolean;
 }
 
@@ -32,6 +33,8 @@ export default function ConnectionDialog({
   const [saving, setSaving] = useState(false);
   const [key, setKey] = useState("");
   const [model, setModel] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [savingOpenai, setSavingOpenai] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -58,6 +61,39 @@ export default function ConnectionDialog({
       setResult({ ok: false, message: (e as Error).message });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveOpenai() {
+    setSavingOpenai(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/openai-key", {
+        key: openaiKey,
+      });
+      setOpenaiKey("");
+      setResult(r);
+      await onChanged();
+      toast.success("OpenAI key saved and verified.");
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSavingOpenai(false);
+    }
+  }
+
+  async function removeOpenai() {
+    if (
+      !window.confirm(
+        "Remove the saved OpenAI key? GPT Image models stop until a new key is added.",
+      )
+    )
+      return;
+    try {
+      await del("/api/studio/engine/openai-key");
+      setResult(null);
+      await onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -168,6 +204,66 @@ export default function ConnectionDialog({
         </button>
         {result && <p className={result.ok ? "success-note" : "image-error"}>{result.message}</p>}
 
+        <div className="qa-heading" style={{ marginTop: 12 }}>
+          <KeyRound size={18} />
+          <strong>OpenAI (GPT Image 2.5 Sunburst / Flare)</strong>
+        </div>
+        {engine.openai !== "none" ? (
+          <div className="success-note">
+            <Check size={19} />
+            {engine.openai === "secret"
+              ? "An OpenAI key is configured as a server secret."
+              : "An OpenAI key is saved on the server."}
+          </div>
+        ) : (
+          <p className="quality-note">
+            Add an OpenAI API key to use GPT Image 2.5 Sunburst. Create it at{" "}
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-link"
+            >
+              platform.openai.com/api-keys
+            </a>{" "}
+            with billing enabled.
+          </p>
+        )}
+        {engine.openai !== "secret" && (
+          <div className="footer-actions">
+            <input
+              id="openai-key"
+              type="password"
+              autoComplete="off"
+              placeholder="sk-..."
+              aria-label="OpenAI API key"
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value.trim())}
+            />
+            <button
+              className="primary"
+              onClick={() => void saveOpenai()}
+              disabled={savingOpenai || !openaiKey}
+            >
+              {savingOpenai ? (
+                <LoaderCircle className="spinning" size={17} />
+              ) : (
+                <KeyRound size={17} />
+              )}
+              {engine.openai === "stored" ? "Replace" : "Save"}
+            </button>
+            {engine.openai === "stored" && (
+              <button
+                className="secondary danger"
+                onClick={() => void removeOpenai()}
+                aria-label="Remove OpenAI key"
+              >
+                <Trash2 size={17} />
+              </button>
+            )}
+          </div>
+        )}
+
         <label htmlFor="engine-model" className="field-label">
           Image model slug
         </label>
@@ -184,6 +280,9 @@ export default function ConnectionDialog({
             <option value="flux-2-pro" />
             <option value="flux-2-max" />
             <option value="qwen-image-edit" />
+            <option value="gpt-image-2.5-sunburst" />
+            <option value="gpt-image-2.5-flare" />
+            <option value="gpt-image-2" />
           </datalist>
           <button
             className="secondary"
