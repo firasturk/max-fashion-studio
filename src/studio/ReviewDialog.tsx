@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { QA, Source, Task } from "@shared/types";
+import Zoomable from "./Zoomable";
 
 export default function ReviewDialog({
   task,
