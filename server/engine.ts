@@ -14,7 +14,7 @@ import { StudioError, errorMessage, isFatalEngineError } from "./errors";
 import { buildPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
-import { resolveEngineKey } from "./settings";
+import { resolveEngineKey, resolveEngineModel } from "./settings";
 
 interface BatchRow {
   id: string;
@@ -67,7 +67,7 @@ export async function makeClient(env: Env, key?: string): Promise<HiggsfieldClie
   return new HiggsfieldClient({
     apiKey,
     baseUrl: env.HIGGSFIELD_BASE_URL || "https://api.higgsfield.ai",
-    model: env.HIGGSFIELD_MODEL || "nano-banana-pro",
+    model: await resolveEngineModel(env),
   });
 }
 

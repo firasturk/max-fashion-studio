@@ -52,6 +52,25 @@ async function readError(r: Response): Promise<string> {
 /** Map an HTTP failure from the engine to a user-facing error. */
 export async function engineError(r: Response): Promise<StudioError> {
   const detail = await readError(r);
+  const code = detail.trim().toLowerCase();
+  if (code === "not_enough_credits")
+    return new StudioError(
+      "Higgsfield Cloud account has no credits. Top up at cloud.higgsfield.ai and resume.",
+      502,
+      true,
+    );
+  if (code === "model_disabled")
+    return new StudioError(
+      "This model is disabled on your Higgsfield Cloud account. Pick another model in Connection.",
+      502,
+      true,
+    );
+  if (code === "model_not_found")
+    return new StudioError(
+      "This model slug does not exist on Higgsfield. Pick another model in Connection.",
+      502,
+      true,
+    );
   if (r.status === 401 || r.status === 403)
     return new StudioError(
       `Higgsfield rejected the API key (${r.status}). ${detail}`.trim(),
@@ -68,7 +87,7 @@ export async function engineError(r: Response): Promise<StudioError> {
     return new StudioError("Higgsfield rate limit reached. Pause and retry later.", 429, true);
   if (r.status === 404)
     return new StudioError(
-      `Higgsfield endpoint not found (${r.status}). Check the HIGGSFIELD_MODEL slug. ${detail}`.trim(),
+      `Higgsfield endpoint not found (${r.status}). ${detail}`.trim(),
       502,
       true,
     );
@@ -128,6 +147,10 @@ export class HiggsfieldClient {
       body: JSON.stringify(this.buildInput(job)),
       signal: AbortSignal.timeout(60_000),
     });
+    if (r.status === 400 && job.size.toLowerCase() !== "2k") {
+      const detail = await r.clone().text();
+      if (/resolution/i.test(detail)) return this.submit({ ...job, size: "2K" });
+    }
     if (!r.ok) throw await engineError(r);
     const d = (await r.json()) as { request_id?: string };
     if (!d.request_id) throw new StudioError("Higgsfield did not return a request id.", 502);
@@ -203,6 +226,17 @@ export class HiggsfieldClient {
     });
     if (!put.ok) throw new StudioError(`Reference upload failed (${put.status}).`, 502);
     return d.public_url;
+  }
+
+  /** Diagnostic: POST an empty body to a model slug and report how the API answers (no generation is started). */
+  async probeModel(slug: string, body = "{}"): Promise<{ status: number; detail: string }> {
+    const r = await this.fetchImpl(this.url(slug), {
+      method: "POST",
+      headers: this.headers(),
+      body,
+      signal: AbortSignal.timeout(20_000),
+    });
+    return { status: r.status, detail: await readError(r) };
   }
 
   /** Cheap credential check: an authenticated GET on a random request id returns 404, an unauthenticated one 401/403. */

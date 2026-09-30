@@ -31,6 +31,8 @@ export default function ConnectionDialog({
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [key, setKey] = useState("");
+  const [model, setModel] = useState("");
+  const [savingModel, setSavingModel] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   async function verify() {
@@ -56,6 +58,21 @@ export default function ConnectionDialog({
       setResult({ ok: false, message: (e as Error).message });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveModel() {
+    setSavingModel(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/model", { model });
+      setResult(r);
+      setModel("");
+      await onChanged();
+      toast.success("Model saved.");
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSavingModel(false);
     }
   }
 
@@ -150,6 +167,37 @@ export default function ConnectionDialog({
           Test connection
         </button>
         {result && <p className={result.ok ? "success-note" : "image-error"}>{result.message}</p>}
+
+        <label htmlFor="engine-model" className="field-label">
+          Image model slug
+        </label>
+        <div className="footer-actions">
+          <input
+            id="engine-model"
+            placeholder={engine.model}
+            value={model}
+            onChange={(e) => setModel(e.target.value.trim())}
+            list="engine-models"
+          />
+          <datalist id="engine-models">
+            <option value="nano-banana-pro" />
+            <option value="flux-2-pro" />
+            <option value="flux-2-max" />
+            <option value="qwen-image-edit" />
+          </datalist>
+          <button
+            className="secondary"
+            onClick={() => void saveModel()}
+            disabled={savingModel || !model || !engine.configured}
+          >
+            {savingModel ? <LoaderCircle className="spinning" size={17} /> : <Check size={17} />}
+            Use model
+          </button>
+        </div>
+        <p className="quality-note">
+          The slug is checked with Higgsfield before it is saved. Models that are disabled on your
+          account are rejected.
+        </p>
 
         <div className="connection-details">
           <span>Image model</span>

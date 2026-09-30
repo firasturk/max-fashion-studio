@@ -83,3 +83,10 @@ export async function resolveEngineKey(
   const stored = await getSetting(env, ENGINE_KEY_SETTING);
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
+
+export const ENGINE_MODEL_SETTING = "higgsfield_model";
+
+/** The model slug: saved from the app when present, otherwise the HIGGSFIELD_MODEL variable. */
+export async function resolveEngineModel(env: Env): Promise<string> {
+  return (await getSetting(env, ENGINE_MODEL_SETTING)) || env.HIGGSFIELD_MODEL || "nano-banana-pro";
+}

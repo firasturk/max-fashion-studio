@@ -4,7 +4,14 @@ import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
 import { advanceBatch, engineConfigured, makeClient, keyLooksValid } from "./engine";
-import { resolveEngineKey, setSetting, deleteSetting, ENGINE_KEY_SETTING } from "./settings";
+import {
+  resolveEngineKey,
+  resolveEngineModel,
+  setSetting,
+  deleteSetting,
+  ENGINE_KEY_SETTING,
+  ENGINE_MODEL_SETTING,
+} from "./settings";
 import {
   configSchema,
   validateConfig,
@@ -73,7 +80,7 @@ studioRoutes.get("/state", async (c) => {
     user,
     batches,
     engine: {
-      model: c.env.HIGGSFIELD_MODEL || "nano-banana-pro",
+      model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
       source: engineKey.source,
       review: !!c.env.GEMINI_API_KEY,
@@ -104,6 +111,39 @@ studioRoutes.post("/engine/key", async (c) => {
   if (!check.ok) throw new StudioError(`Higgsfield rejected this key: ${check.message}`, 400);
   await setSetting(c.env, ENGINE_KEY_SETTING, key);
   return c.json({ ok: true, message: check.message });
+});
+
+/** Diagnostic used to find the right model slug: reports the API's answer for a slug without generating. */
+studioRoutes.get("/engine/probe", async (c) => {
+  const slug = (c.req.query("slug") ?? "").trim();
+  if (!slug || slug.length > 120 || !/^[\w./-]+$/.test(slug))
+    throw new StudioError("Invalid slug.");
+  const raw = c.req.query("body");
+  let body = "{}";
+  if (raw) {
+    try {
+      body = JSON.stringify(JSON.parse(raw));
+    } catch {
+      throw new StudioError("Probe body must be JSON.");
+    }
+  }
+  return c.json(await (await makeClient(c.env)).probeModel(slug, body));
+});
+
+/** Save the model slug after checking that Higgsfield knows it and has it enabled. */
+studioRoutes.post("/engine/model", async (c) => {
+  const { model } = await body(c, z.object({ model: z.string().trim().min(1).max(120) }));
+  if (!/^[\w./-]+$/.test(model)) throw new StudioError("Invalid model slug.");
+  const probe = await (await makeClient(c.env)).probeModel(model);
+  const code = probe.detail.trim().toLowerCase();
+  if (probe.status === 404 || code === "model_not_found")
+    throw new StudioError(`Higgsfield does not know a model called "${model}".`);
+  if (code === "model_disabled")
+    throw new StudioError(`"${model}" exists but is disabled on your Higgsfield account.`);
+  await setSetting(c.env, ENGINE_MODEL_SETTING, model);
+  const note =
+    code === "not_enough_credits" ? " Note: your Higgsfield account has no credits yet." : "";
+  return c.json({ ok: true, message: `Model "${model}" is available.${note}` });
 });
 
 studioRoutes.delete("/engine/key", async (c) => {
