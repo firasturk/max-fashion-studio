@@ -78,12 +78,12 @@ export default function ReviewDialog({
             </div>
             <div className="review-photo">
               {task && (
-                <img
+                <Zoomable
                   src={showOriginal ? originalUrl : resultUrl}
                   alt={showOriginal ? "Original product photo" : "Generated product photo"}
+                  overlay={<div className="center-line" />}
                 />
               )}
-              <div className="center-line" />
             </div>
           </div>
           <div className="revision-panel">
