@@ -1,0 +1,15 @@
+# Copy to .dev.vars for local development. Never commit real values.
+# Higgsfield Cloud API credentials from https://cloud.higgsfield.ai (format KEY_ID:KEY_SECRET)
+HIGGSFIELD_API_KEY=
+# Model slug on api.higgsfield.ai used for image generation (check the model page in the Higgsfield console)
+HIGGSFIELD_MODEL=nano-banana-pro
+# Optional: Google AI Studio key for automated review (centering + product fidelity). Leave empty to skip automated review.
+GEMINI_API_KEY=
+# Invite code required to create an account. Share only with the team.
+INVITE_CODE=change-me
+# Long random string used to sign session cookies.
+SESSION_SECRET=change-me-to-a-long-random-string
+# Optional: token protecting the Higgsfield webhook endpoint. Random string.
+WEBHOOK_TOKEN=
+# Optional: public base URL of the deployed worker, used to build the webhook URL (e.g. https://studio.example.workers.dev)
+PUBLIC_BASE_URL=
