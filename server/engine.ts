@@ -14,6 +14,7 @@ import { StudioError, errorMessage, isFatalEngineError } from "./errors";
 import { buildPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
+import { resolveEngineKey } from "./settings";
 
 interface BatchRow {
   id: string;
@@ -51,19 +52,20 @@ const SUBMIT_TIMEOUT_MS = 10 * 60 * 1000; // processing without a request id for
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const MAX_AUTO_ATTEMPTS = 2; // one automatic retry for transient engine failures / off-centre
 
-export function engineConfigured(env: Env): boolean {
-  return !!env.HIGGSFIELD_API_KEY && /^[^:\s]+:[^:\s]+$/.test(env.HIGGSFIELD_API_KEY);
+export function keyLooksValid(key: string | null | undefined): key is string {
+  return !!key && /^[^:\s]+:[^:\s]+$/.test(key);
 }
 
-export function makeClient(env: Env): HiggsfieldClient {
-  if (!env.HIGGSFIELD_API_KEY)
-    throw new StudioError(
-      "Higgsfield is not connected. Set HIGGSFIELD_API_KEY as a secret.",
-      428,
-      true,
-    );
+export async function engineConfigured(env: Env): Promise<boolean> {
+  return keyLooksValid((await resolveEngineKey(env)).key);
+}
+
+export async function makeClient(env: Env, key?: string): Promise<HiggsfieldClient> {
+  const apiKey = key ?? (await resolveEngineKey(env)).key;
+  if (!apiKey)
+    throw new StudioError("Higgsfield is not connected. Add the API key in Connection.", 428, true);
   return new HiggsfieldClient({
-    apiKey: env.HIGGSFIELD_API_KEY,
+    apiKey,
     baseUrl: env.HIGGSFIELD_BASE_URL || "https://api.higgsfield.ai",
     model: env.HIGGSFIELD_MODEL || "nano-banana-pro",
   });
@@ -102,7 +104,7 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
     batch.id,
   );
   if (!inflight.length) return;
-  const client = engineConfigured(env) ? makeClient(env) : null;
+  const client = (await engineConfigured(env)) ? await makeClient(env) : null;
 
   for (const task of inflight) {
     const age = now() - (task.leased_at ?? now());
@@ -300,11 +302,11 @@ async function eligibleQueued(
 }
 
 async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<void> {
-  if (!engineConfigured(env)) {
+  if (!(await engineConfigured(env))) {
     await pauseBatch(
       env,
       batch.id,
-      "Higgsfield is not connected. Set HIGGSFIELD_API_KEY as a secret and resume.",
+      "Higgsfield is not connected. Add the API key in Connection and resume.",
     );
     return;
   }
@@ -316,7 +318,7 @@ async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<vo
   const slots = concurrency(env) - (processing?.n ?? 0);
   if (slots <= 0) return;
   const candidates = await eligibleQueued(env, batch, config, slots);
-  const client = makeClient(env);
+  const client = await makeClient(env);
 
   for (const task of candidates) {
     const token = uuid();

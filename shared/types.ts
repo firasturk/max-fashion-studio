@@ -56,7 +56,12 @@ export interface Task {
 export interface StateResponse {
   user: User;
   batches: Batch[];
-  engine: { model: string; configured: boolean; review: boolean };
+  engine: {
+    model: string;
+    configured: boolean;
+    source: "secret" | "stored" | "none";
+    review: boolean;
+  };
 }
 
 export interface BatchResponse {

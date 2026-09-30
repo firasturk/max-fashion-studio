@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
-import { advanceBatch, engineConfigured, makeClient } from "./engine";
+import { advanceBatch, engineConfigured, makeClient, keyLooksValid } from "./engine";
+import { resolveEngineKey, setSetting, deleteSetting, ENGINE_KEY_SETTING } from "./settings";
 import {
   configSchema,
   validateConfig,
@@ -67,25 +68,47 @@ studioRoutes.get("/state", async (c) => {
     "SELECT id, name, config, state, last_error, created, updated FROM batches WHERE owner = ? ORDER BY created DESC LIMIT 200",
     user.id,
   );
+  const engineKey = await resolveEngineKey(c.env);
   return c.json({
     user,
     batches,
     engine: {
       model: c.env.HIGGSFIELD_MODEL || "nano-banana-pro",
-      configured: engineConfigured(c.env),
+      configured: keyLooksValid(engineKey.key),
+      source: engineKey.source,
       review: !!c.env.GEMINI_API_KEY,
     },
   });
 });
 
 studioRoutes.get("/engine/verify", async (c) => {
-  if (!engineConfigured(c.env))
-    return c.json({ ok: false, message: "HIGGSFIELD_API_KEY is not set." });
+  if (!(await engineConfigured(c.env)))
+    return c.json({ ok: false, message: "No Higgsfield API key is configured." });
   try {
-    return c.json(await makeClient(c.env).verify());
+    return c.json(await (await makeClient(c.env)).verify());
   } catch (e) {
     return c.json({ ok: false, message: errorMessage(e) });
   }
+});
+
+/** Save the engine key from the app. It is verified against Higgsfield first and stored encrypted. */
+studioRoutes.post("/engine/key", async (c) => {
+  if (c.env.HIGGSFIELD_API_KEY)
+    throw new StudioError("The key is managed as a Worker secret on this deployment.", 409);
+  const { key } = await body(c, z.object({ key: z.string().trim().min(3).max(500) }));
+  if (!keyLooksValid(key))
+    throw new StudioError(
+      "Enter the key as KEY_ID:KEY_SECRET (both parts from cloud.higgsfield.ai).",
+    );
+  const check = await (await makeClient(c.env, key)).verify();
+  if (!check.ok) throw new StudioError(`Higgsfield rejected this key: ${check.message}`, 400);
+  await setSetting(c.env, ENGINE_KEY_SETTING, key);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/key", async (c) => {
+  await deleteSetting(c.env, ENGINE_KEY_SETTING);
+  return c.json({ ok: true });
 });
 
 const newBatch = z.object({ name: z.string().max(100).optional(), config: configSchema });
@@ -282,8 +305,8 @@ async function body<T extends z.ZodTypeAny>(
 studioRoutes.post("/start", async (c) => {
   const { batch } = await body(c, batchRef);
   const b = await ownedBatch(c.env, c.get("user"), batch);
-  if (!engineConfigured(c.env))
-    throw new StudioError("Higgsfield is not connected. Set HIGGSFIELD_API_KEY as a secret.", 428);
+  if (!(await engineConfigured(c.env)))
+    throw new StudioError("Higgsfield is not connected. Add the API key in Connection.", 428);
   await run(
     c.env.DB,
     "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",

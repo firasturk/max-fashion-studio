@@ -41,7 +41,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [pending, setPending] = useState<Pending[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [engine, setEngine] = useState<EngineInfo>({ model: "", configured: false, review: false });
+  const [engine, setEngine] = useState<EngineInfo>({
+    model: "",
+    configured: false,
+    source: "none",
+    review: false,
+  });
   const [tab, setTab] = useState("sources");
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -551,7 +556,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </footer>
       </main>
 
-      <ConnectionDialog open={connection} engine={engine} onClose={() => setConnection(false)} />
+      <ConnectionDialog
+        open={connection}
+        engine={engine}
+        onClose={() => setConnection(false)}
+        onChanged={loadState}
+      />
       <ReviewDialog
         task={selected}
         source={selectedSource}

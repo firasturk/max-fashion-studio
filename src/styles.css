@@ -1266,3 +1266,10 @@ input[type="checkbox"] {
 .auth-card .max-logo {
   align-self: flex-start;
 }
+.connection-dialog input[type="password"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}

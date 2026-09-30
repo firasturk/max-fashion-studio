@@ -8,7 +8,7 @@ import type { User } from "@shared/types";
 
 const SESSION_COOKIE = "studio_session";
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 100_000; // Cloudflare Workers cap PBKDF2 at 100k iterations
 
 const enc = new TextEncoder();
 
