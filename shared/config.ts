@@ -17,6 +17,8 @@ export const configSchema = z.object({
   model: z.string().max(120).optional(),
   /** Images per original for modes 2-4. Mode 1 always produces six. */
   count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
+  backdrop: z.string().max(200).default("warm beige seamless paper backdrop"),
   identity: z.string().max(160).optional(),
   modelDescription: z.string().max(1000),
   center: z.boolean(),
@@ -217,6 +219,7 @@ export const DEFAULT_CONFIG: Config = {
   ratio: "2:3",
   size: "2K",
   count: 3,
+  backdrop: "warm beige seamless paper backdrop",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,
 };

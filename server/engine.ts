@@ -336,8 +336,19 @@ async function eligibleQueued(
         batch.id,
         t.source,
       );
-      if (firstCard?.output && !["processing", "finalizing", "queued"].includes(firstCard.status))
-        out.push(t);
+      const ready = (r: { status: string; output: string | null } | null) =>
+        !!r?.output && !["processing", "finalizing", "queued"].includes(r.status);
+      if (!ready(firstCard)) continue;
+      if (t.card > 2) {
+        const studioCard = await first<{ status: string; output: string | null }>(
+          env.DB,
+          "SELECT status, output FROM tasks WHERE batch = ? AND source = ? AND card = 2",
+          batch.id,
+          t.source,
+        );
+        if (!ready(studioCard)) continue;
+      }
+      out.push(t);
     }
     if (out.length >= limit) break;
   }
@@ -487,7 +498,7 @@ async function submitTask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const imageUrls = [await sourceEngineUrl(env, client, source)];
-  const roles = { identity: false, firstCard: false, revision: false };
+  const roles = { identity: false, firstCard: false, studio: false, revision: false };
 
   if (config.mode === "3" && config.identity) {
     imageUrls.push(await identityEngineUrl(env, client, batch.owner, config.identity));
@@ -507,6 +518,18 @@ async function submitTask(
       );
     imageUrls.push(await outputEngineUrl(env, client, firstCard));
     roles.firstCard = true;
+    if (task.card > 2) {
+      const studioCard = await first<TaskRow>(
+        env.DB,
+        "SELECT id, output, output_engine_url FROM tasks WHERE batch = ? AND source = ? AND card = 2",
+        batch.id,
+        task.source,
+      );
+      if (studioCard?.output) {
+        imageUrls.push(await outputEngineUrl(env, client, studioCard));
+        roles.studio = true;
+      }
+    }
   }
   const edit = task.edit?.trim() ?? "";
   if ((edit || task.recenter) && task.output) {
@@ -559,7 +582,7 @@ async function submitOpenAITask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
-  const roles = { identity: false, firstCard: false, revision: false };
+  const roles = { identity: false, firstCard: false, studio: false, revision: false };
 
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
@@ -575,6 +598,18 @@ async function submitOpenAITask(
       );
     images.push(await outputBytes(env, firstCard));
     roles.firstCard = true;
+    if (task.card > 2) {
+      const studioCard = await first<TaskRow>(
+        env.DB,
+        "SELECT id, output FROM tasks WHERE batch = ? AND source = ? AND card = 2",
+        batch.id,
+        task.source,
+      );
+      if (studioCard?.output) {
+        images.push(await outputBytes(env, studioCard));
+        roles.studio = true;
+      }
+    }
   }
   const edit = task.edit?.trim() ?? "";
   if ((edit || task.recenter) && task.output) {

@@ -104,6 +104,22 @@ export default function CreativePanel({
         </>
       )}
 
+      {config.mode === "1" && (
+        <>
+          <label className="field-label" htmlFor="backdrop">
+            Studio backdrop (cards 2-5)
+          </label>
+          <input
+            id="backdrop"
+            className="text-input"
+            disabled={locked}
+            value={config.backdrop}
+            onChange={(e) => onChange({ backdrop: e.target.value })}
+            placeholder="warm beige seamless paper backdrop"
+          />
+        </>
+      )}
+
       {(config.mode === "1" || config.mode === "2") && (
         <>
           <label className="field-label" htmlFor="model-direction">

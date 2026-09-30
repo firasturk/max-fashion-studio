@@ -24,12 +24,21 @@ describe("prompts", () => {
     expect(p1).toContain("lifestyle location image");
     expect(p1).toContain("denim wash, fading");
     expect(p1).toContain("exactly ONE model");
-    const p3 = buildPrompt(base, 3, "", { firstCard: true });
-    expect(p3).toContain("studio backdrop");
+    const p3 = buildPrompt(base, 3, "", { firstCard: true, studio: true });
+    expect(p3).toContain("warm beige seamless paper backdrop");
+    expect(p3).toContain("identical lighting as card 2");
     expect(p3).toContain("same model face, hair, body");
     expect(p3).toContain("Image 2 is card 1");
-    expect(buildPrompt(base, 6)).toContain("fabric macro close-up");
-    expect(buildPrompt(base, 6)).not.toContain("exactly ONE model");
+    expect(p3).toContain("Image 3 is card 2");
+    expect(buildPrompt(base, 4)).toContain("SEATED");
+    expect(buildPrompt({ ...base, backdrop: "light grey backdrop" }, 2)).toContain(
+      "light grey backdrop",
+    );
+    const p6 = buildPrompt(base, 6);
+    expect(p6).toContain("FABRIC ONLY");
+    expect(p6).toContain("NO person, mannequin");
+    expect(p6).not.toContain("Model direction");
+    expect(p6).not.toContain("exactly ONE model");
   });
   it("mode 2 changes the face, mode 3 changes the pose, mode 4 only the background", () => {
     expect(buildPrompt({ ...base, mode: "2", input: "model" }, 1)).toContain(

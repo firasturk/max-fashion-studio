@@ -8,14 +8,26 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
 
-const MODE1_SHOTS = [
-  "Card 1: lifestyle location image, full-length front view, relaxed standing pose.",
-  "Card 2: studio backdrop, clean seamless background, professional studio lighting, full-length front view.",
-  "Card 3: studio backdrop, same lighting, three-quarter view showing the garment side.",
-  "Card 4: studio backdrop, same lighting, back view with the garment fully visible.",
-  "Card 5: studio backdrop, same lighting, detail-focused mid-length shot of the garment.",
-  "Card 6: fabric macro close-up of the actual material. Show the source weave, stitching and texture; no person.",
-];
+const STUDIO_LIGHT =
+  "Professional studio: soft, even key light from the front-left with gentle fill, no harsh shadows, floor the same colour as the backdrop, no props, no windows.";
+
+/** Card text for mode 1. Cards 2-5 share one backdrop and lighting; the studio set is built from the same model as card 1. */
+function mode1Shot(card: number, backdrop: string): string {
+  switch (card) {
+    case 1:
+      return "Card 1: lifestyle location image, full-length front view, relaxed standing pose.";
+    case 2:
+      return `Card 2: studio shot. ${backdrop}. ${STUDIO_LIGHT} Full-length front view, standing, weight on one leg.`;
+    case 3:
+      return `Card 3: studio shot. Exactly the same ${backdrop} and identical lighting as card 2. Three-quarter view showing the garment side, standing.`;
+    case 4:
+      return `Card 4: studio shot. Exactly the same ${backdrop} and identical lighting as card 2. The model is SEATED on a low plain cube in the same colour as the backdrop, legs together, garment fully visible and unwrinkled.`;
+    case 5:
+      return `Card 5: studio shot. Exactly the same ${backdrop} and identical lighting as card 2. Back view, standing, garment fully visible.`;
+    default:
+      return "Card 6: FABRIC ONLY. Extreme macro close-up of the garment's textile filling the whole frame: weave, lace or knit structure, stitching and texture in sharp focus. ABSOLUTELY NO person, mannequin, body, face, limbs, hanger or background. Crop straight into the fabric of the reference garment.";
+  }
+}
 
 const POSES = [
   "Full-length front view, relaxed standing pose.",
@@ -34,6 +46,8 @@ export interface PromptImages {
   identity?: boolean;
   /** true when card 1's result is attached as the consistency reference (mode 1, cards 2-5) */
   firstCard?: boolean;
+  /** true when card 2's studio result is attached as the backdrop/lighting reference (mode 1, cards 3-5) */
+  studio?: boolean;
   /** true when the latest result is attached as the last image for a revision */
   revision?: boolean;
 }
@@ -58,8 +72,8 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   ];
 
   if (c.mode === "1") {
-    parts.push(`Model direction: ${c.modelDescription}.`);
-    parts.push(MODE1_SHOTS[card - 1]);
+    if (card !== FABRIC_CARD) parts.push(`Model direction: ${c.modelDescription}.`);
+    parts.push(mode1Shot(card, c.backdrop || "warm beige seamless paper backdrop"));
     if (card === 1) parts.push(`Location: ${c.prompt} ${sceneFor(c, 1)}`);
     if (card > 1 && card < FABRIC_CARD)
       parts.push(
@@ -78,6 +92,10 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   }
 
   parts.push(fidelity);
+  if (c.mode === "1" && card === FABRIC_CARD)
+    parts.push(
+      "Output must be a flat textile macro photograph only. If a person would appear, the result is wrong.",
+    );
   if (c.center && card !== FABRIC_CARD && c.mode !== "4") parts.push(CENTERING);
   if (edit)
     parts.push(
@@ -89,6 +107,10 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   if (images.firstCard)
     roles.push(
       "Image 2 is card 1: it establishes the model's face, hair and body. Keep this exact same model across the studio cards.",
+    );
+  if (images.studio)
+    roles.push(
+      "Image 3 is card 2: copy its backdrop colour, floor, lighting direction and softness exactly so the studio set looks like one shoot.",
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));
