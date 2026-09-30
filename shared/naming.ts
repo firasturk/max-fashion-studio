@@ -10,12 +10,27 @@ export function stemKey(name: string): string {
   return stemOf(name).normalize("NFC").toLowerCase();
 }
 
-/** `MAX_001.jpg` -> `MAX_001-AI.png`; six-card sets -> `MAX_001/card-01/MAX_001-AI.png`; multi-image sets -> `MAX_001-AI-02.png`. */
-export function outputName(sourceName: string, card: number, mode: string, total = 1): string {
+/**
+ * `MAX_001.jpg` -> `MAX_001-AI.png`; six-card sets -> `MAX_001/card-01/MAX_001-AI.png`;
+ * multi-image sets -> `MAX_001-AI-02.png`. The extension follows the bytes the engine returned.
+ */
+export function outputName(
+  sourceName: string,
+  card: number,
+  mode: string,
+  total = 1,
+  ext = "png",
+): string {
   const stem = stemOf(sourceName);
-  if (mode === "1") return `${stem}/card-${String(card).padStart(2, "0")}/${stem}-AI.png`;
-  if (total > 1) return `${stem}-AI-${String(card).padStart(2, "0")}.png`;
-  return `${stem}-AI.png`;
+  if (mode === "1") return `${stem}/card-${String(card).padStart(2, "0")}/${stem}-AI.${ext}`;
+  if (total > 1) return `${stem}-AI-${String(card).padStart(2, "0")}.${ext}`;
+  return `${stem}-AI.${ext}`;
+}
+
+/** Extension of a stored result key (`.../uuid.jpg` -> `jpg`). */
+export function outputExt(key: string | null | undefined): string {
+  const m = /\.([a-z0-9]+)$/i.exec(key ?? "");
+  return m ? m[1].toLowerCase() : "png";
 }
 
 /** Safe archive filename (ASCII only, keeps dots/dashes/underscores). */

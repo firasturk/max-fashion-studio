@@ -226,7 +226,8 @@ async function storeResultBytes(
   result: ImageBytes,
   url: string | null,
 ): Promise<void> {
-  const key = `${batch.owner}/${batch.id}/output/${task.id}/${uuid()}.png`;
+  const ext = /jpe?g/i.test(result.mime) ? "jpg" : /webp/i.test(result.mime) ? "webp" : "png";
+  const key = `${batch.owner}/${batch.id}/output/${task.id}/${uuid()}.${ext}`;
   await env.BUCKET.put(key, result.bytes, {
     httpMetadata: { contentType: result.mime || "image/png" },
   });

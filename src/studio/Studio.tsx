@@ -26,7 +26,7 @@ import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob } from "@/lib/zip";
 import { DEFAULT_CONFIG, cardsPerSource, exportsOriginals, type Config } from "@shared/config";
-import { outputName, safeArchiveName, stemKey } from "@shared/naming";
+import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
 import type { Batch, EngineModel, StateResponse, Task, User } from "@shared/types";
 import type { PickedFile } from "@/lib/files";
 import BatchesView from "./BatchesView";
@@ -292,7 +292,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
       const entries = chosen.map((t) => ({
-        name: outputName(byId.get(t.source)!.name, t.card, mode, total),
+        name: outputName(byId.get(t.source)!.name, t.card, mode, total, outputExt(t.output)),
         url: outputUrl(t),
       }));
       const originalsIncluded = exportsOriginals(viewConfig);
@@ -304,7 +304,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         engine: engine.model,
         generated: chosen.map((t) => ({
           original: byId.get(t.source)?.name,
-          file: outputName(byId.get(t.source)!.name, t.card, mode, total),
+          file: outputName(byId.get(t.source)!.name, t.card, mode, total, outputExt(t.output)),
           status: t.status,
           prompt: t.prompt,
           qa: t.qa ? JSON.parse(t.qa) : null,

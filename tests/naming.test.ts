@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isValidSourceName, outputName, safeArchiveName, stemKey, stemOf } from "../shared/naming";
+import {
+  isValidSourceName,
+  outputExt,
+  outputName,
+  safeArchiveName,
+  stemKey,
+  stemOf,
+} from "../shared/naming";
 
 describe("naming", () => {
   it("adds -AI and switches the extension to png", () => {
@@ -33,6 +40,11 @@ describe("naming", () => {
     expect(isValidSourceName("bad\u0000.jpg")).toBe(false);
     expect(isValidSourceName("MAX 001.jpg")).toBe(true);
     expect(isValidSourceName("")).toBe(false);
+  });
+  it("keeps the engine's real format in the export name", () => {
+    expect(outputExt("u/b/output/t/abc.jpg")).toBe("jpg");
+    expect(outputExt(null)).toBe("png");
+    expect(outputName("MAX_001.jpg", 1, "4", 1, "jpg")).toBe("MAX_001-AI.jpg");
   });
   it("makes safe archive names", () => {
     expect(safeArchiveName("Denim · 30/09/2026")).toBe("Denim_30_09_2026");

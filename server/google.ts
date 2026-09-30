@@ -76,7 +76,7 @@ interface InteractionResponse {
 
 /** Finds the final image wherever the response puts it (output_image, outputs[] or model_output steps). */
 export function extractImage(d: InteractionResponse): { data: string; mime: string } | null {
-  if (typeof d.output_image === "string") return { data: d.output_image, mime: "image/png" };
+  if (typeof d.output_image === "string") return { data: d.output_image, mime: "image/jpeg" };
   if (d.output_image?.data)
     return { data: d.output_image.data, mime: d.output_image.mime_type || "image/png" };
   const fromOutputs = (d.outputs ?? []).filter((o) => o.type === "image" && o.data).at(-1);
@@ -87,7 +87,7 @@ export function extractImage(d: InteractionResponse): { data: string; mime: stri
     .flatMap((s) => s.content ?? [])
     .filter((c) => c.type === "image" && c.data)
     .at(-1);
-  if (fromSteps?.data) return { data: fromSteps.data, mime: fromSteps.mime_type || "image/png" };
+  if (fromSteps?.data) return { data: fromSteps.data, mime: fromSteps.mime_type || "image/jpeg" };
   return null;
 }
 
@@ -143,9 +143,10 @@ export class GoogleImageClient {
         model: job.model,
         store: false,
         input,
+        // The Interactions API only returns JPEG for image responses.
         response_format: {
           type: "image",
-          mime_type: "image/png",
+          mime_type: "image/jpeg",
           aspect_ratio: job.aspectRatio,
           image_size: job.size.toUpperCase(),
         },

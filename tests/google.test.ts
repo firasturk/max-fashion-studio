@@ -10,7 +10,7 @@ describe("Google image client", () => {
   });
 
   it("finds the image in any of the response shapes", () => {
-    expect(extractImage({ output_image: "AAAA" })).toEqual({ data: "AAAA", mime: "image/png" });
+    expect(extractImage({ output_image: "AAAA" })).toEqual({ data: "AAAA", mime: "image/jpeg" });
     expect(extractImage({ output_image: { data: "BBBB", mime_type: "image/jpeg" } })).toEqual({
       data: "BBBB",
       mime: "image/jpeg",
@@ -22,7 +22,7 @@ describe("Google image client", () => {
           { type: "model_output", content: [{ type: "image", data: "CCCC" }] },
         ],
       }),
-    ).toEqual({ data: "CCCC", mime: "image/png" });
+    ).toEqual({ data: "CCCC", mime: "image/jpeg" });
     expect(extractImage({})).toBeNull();
   });
 
@@ -38,7 +38,7 @@ describe("Google image client", () => {
       expect(body.input[1].mime_type).toBe("image/jpeg");
       expect(body.response_format).toEqual({
         type: "image",
-        mime_type: "image/png",
+        mime_type: "image/jpeg",
         aspect_ratio: "2:3",
         image_size: "2K",
       });
@@ -54,7 +54,7 @@ describe("Google image client", () => {
       aspectRatio: "2:3",
       size: "2K",
     });
-    expect(out.mime).toBe("image/png");
+    expect(out.mime).toBe("image/jpeg");
     expect(out.bytes.byteLength).toBe(3);
   });
 
