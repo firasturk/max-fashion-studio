@@ -544,17 +544,20 @@ async function ensureBrief(
     aspectRatio: config.ratio,
     used,
   };
+  // The builder follows the image engine's vendor when possible (OpenAI model -> OpenAI builder),
+  // so one key is enough and errors come from a single provider.
   const google = (await resolveGoogleKey(env)).key;
-  const openai = google ? null : (await resolveOpenAIKey(env)).key;
+  const openai = (await resolveOpenAIKey(env)).key;
   if (!google && !openai)
     throw new StudioError(
       "The editorial prompt builder needs a Google or OpenAI key in Connection.",
       428,
       true,
     );
-  const brief = google
-    ? await buildBriefWithGoogle(google, req)
-    : await buildBriefWithOpenAI(openai!, req);
+  const preferOpenAI = isOpenAIModel(config.model) ? !!openai : !google;
+  const brief = preferOpenAI
+    ? await buildBriefWithOpenAI(openai!, req)
+    : await buildBriefWithGoogle(google!, req);
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
 }
