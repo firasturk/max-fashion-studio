@@ -1,7 +1,7 @@
-import { Camera, Layers, Sparkles, UserRound, type LucideIcon } from "lucide-react";
+import { Camera, Layers, Sparkles, UserRound, Wand2, type LucideIcon } from "lucide-react";
 
 export interface ModeInfo {
-  id: "1" | "2" | "3" | "4";
+  id: "1" | "2" | "3" | "4" | "5";
   title: string;
   caption: string;
   icon: LucideIcon;
@@ -42,6 +42,16 @@ export const MODES: ModeInfo[] = [
       "Keep the real model, garment and pose exactly as shot and swap in a fresh background per image, chosen from the category's scenes. Choose how many backgrounds per original.",
   },
 ];
+
+export const EDITORIAL_MODE: ModeInfo = {
+  id: "5",
+  title: "Editorial campaign",
+  caption: "Prompt builder · fresh scene each image",
+  icon: Wand2,
+  detail:
+    "From your real model photo: a vision model runs the Fashion Editorial Prompt Builder skill on each image, writes a detailed Zara / Splash-style prompt (exact outfit, preserved face when visible, new location, real editorial pose) and generates it. Every image gets a different scene and pose.",
+};
+MODES.push(EDITORIAL_MODE);
 
 export const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",

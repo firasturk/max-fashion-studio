@@ -5,6 +5,7 @@ import {
   CATEGORIES,
   CATEGORY_PRESETS,
   INPUT_TYPES,
+  MARKETS,
   MAX_COUNT,
   RATIOS,
   SIZES,
@@ -104,6 +105,28 @@ export default function CreativePanel({
         </>
       )}
 
+      {config.mode === "5" && (
+        <>
+          <label className="field-label">Generated face (when the reference face is hidden)</label>
+          <Picker
+            value={config.market}
+            label="Market look"
+            disabled={locked}
+            items={MARKETS}
+            render={(v) =>
+              v === "auto"
+                ? "Auto (alternate Arab / European)"
+                : v === "arab"
+                  ? "Arab / Middle-Eastern"
+                  : v === "european"
+                    ? "European"
+                    : "Mixed"
+            }
+            onChange={(v) => onChange({ market: v as Config["market"] })}
+          />
+        </>
+      )}
+
       {config.mode === "1" && (
         <>
           <label className="field-label" htmlFor="backdrop">
@@ -137,7 +160,11 @@ export default function CreativePanel({
 
       <div className="field-row">
         <label className="field-label" htmlFor="prompt">
-          {config.mode === "4" ? "Background direction" : "Background & lifestyle prompt"}
+          {config.mode === "4"
+            ? "Background direction"
+            : config.mode === "5"
+              ? "City / mood preference (optional)"
+              : "Background & lifestyle prompt"}
         </label>
         <button
           className="text-button"

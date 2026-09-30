@@ -11,7 +11,8 @@ import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
 import { inspectWithGemini, manualQA } from "./gemini";
 import { StudioError, errorMessage, isFatalEngineError } from "./errors";
-import { buildPrompt, RECENTER_SUFFIX } from "@shared/prompts";
+import { buildPrompt, buildEditorialPrompt, RECENTER_SUFFIX } from "@shared/prompts";
+import { buildBriefWithGoogle, buildBriefWithOpenAI, type EditorialBrief } from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
 import {
@@ -44,6 +45,7 @@ interface TaskRow {
   request_id: string | null;
   leased_at: number | null;
   prompt: string;
+  brief: string | null;
 }
 
 interface SourceRow {
@@ -513,6 +515,72 @@ async function outputEngineUrl(
   return url;
 }
 
+/** Runs the prompt-builder skill once per card and stores the brief; revisions and retries reuse it. */
+async function ensureBrief(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+  source: SourceRow,
+): Promise<EditorialBrief> {
+  if (task.brief) return JSON.parse(task.brief) as EditorialBrief;
+  const image = await sourceBytes(env, source);
+  const siblings = await all<{ card: number; brief: string | null }>(
+    env.DB,
+    "SELECT card, brief FROM tasks WHERE batch = ? AND source = ? AND id != ? AND brief IS NOT NULL ORDER BY card",
+    batch.id,
+    task.source,
+    task.id,
+  );
+  const used = siblings.map((t) => {
+    const b = JSON.parse(t.brief!) as EditorialBrief;
+    return { scene: b.scene, pose: b.pose };
+  });
+  const req = {
+    image,
+    run: task.card,
+    market: config.market || "auto",
+    preference: config.prompt,
+    aspectRatio: config.ratio,
+    used,
+  };
+  const google = (await resolveGoogleKey(env)).key;
+  const openai = google ? null : (await resolveOpenAIKey(env)).key;
+  if (!google && !openai)
+    throw new StudioError(
+      "The editorial prompt builder needs a Google or OpenAI key in Connection.",
+      428,
+      true,
+    );
+  const brief = google
+    ? await buildBriefWithGoogle(google, req)
+    : await buildBriefWithOpenAI(openai!, req);
+  await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
+  return brief;
+}
+
+/** Prompt for a card: the editorial brief in mode 5, the deterministic builder otherwise. */
+async function promptFor(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+  source: SourceRow,
+  edit: string,
+  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean },
+): Promise<string> {
+  let prompt: string;
+  if (config.mode === "5") {
+    const brief = await ensureBrief(env, batch, config, task, source);
+    prompt = buildEditorialPrompt(brief.prompt, brief.negative, edit, roles);
+  } else {
+    prompt = buildPrompt(config, task.card, edit, roles);
+  }
+  if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
+  await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
+  return prompt;
+}
+
 async function submitTask(
   env: Env,
   client: HiggsfieldClient,
@@ -562,9 +630,7 @@ async function submitTask(
     roles.revision = true;
   }
 
-  let prompt = buildPrompt(config, task.card, edit, roles);
-  if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
-  await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
+  const prompt = await promptFor(env, batch, config, task, source, edit, roles);
 
   const job: GenerationJob = {
     prompt,
@@ -642,9 +708,7 @@ async function submitOpenAITask(
     roles.revision = true;
   }
 
-  let prompt = buildPrompt(config, task.card, edit, roles);
-  if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
-  await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
+  const prompt = await promptFor(env, batch, config, task, source, edit, roles);
 
   const requestId = `sync:${uuid()}`;
   // Record the id before the slow call so a concurrent driver sees the task as in flight.

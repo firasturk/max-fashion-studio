@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const MODES = ["1", "2", "3", "4"] as const;
+export const MODES = ["1", "2", "3", "4", "5"] as const;
+export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
 export const SIZES = ["1K", "2K", "4K"] as const;
@@ -17,6 +18,8 @@ export const configSchema = z.object({
   model: z.string().max(120).optional(),
   /** Images per original for modes 2-4. Mode 1 always produces six. */
   count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  /** Editorial mode: look of a generated face when the reference face is not visible. */
+  market: z.enum(MARKETS).default("auto"),
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
   backdrop: z.string().max(1000).default("warm beige seamless paper backdrop"),
   identity: z.string().max(160).optional(),
@@ -220,6 +223,7 @@ export const DEFAULT_CONFIG: Config = {
   size: "2K",
   count: 3,
   backdrop: "warm beige seamless paper backdrop",
+  market: "auto",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,
 };
@@ -229,6 +233,7 @@ export function validateConfig(c: Config): string | null {
   if (c.mode === "4" && c.input !== "model") return "Fresh backgrounds need a real model photo.";
   if (c.mode === "3" && c.input !== "model") return "New poses need a real model photo.";
   if (c.mode === "2" && c.input !== "model") return "New face lifestyle needs a real model photo.";
+  if (c.mode === "5" && c.input !== "model") return "Editorial campaign needs a real model photo.";
   return null;
 }
 

@@ -9,6 +9,7 @@ function cardLabel(mode: string, card: number): string {
     return card === 1 ? "Lifestyle" : card === 6 ? "Fabric detail" : `Studio ${card - 1}`;
   if (mode === "4") return `Background ${card}`;
   if (mode === "3") return `Pose ${card}`;
+  if (mode === "5") return `Editorial ${card}`;
   return `Lifestyle ${card}`;
 }
 

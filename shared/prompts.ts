@@ -5,6 +5,7 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "1": "Fashion catalogue production from a mannequin or flat-lay reference. Replace the mannequin with a fully clothed photorealistic adult model wearing exactly this garment. Do not invent unseen product construction.",
   "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the category. Never reuse the original person's face.",
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
+  "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
 
@@ -86,6 +87,9 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   } else if (c.mode === "3") {
     parts.push(`New pose: ${POSES[(card - 1) % POSES.length]}`);
     parts.push(`Setting: ${c.prompt} ${sceneFor(c, card)}`);
+  } else if (c.mode === "5") {
+    parts.push("Editorial prompt is written per image by the prompt builder before generation.");
+    if (c.prompt) parts.push(`City / mood preference: ${c.prompt}`);
   } else {
     parts.push(`New background for this image: ${sceneFor(c, card)} ${c.prompt}`);
     parts.push("Keep the model, pose, framing and garment exactly as in the source photo.");
@@ -115,6 +119,27 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));
   return parts.filter(Boolean).join("\n\n");
+}
+
+/** Final prompt for an editorial card: the builder's prompt plus roles, revision and the negative block. */
+export function buildEditorialPrompt(
+  briefPrompt: string,
+  negative: string,
+  edit = "",
+  images: PromptImages = {},
+): string {
+  const parts = [briefPrompt.trim()];
+  if (edit)
+    parts.push(
+      `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
+    );
+  const roles: string[] = [
+    "The attached first image is the reference photo of the outfit and model.",
+  ];
+  if (images.revision) roles.push("The LAST image is the existing result to revise.");
+  if (roles.length > 1) parts.push(roles.join(" "));
+  if (negative) parts.push(`AVOID: ${negative}`);
+  return parts.join("\n\n");
 }
 
 export const RECENTER_SUFFIX =

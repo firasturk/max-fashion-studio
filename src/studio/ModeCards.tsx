@@ -9,7 +9,7 @@ export default function ModeCards({
 }: {
   value: string;
   disabled: boolean;
-  onChange: (mode: "1" | "2" | "3" | "4") => void;
+  onChange: (mode: "1" | "2" | "3" | "4" | "5") => void;
 }) {
   return (
     <>

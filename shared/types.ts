@@ -63,6 +63,8 @@ export interface Task {
   prompt: string;
   attempts: number;
   request_id: string | null;
+  /** JSON EditorialBrief for editorial-mode tasks. */
+  brief: string | null;
   updated: number;
 }
 

@@ -31,6 +31,15 @@ export default function ReviewDialog({
   const [showOriginal, setShowOriginal] = useState(false);
   const [edit, setEdit] = useState("");
   const qa = task?.qa ? (JSON.parse(task.qa) as QA) : null;
+  const brief = task?.brief
+    ? (JSON.parse(task.brief) as {
+        scene: string;
+        pose: string;
+        light: string;
+        faceMode: string;
+        subject: string;
+      })
+    : null;
   const fabric = task?.card === 6;
 
   return (
@@ -108,6 +117,23 @@ export default function ReviewDialog({
                 </div>
                 <p className="qa-notes">{qa.notes}</p>
               </>
+            )}
+            {brief && (
+              <div className="brief-box">
+                <strong>Editorial brief</strong>
+                <span>
+                  {brief.subject} · {brief.faceMode.replace("_", " ").toLowerCase()}
+                </span>
+                <span>Scene: {brief.scene}</span>
+                <span>Pose: {brief.pose}</span>
+                <span>Light: {brief.light}</span>
+              </div>
+            )}
+            {task?.prompt && (
+              <details className="prompt-details">
+                <summary>Prompt used</summary>
+                <pre>{task.prompt}</pre>
+              </details>
             )}
             {task?.error && <p className="image-error">{task.error}</p>}
             <p className="quality-note">

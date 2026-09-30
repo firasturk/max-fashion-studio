@@ -1398,3 +1398,36 @@ input[type="checkbox"] {
   padding: 10px 12px;
   font-size: 14px;
 }
+.brief-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #475467;
+  background: #f5f7fb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.brief-box strong {
+  color: var(--foreground);
+}
+.prompt-details {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.prompt-details summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 600;
+}
+.prompt-details pre {
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+  background: #f5f7fb;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
