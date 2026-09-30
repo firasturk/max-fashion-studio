@@ -6,6 +6,7 @@ import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
 import { advanceBatch, activeBatchIds } from "./engine";
 import type { User } from "@shared/types";
+import { serveStatic } from "./static";
 
 type Variables = { user: User };
 
@@ -43,6 +44,11 @@ app.use("/api/studio/*", async (c, next) => {
   await next();
 });
 app.route("/api/studio", studioRoutes);
+
+app.get("*", (c) => {
+  if (c.req.path.startsWith("/api/")) return c.json({ error: "Not found." }, 404);
+  return serveStatic(c.req.path) ?? c.json({ error: "Not found." }, 404);
+});
 
 app.notFound((c) => c.json({ error: "Not found." }, 404));
 

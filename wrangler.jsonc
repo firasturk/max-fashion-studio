@@ -10,6 +10,12 @@
     "run_worker_first": ["/api/*"],
   },
   "observability": { "enabled": true },
+  "alias": {
+    "@shared/config": "./shared/config.ts",
+    "@shared/prompts": "./shared/prompts.ts",
+    "@shared/naming": "./shared/naming.ts",
+    "@shared/types": "./shared/types.ts"
+  },
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
     {

@@ -8,3 +8,5 @@ dist
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 test-results
+server/generated/assets.ts
+wrangler.deploy.json
