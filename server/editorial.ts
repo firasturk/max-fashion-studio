@@ -110,11 +110,41 @@ function parseBrief(text: string): EditorialBrief {
 }
 
 /** Google Gemini through the Interactions API with a JSON schema response. */
+/** Text/vision models to try in order; Google retires names quickly, so a 404 falls through to the next. */
+export const GOOGLE_TEXT_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.5-flash",
+  "gemini-3-flash",
+  "gemini-2.5-flash",
+];
+
 export async function buildBriefWithGoogle(
   key: string,
   req: EditorialRequest,
   fetchImpl: typeof fetch = fetch,
-  model = "gemini-2.5-flash",
+  model?: string,
+): Promise<EditorialBrief> {
+  const candidates = model ? [model] : GOOGLE_TEXT_MODELS;
+  let lastError: StudioError | null = null;
+  for (const m of candidates) {
+    try {
+      return await buildBriefWithGoogleModel(key, req, fetchImpl, m);
+    } catch (e) {
+      if (e instanceof StudioError && /\(404\)/.test(e.message)) {
+        lastError = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError ?? new StudioError("No Google text model available.", 502);
+}
+
+async function buildBriefWithGoogleModel(
+  key: string,
+  req: EditorialRequest,
+  fetchImpl: typeof fetch,
+  model: string,
 ): Promise<EditorialBrief> {
   const r = await fetchImpl("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",

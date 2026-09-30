@@ -62,7 +62,7 @@ export async function inspectWithGemini(
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.8-flash",
       store: false,
       input: [{ type: "text", text: instruction }, ...images],
       response_format: { type: "text", mime_type: "application/json", schema: SCHEMA },

@@ -402,7 +402,7 @@ export default function ConnectionDialog({
           <strong>{engine.model}</strong>
           <span>Automatic review</span>
           <strong>
-            {engine.review ? "Gemini 2.5 Flash (Google key)" : "Off until a Google key is added"}
+            {engine.review ? "Gemini Flash (Google key)" : "Off until a Google key is added"}
           </strong>
         </div>
       </DialogContent>

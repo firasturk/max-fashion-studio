@@ -44,7 +44,7 @@ describe("editorial prompt builder", () => {
   it("parses the Google interaction output", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
-      expect(body.model).toBe("gemini-2.5-flash");
+      expect(body.model).toBe("gemini-3.8-flash");
       expect(body.input[1].type).toBe("image");
       expect(body.response_format.mime_type).toBe("application/json");
       return new Response(
@@ -63,6 +63,26 @@ describe("editorial prompt builder", () => {
     );
     expect(out.scene).toBe("Dubai courtyard");
     expect(out.prompt.length).toBeGreaterThan(200);
+  });
+
+  it("falls through to the next Google model when one is retired (404)", async () => {
+    const seen: string[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      seen.push(body.model);
+      if (body.model === "gemini-3.8-flash")
+        return new Response(JSON.stringify({ error: { message: "no longer available" } }), {
+          status: 404,
+        });
+      return new Response(JSON.stringify({ output_text: JSON.stringify(brief) }), { status: 200 });
+    });
+    const out = await buildBriefWithGoogle(
+      "AIzaTestKey",
+      req,
+      fetchMock as unknown as typeof fetch,
+    );
+    expect(seen).toEqual(["gemini-3.8-flash", "gemini-3.5-flash"]);
+    expect(out.scene).toBe("Dubai courtyard");
   });
 
   it("parses the OpenAI chat output, including fenced JSON", async () => {
