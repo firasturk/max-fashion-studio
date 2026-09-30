@@ -314,7 +314,11 @@ const newBatch = z.object({ name: z.string().max(100).optional(), config: config
 studioRoutes.post("/batch", async (c) => {
   const user = c.get("user");
   const parsed = newBatch.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) throw new StudioError("Invalid batch settings.");
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.filter((p) => p !== "config").join(".") || "settings";
+    throw new StudioError(`Invalid batch settings: ${field} ${issue?.message ?? "is invalid"}.`);
+  }
   const config = parsed.data.config;
   if (config.model && !/^[\w./-]+$/.test(config.model))
     throw new StudioError("Invalid model slug.");
