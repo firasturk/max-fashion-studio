@@ -63,6 +63,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [page, setPage] = useState<"studio" | "batches">("studio");
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Config | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const { batch, sources, tasks, active, open, close, refresh, action, remove } = useBatch();
 
   const loadState = useCallback(async () => {
@@ -108,10 +110,26 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }, [tasks, selected]);
 
   const viewConfig: Config = useMemo(
-    () => (batch ? (JSON.parse(batch.config) as Config) : config),
-    [batch, config],
+    () => draft ?? (batch ? (JSON.parse(batch.config) as Config) : config),
+    [batch, config, draft],
   );
-  const locked = !!batch || uploading;
+  const locked = (!!batch && !draft) || uploading || savingDraft;
+  const canEditBatch = !!batch && batch.state !== "running" && !active;
+
+  async function saveDraft() {
+    if (!batch || !draft) return;
+    setSavingDraft(true);
+    try {
+      await action("batch/config", { config: draft, name: batch.name });
+      setDraft(null);
+      await loadState();
+      toast.success("Batch settings updated.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
   const sourceUrl = (id: string, kind: "original" | "reference" = "reference") =>
     `/api/studio/file?batch=${batch?.id}&id=${id}&kind=${kind}`;
   const outputUrl = (t: Task) =>
@@ -145,6 +163,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   async function openBatch(id: string) {
     if (uploading) return;
+    setDraft(null);
     setSelection(new Set());
     setOpeningId(id);
     try {
@@ -175,6 +194,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   function newBatch() {
     if (uploading) return;
+    setDraft(null);
     close();
     setSelection(new Set());
     setTab("sources");
@@ -437,7 +457,17 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 saved={!!batch}
                 models={models}
                 defaultModel={engine.model}
-                onChange={(patch) => setConfig((c) => ({ ...c, ...patch }))}
+                onChange={(patch) =>
+                  draft
+                    ? setDraft((d) => (d ? { ...d, ...patch } : d))
+                    : setConfig((c) => ({ ...c, ...patch }))
+                }
+                editing={!!draft}
+                canEdit={canEditBatch}
+                saving={savingDraft}
+                onEdit={() => batch && setDraft(JSON.parse(batch.config) as Config)}
+                onSave={() => void saveDraft()}
+                onCancel={() => setDraft(null)}
               />
 
               <section className="media-panel">

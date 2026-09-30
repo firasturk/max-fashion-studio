@@ -86,9 +86,15 @@ export async function resolveEngineKey(
 
 export const ENGINE_MODEL_SETTING = "higgsfield_model";
 
-/** The model slug: saved from the app when present, otherwise the HIGGSFIELD_MODEL variable. */
+/**
+ * The model slug: saved from the app when present; otherwise Nano Banana Pro through Google when a
+ * Google key exists, else the HIGGSFIELD_MODEL variable.
+ */
 export async function resolveEngineModel(env: Env): Promise<string> {
-  return (await getSetting(env, ENGINE_MODEL_SETTING)) || env.HIGGSFIELD_MODEL || "nano-banana-pro";
+  const stored = await getSetting(env, ENGINE_MODEL_SETTING);
+  if (stored) return stored;
+  if ((await resolveGoogleKey(env)).key) return "gemini-3-pro-image";
+  return env.HIGGSFIELD_MODEL || "nano-banana-pro";
 }
 
 export const OPENAI_KEY_SETTING = "openai_api_key";

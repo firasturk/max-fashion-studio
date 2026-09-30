@@ -1527,3 +1527,26 @@ input[type="checkbox"] {
   margin: 24px auto;
   display: block;
 }
+.icon-button {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+  color: var(--primary);
+  display: inline-flex;
+}
+.icon-button:hover {
+  background: #edf2ff;
+}
+.edit-bar {
+  background: #edf2ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #163ea8;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

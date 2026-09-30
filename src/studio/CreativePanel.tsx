@@ -1,4 +1,4 @@
-import { FileImage, ScanLine, Settings2 } from "lucide-react";
+import { Check, FileImage, LoaderCircle, Pencil, ScanLine, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import {
@@ -23,6 +23,12 @@ export default function CreativePanel({
   models,
   defaultModel,
   onChange,
+  editing = false,
+  canEdit = false,
+  saving = false,
+  onEdit,
+  onSave,
+  onCancel,
 }: {
   config: Config;
   locked: boolean;
@@ -30,6 +36,12 @@ export default function CreativePanel({
   models: EngineModel[];
   defaultModel: string;
   onChange: (patch: Partial<Config>) => void;
+  editing?: boolean;
+  canEdit?: boolean;
+  saving?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
+  onCancel?: () => void;
 }) {
   const enabled = models.filter((m) => m.enabled);
   const modelItems = enabled.length ? enabled.map((m) => m.slug) : [config.model || defaultModel];
@@ -41,12 +53,39 @@ export default function CreativePanel({
       <div className="panel-heading">
         <span className="step">02</span>
         <h2>Creative direction</h2>
-        <Settings2 size={18} />
+        {canEdit && !editing && (
+          <button
+            className="icon-button"
+            onClick={onEdit}
+            aria-label="Edit batch settings"
+            title="Edit batch settings"
+          >
+            <Pencil size={17} />
+          </button>
+        )}
       </div>
-      {saved && (
+      {saved && !editing && (
         <p className="saved-note">
-          Settings saved with this batch. Use individual revisions to change a result.
+          Settings saved with this batch.{" "}
+          {canEdit
+            ? "Use the pencil to edit them for the remaining images."
+            : "Pause the batch to edit them."}
         </p>
+      )}
+      {editing && (
+        <div className="edit-bar">
+          <span>
+            Editing saved settings. Queued images will use them; finished images keep theirs.
+          </span>
+          <div className="footer-actions">
+            <button className="primary" onClick={onSave} disabled={saving}>
+              {saving ? <LoaderCircle className="spinning" size={15} /> : <Check size={15} />} Save
+            </button>
+            <button className="secondary" onClick={onCancel} disabled={saving}>
+              <X size={15} /> Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       <label className="field-label">AI model</label>

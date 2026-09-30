@@ -347,6 +347,82 @@ studioRoutes.post("/batch", async (c) => {
   return c.json({ id });
 });
 
+/**
+ * Edit a saved batch's creative direction. The workflow (mode) is fixed because it defines the card
+ * structure; everything else can change. Queued tasks get fresh prompts, and the number of cards per
+ * source is grown or shrunk (only never-generated cards are removed).
+ */
+studioRoutes.post("/batch/config", async (c) => {
+  const user = c.get("user");
+  const parsed = z
+    .object({
+      batch: z.string().min(1),
+      name: z.string().max(100).optional(),
+      config: configSchema,
+    })
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.filter((p) => p !== "config").join(".") || "settings";
+    throw new StudioError(`Invalid batch settings: ${field} ${issue?.message ?? "is invalid"}.`);
+  }
+  const b = await ownedBatch(c.env, user, parsed.data.batch);
+  if (b.state === "running")
+    throw new StudioError("Pause the batch before editing its settings.", 409);
+  const previous = JSON.parse(b.config) as Config;
+  const config = { ...parsed.data.config, mode: previous.mode };
+  if (config.model && !/^[\w./-]+$/.test(config.model))
+    throw new StudioError("Invalid model slug.");
+  const problem = validateConfig(config);
+  if (problem) throw new StudioError(problem);
+
+  const statements = [
+    c.env.DB.prepare("UPDATE batches SET config = ?, name = ?, updated = ? WHERE id = ?").bind(
+      JSON.stringify(config),
+      (parsed.data.name || b.name).slice(0, 100),
+      now(),
+      b.id,
+    ),
+  ];
+  const wanted = cardsPerSource(config);
+  const sources = await all<{ id: string; role: string }>(
+    c.env.DB,
+    "SELECT id, role FROM sources WHERE batch = ?",
+    b.id,
+  );
+  for (const src of sources) {
+    if (!createsTasks(config, src.role as "lead" | "supporting")) continue;
+    const tasks = await all<{ id: string; card: number; status: string; output: string | null }>(
+      c.env.DB,
+      "SELECT id, card, status, output FROM tasks WHERE batch = ? AND source = ? ORDER BY card",
+      b.id,
+      src.id,
+    );
+    const have = new Set(tasks.map((t) => t.card));
+    for (let card = 1; card <= wanted; card++) {
+      if (!have.has(card))
+        statements.push(
+          c.env.DB.prepare(
+            "INSERT INTO tasks (id, batch, source, card, status, prompt, updated) VALUES (?, ?, ?, ?, 'queued', ?, ?)",
+          ).bind(uuid(), b.id, src.id, card, buildPrompt(config, card), now()),
+        );
+    }
+    for (const t of tasks) {
+      if (t.card > wanted && !t.output && t.status !== "processing")
+        statements.push(c.env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(t.id));
+      else if (t.status === "queued" || t.status === "failed")
+        statements.push(
+          c.env.DB.prepare("UPDATE tasks SET prompt = ?, brief = NULL WHERE id = ?").bind(
+            buildPrompt(config, t.card),
+            t.id,
+          ),
+        );
+    }
+  }
+  await c.env.DB.batch(statements);
+  return c.json(await batchPayload(c.env, await ownedBatch(c.env, user, b.id)));
+});
+
 studioRoutes.get("/batch", async (c) => {
   const b = await ownedBatch(c.env, c.get("user"), c.req.query("batch"));
   return c.json(await batchPayload(c.env, b));

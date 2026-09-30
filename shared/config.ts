@@ -232,7 +232,7 @@ export const DEFAULT_CONFIG: Config = {
   category: "Jeans & Jeggings",
   input: "model",
   prompt: CATEGORY_PRESETS["Jeans & Jeggings"].prompt,
-  ratio: "2:3",
+  ratio: "1:1",
   size: "2K",
   count: 3,
   backdrop: "warm beige seamless paper backdrop",
