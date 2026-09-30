@@ -98,8 +98,13 @@ export class GoogleImageClient {
     private apiKey: string,
     fetchImpl: typeof fetch = fetch,
   ) {
-    if (!/^[A-Za-z0-9_-]{20,}$/.test(apiKey))
-      throw new StudioError("Google AI Studio key looks invalid.", 400, true);
+    // Only reject obvious paste mistakes; the real check is the verify() call against Google.
+    if (!/^\S{20,}$/.test(apiKey))
+      throw new StudioError(
+        "Google AI Studio key looks invalid (too short or contains spaces).",
+        400,
+        true,
+      );
     this.fetchImpl = (input, init) => fetchImpl(input, init);
   }
 
