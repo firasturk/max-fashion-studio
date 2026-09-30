@@ -14,7 +14,8 @@
     "@shared/config": "./shared/config.ts",
     "@shared/prompts": "./shared/prompts.ts",
     "@shared/naming": "./shared/naming.ts",
-    "@shared/types": "./shared/types.ts"
+    "@shared/types": "./shared/types.ts",
+    "@shared/editorial-skill": "./shared/editorial-skill.ts"
   },
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
