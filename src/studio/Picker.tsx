@@ -13,6 +13,7 @@ export default function Picker({
   label,
   disabled = false,
   className = "picker",
+  render = (v) => v,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -20,16 +21,17 @@ export default function Picker({
   label: string;
   disabled?: boolean;
   className?: string;
+  render?: (v: string) => string;
 }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger aria-label={label} className={className}>
-        <SelectValue />
+        <SelectValue>{render(value)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {items.map((i) => (
           <SelectItem key={i} value={i}>
-            {i}
+            {render(i)}
           </SelectItem>
         ))}
       </SelectContent>

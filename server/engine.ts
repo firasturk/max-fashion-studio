@@ -60,14 +60,18 @@ export async function engineConfigured(env: Env): Promise<boolean> {
   return keyLooksValid((await resolveEngineKey(env)).key);
 }
 
-export async function makeClient(env: Env, key?: string): Promise<HiggsfieldClient> {
+export async function makeClient(
+  env: Env,
+  key?: string,
+  model?: string,
+): Promise<HiggsfieldClient> {
   const apiKey = key ?? (await resolveEngineKey(env)).key;
   if (!apiKey)
     throw new StudioError("Higgsfield is not connected. Add the API key in Connection.", 428, true);
   return new HiggsfieldClient({
     apiKey,
     baseUrl: env.HIGGSFIELD_BASE_URL || "https://api.higgsfield.ai",
-    model: await resolveEngineModel(env),
+    model: model || (await resolveEngineModel(env)),
   });
 }
 
@@ -318,7 +322,7 @@ async function submitNext(env: Env, batch: BatchRow, config: Config): Promise<vo
   const slots = concurrency(env) - (processing?.n ?? 0);
   if (slots <= 0) return;
   const candidates = await eligibleQueued(env, batch, config, slots);
-  const client = await makeClient(env);
+  const client = await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
     const token = uuid();

@@ -11,35 +11,35 @@ export interface ModeInfo {
 export const MODES: ModeInfo[] = [
   {
     id: "1",
-    title: "Fully AI-generated",
-    caption: "5 lifestyle + 1 fabric detail",
+    title: "Mannequin to model",
+    caption: "1 lifestyle + 4 studio + 1 fabric",
     icon: Sparkles,
     detail:
-      "Turn a garment or mannequin into six product cards. Texture, colour and fit require review.",
+      "From a mannequin or flat lay: one lifestyle image, four studio-backdrop shots with the same model face and studio light, and a fabric close-up. Texture, colour and fit require review.",
   },
   {
     id: "2",
-    title: "AI first card",
-    caption: "New model + your real shoot",
+    title: "New face lifestyle",
+    caption: "Real shoot, different face",
     icon: Layers,
     detail:
-      "Generate the lifestyle first card. Supporting photographs stay original; model identity may differ.",
+      "From your real model photo: lifestyle images with a different face chosen for the category. The garment, styling and body stay the same. Choose how many images per original.",
   },
   {
     id: "3",
-    title: "Your model, AI setting",
-    caption: "Real face + lifestyle first card",
+    title: "New poses",
+    caption: "Same model, face changed",
     icon: UserRound,
     detail:
-      "Use an identity reference for the first card. Check facial features and garment fidelity before approval.",
+      "From your real model photo: new poses with the same model and garment, but the face is changed so the person is not identifiable. Choose how many poses per original.",
   },
   {
     id: "4",
-    title: "Background enhancement",
-    caption: "Your model. Your product.",
+    title: "Fresh backgrounds",
+    caption: "Model, clothes and pose untouched",
     icon: Camera,
     detail:
-      "Keep the real model photograph and improve the surroundings. Review for unintended subject changes.",
+      "Keep the real model, garment and pose exactly as shot and swap in a fresh background per image, chosen from the category's scenes. Choose how many backgrounds per original.",
   },
 ];
 

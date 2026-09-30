@@ -1,8 +1,8 @@
 /** Output naming rules shared by the server (export manifest) and the client (ZIP builder). */
 
-/** Strip the extension and any trailing "-AI" so uploads of earlier results never double the suffix. */
+/** Strip the extension and any trailing "-AI" so uploads of earlier results never double the suffix. Keeps folder segments. */
 export function stemOf(name: string): string {
-  return name.replace(/\.[^.]+$/, "").replace(/-AI$/i, "");
+  return name.replace(/\.[^./]+$/, "").replace(/-AI$/i, "");
 }
 
 /** Case-insensitive key used to reject two uploads that would produce the same output file. */
@@ -10,10 +10,11 @@ export function stemKey(name: string): string {
   return stemOf(name).normalize("NFC").toLowerCase();
 }
 
-/** `MAX_001.jpg` -> `MAX_001-AI.png`; six-card sets -> `MAX_001/card-01/MAX_001-AI.png`. */
-export function outputName(sourceName: string, card: number, mode: string): string {
+/** `MAX_001.jpg` -> `MAX_001-AI.png`; six-card sets -> `MAX_001/card-01/MAX_001-AI.png`; multi-image sets -> `MAX_001-AI-02.png`. */
+export function outputName(sourceName: string, card: number, mode: string, total = 1): string {
   const stem = stemOf(sourceName);
   if (mode === "1") return `${stem}/card-${String(card).padStart(2, "0")}/${stem}-AI.png`;
+  if (total > 1) return `${stem}-AI-${String(card).padStart(2, "0")}.png`;
   return `${stem}-AI.png`;
 }
 
@@ -22,12 +23,17 @@ export function safeArchiveName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/_+/g, "_") || "batch";
 }
 
-/** Reject path separators and control characters; keep Unicode names. */
+/** Relative paths from folder uploads are allowed (`Denim/MAX_001.jpg`); traversal, absolute paths and control characters are not. */
 export function isValidSourceName(name: string): boolean {
-  if (name.length === 0 || name.length > 200) return false;
-  for (const ch of name) {
-    const code = ch.charCodeAt(0);
-    if (ch === "/" || ch === "\\" || code < 0x20) return false;
-  }
-  return true;
+  if (name.length === 0 || name.length > 300) return false;
+  if (name.startsWith("/") || name.includes("\\")) return false;
+  for (const ch of name) if (ch.charCodeAt(0) < 0x20) return false;
+  const segments = name.split("/");
+  return segments.every((s) => s.length > 0 && s !== "." && s !== "..");
+}
+
+/** Normalises a browser-provided relative path: strips a leading top-level folder name when it is the only root. */
+export function relativeUploadName(path: string, fallback: string): string {
+  const clean = (path || fallback).replace(/^\.?\//, "");
+  return clean || fallback;
 }

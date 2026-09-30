@@ -1,11 +1,14 @@
 import { useRef } from "react";
-import { Upload, X } from "lucide-react";
+import { FolderOpen, Upload, X } from "lucide-react";
 import Picker from "./Picker";
+import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
 import type { Source } from "@shared/types";
-import type { Config } from "@shared/config";
+import { cardsPerSource, type Config } from "@shared/config";
 
 export interface Pending {
   file: File;
+  /** Relative path inside the batch, e.g. `Denim/MAX_001.jpg` for folder uploads. */
+  name: string;
   url: string;
   role: "lead" | "supporting";
 }
@@ -30,14 +33,18 @@ export default function SourcesTab({
   uploading: boolean;
   batchName: string;
   sourceUrl: (id: string) => string;
-  onFiles: (files: FileList | null) => void;
+  onFiles: (files: PickedFile[]) => void;
   onRemove: (url: string) => void;
   onRole: (url: string, role: "lead" | "supporting") => void;
   onBatchName: (name: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const expected =
-    config.mode === "1" ? pending.length * 6 : pending.filter((p) => p.role === "lead").length;
+  const folderInput = useRef<HTMLInputElement>(null);
+  const leads = pending.filter((p) => p.role === "lead").length;
+  const expected = leads * cardsPerSource(config);
+  const folders = new Set(
+    pending.map((p) => p.name.split("/").slice(0, -1).join("/")).filter(Boolean),
+  );
 
   return (
     <>
@@ -50,7 +57,20 @@ export default function SourcesTab({
             multiple
             hidden
             onChange={(e) => {
-              onFiles(e.target.files);
+              onFiles(filesFromInput(e.target.files));
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={folderInput}
+            type="file"
+            hidden
+            // @ts-expect-error non-standard attribute understood by Chromium, Safari and Firefox
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={(e) => {
+              onFiles(filesFromInput(e.target.files));
               e.target.value = "";
             }}
           />
@@ -59,21 +79,38 @@ export default function SourcesTab({
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              if (!uploading) onFiles(e.dataTransfer.files);
+              if (uploading) return;
+              void filesFromDrop(e.dataTransfer).then(onFiles);
             }}
           >
             <div className="upload-icon">
               <Upload size={28} />
             </div>
-            <h3>{pending.length ? "Add more photographs" : "Drop your collection here"}</h3>
-            <p>Select multiple images at once. Up to 12 MB each.</p>
-            <button
-              className="secondary"
-              disabled={uploading}
-              onClick={() => fileInput.current?.click()}
-            >
-              Browse images
-            </button>
+            <h3>
+              {pending.length
+                ? "Add more photographs or folders"
+                : "Drop your collection or a whole folder here"}
+            </h3>
+            <p>
+              Folders are read recursively and their names are kept in the export. Up to 12 MB per
+              image.
+            </p>
+            <div className="footer-actions">
+              <button
+                className="secondary"
+                disabled={uploading}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload size={16} /> Browse images
+              </button>
+              <button
+                className="secondary"
+                disabled={uploading}
+                onClick={() => folderInput.current?.click()}
+              >
+                <FolderOpen size={16} /> Upload folder
+              </button>
+            </div>
           </div>
           {pending.length > 0 && (
             <div className="batch-name">
@@ -86,7 +123,10 @@ export default function SourcesTab({
                 onChange={(e) => onBatchName(e.target.value)}
               />
               <span>
-                {pending.length} originals · {expected} AI results
+                {pending.length} originals
+                {folders.size
+                  ? ` in ${folders.size} folder${folders.size > 1 ? "s" : ""}`
+                  : ""} · {expected} AI results
               </span>
             </div>
           )}
@@ -111,10 +151,10 @@ export default function SourcesTab({
           : pending.map((p) => (
               <article className="image-card" key={p.url}>
                 <div className="photo-frame">
-                  <img src={p.url} alt={p.file.name} />
+                  <img src={p.url} alt={p.name} />
                   <button
                     className="remove-image"
-                    aria-label={`Remove ${p.file.name}`}
+                    aria-label={`Remove ${p.name}`}
                     disabled={uploading}
                     onClick={() => onRemove(p.url)}
                   >
@@ -123,18 +163,15 @@ export default function SourcesTab({
                   <span className="image-label">ORIGINAL</span>
                 </div>
                 <div className="image-info">
-                  <strong title={p.file.name}>{p.file.name}</strong>
-                  {config.mode === "2" || config.mode === "3" ? (
-                    <Picker
-                      label={`Role for ${p.file.name}`}
-                      value={p.role}
-                      disabled={uploading}
-                      items={["lead", "supporting"]}
-                      onChange={(v) => onRole(p.url, v as Pending["role"])}
-                    />
-                  ) : (
-                    <span>{(p.file.size / 1048576).toFixed(1)} MB</span>
-                  )}
+                  <strong title={p.name}>{p.name}</strong>
+                  <Picker
+                    label={`Role for ${p.name}`}
+                    value={p.role}
+                    disabled={uploading}
+                    items={["lead", "supporting"]}
+                    render={(v) => (v === "lead" ? "Generate" : "Keep original only")}
+                    onChange={(v) => onRole(p.url, v as Pending["role"])}
+                  />
                 </div>
               </article>
             ))}

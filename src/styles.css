@@ -1280,3 +1280,99 @@ input[type="checkbox"] {
   padding: 10px 12px;
   font-size: 14px;
 }
+
+/* --- Batches page and header navigation --- */
+.nav-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 24px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #f3f5fa;
+}
+.nav-tabs button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #667085;
+}
+.nav-tabs button.active {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+.batches-page {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 8px 8px 16px;
+}
+.batches-table {
+  display: flex;
+  flex-direction: column;
+}
+.batches-head,
+.batches-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.2fr 1.4fr 1.4fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.batches-head {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #667085;
+}
+.batches-row:last-child {
+  border-bottom: 0;
+}
+.batches-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.batches-name small {
+  color: #667085;
+  font-size: 12px;
+}
+.batches-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.batches-progress .bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #edf0f6;
+  overflow: hidden;
+}
+.batches-progress .bar span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.batches-status.running {
+  color: var(--primary);
+}
+.batches-status.paused {
+  color: #b42318;
+}
+@media (max-width: 900px) {
+  .batches-head {
+    display: none;
+  }
+  .batches-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .nav-tabs {
+    margin-left: 8px;
+  }
+}

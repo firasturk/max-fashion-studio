@@ -7,6 +7,7 @@ import { advanceBatch, engineConfigured, makeClient, keyLooksValid } from "./eng
 import {
   resolveEngineKey,
   resolveEngineModel,
+  getSetting,
   setSetting,
   deleteSetting,
   ENGINE_KEY_SETTING,
@@ -16,11 +17,11 @@ import {
   configSchema,
   validateConfig,
   createsTasks,
-  CARDS_PER_SOURCE,
+  cardsPerSource,
   type Config,
 } from "@shared/config";
 import { buildPrompt } from "@shared/prompts";
-import { stemOf, stemKey, isValidSourceName } from "@shared/naming";
+import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
 import type { User, Batch, Source, Task } from "@shared/types";
 
 type Variables = { user: User };
@@ -70,9 +71,18 @@ async function batchPayload(env: Env, b: BatchRow) {
 
 studioRoutes.get("/state", async (c) => {
   const user = c.get("user");
-  const batches = await all<Batch>(
+  const batches = await all<
+    Batch & { total: number; completed: number; review: number; failed: number; queued: number }
+  >(
     c.env.DB,
-    "SELECT id, name, config, state, last_error, created, updated FROM batches WHERE owner = ? ORDER BY created DESC LIMIT 200",
+    `SELECT b.id, b.name, b.config, b.state, b.last_error, b.created, b.updated,
+       COUNT(t.id) AS total,
+       SUM(CASE WHEN t.output IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+       SUM(CASE WHEN t.status = 'review' THEN 1 ELSE 0 END) AS review,
+       SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS failed,
+       SUM(CASE WHEN t.status IN ('queued','processing','finalizing') THEN 1 ELSE 0 END) AS queued
+     FROM batches b LEFT JOIN tasks t ON t.batch = b.id
+     WHERE b.owner = ? GROUP BY b.id ORDER BY b.created DESC LIMIT 200`,
     user.id,
   );
   const engineKey = await resolveEngineKey(c.env);
@@ -86,6 +96,46 @@ studioRoutes.get("/state", async (c) => {
       review: !!c.env.GEMINI_API_KEY,
     },
   });
+});
+
+/** Known image models on the Higgsfield API. Each is probed (no generation) and cached for an hour. */
+const MODEL_CANDIDATES: { slug: string; name: string }[] = [
+  { slug: "nano-banana-pro", name: "Nano Banana Pro (Google)" },
+  { slug: "flux-2-pro", name: "FLUX.2 Pro" },
+  { slug: "flux-2-max", name: "FLUX.2 Max" },
+  { slug: "flux-2-flex", name: "FLUX.2 Flex" },
+  { slug: "qwen-image-edit", name: "Qwen Image Edit" },
+  { slug: "seedream-4-5", name: "Seedream 4.5" },
+  { slug: "gpt-image-2", name: "GPT Image 2" },
+];
+const MODELS_CACHE = "engine_models_cache";
+
+studioRoutes.get("/engine/models", async (c) => {
+  if (!(await engineConfigured(c.env))) return c.json({ models: [] });
+  const refresh = c.req.query("refresh") === "1";
+  if (!refresh) {
+    const cached = await getSetting(c.env, MODELS_CACHE);
+    if (cached) {
+      const parsed = JSON.parse(cached) as { at: number; models: unknown[] };
+      if (now() - parsed.at < 60 * 60 * 1000)
+        return c.json({ models: parsed.models, cached: true });
+    }
+  }
+  const client = await makeClient(c.env);
+  const models = await Promise.all(
+    MODEL_CANDIDATES.map(async (m) => {
+      try {
+        const r = await client.probeModel(m.slug);
+        const code = r.detail.trim().toLowerCase();
+        const enabled = r.status !== 404 && code !== "model_not_found" && code !== "model_disabled";
+        return { ...m, enabled, reason: enabled ? "" : code || `HTTP ${r.status}` };
+      } catch (e) {
+        return { ...m, enabled: false, reason: errorMessage(e) };
+      }
+    }),
+  );
+  await setSetting(c.env, MODELS_CACHE, JSON.stringify({ at: now(), models }));
+  return c.json({ models });
 });
 
 studioRoutes.get("/engine/verify", async (c) => {
@@ -158,6 +208,8 @@ studioRoutes.post("/batch", async (c) => {
   const parsed = newBatch.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new StudioError("Invalid batch settings.");
   const config = parsed.data.config;
+  if (config.model && !/^[\w./-]+$/.test(config.model))
+    throw new StudioError("Invalid model slug.");
   const problem = validateConfig(config);
   if (problem) throw new StudioError(problem);
   if (config.identity) {
@@ -238,7 +290,7 @@ studioRoutes.post("/upload", async (c) => {
   const config = JSON.parse(b.config) as Config;
   const form = await c.req.formData();
   const f = checkImage(form.get("file"), MAX_UPLOAD, "Image");
-  const name = f.name.normalize("NFC");
+  const name = relativeUploadName(String(form.get("name") || ""), f.name).normalize("NFC");
   if (!isValidSourceName(name)) throw new StudioError("Unsupported filename.");
   const stem = stemKey(name);
   const duplicate = await first(
@@ -276,7 +328,7 @@ studioRoutes.post("/upload", async (c) => {
       ).bind(id, b.id, name, stem, key, referenceKey, f.type, f.size, role, now()),
     ];
     if (createsTasks(config, role)) {
-      for (let card = 1; card <= CARDS_PER_SOURCE[config.mode]; card++) {
+      for (let card = 1; card <= cardsPerSource(config); card++) {
         statements.push(
           c.env.DB.prepare(
             "INSERT INTO tasks (id, batch, source, card, status, prompt, updated) VALUES (?, ?, ?, ?, 'queued', ?, ?)",

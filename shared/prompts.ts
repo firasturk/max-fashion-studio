@@ -1,30 +1,36 @@
 import type { Config } from "./config";
-import { FABRIC_CARD } from "./config";
+import { CATEGORY_PRESETS, FABRIC_CARD } from "./config";
 
 export const MODE_PROMPTS: Record<Config["mode"], string> = {
-  "1": "Create a fashion catalogue image using the garment reference as the source of truth. Replace the mannequin or flat lay with a fully clothed photorealistic adult model. Build a consistent lifestyle story. Do not invent unseen product construction.",
-  "2": "Create ONLY a lifestyle first card from the supplied product photo. Use a new photorealistic adult model. The remaining real photographs are preserved separately. Reproduce the garment accurately.",
-  "3": "Create ONLY a lifestyle first card using the supplied real model identity reference. Preserve that adult person's face, proportions and body shape. Keep the exact referenced garment.",
-  "4": "Improve ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands and every visible garment detail. Do not redesign, recolour, retouch or replace the model or garment. Match background lighting to the original subject.",
+  "1": "Fashion catalogue production from a mannequin or flat-lay reference. Replace the mannequin with a fully clothed photorealistic adult model wearing exactly this garment. Do not invent unseen product construction.",
+  "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the category. Never reuse the original person's face.",
+  "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
+  "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
 
-const SHOTS = [
+const MODE1_SHOTS = [
+  "Card 1: lifestyle location image, full-length front view, relaxed standing pose.",
+  "Card 2: studio backdrop, clean seamless background, professional studio lighting, full-length front view.",
+  "Card 3: studio backdrop, same lighting, three-quarter view showing the garment side.",
+  "Card 4: studio backdrop, same lighting, back view with the garment fully visible.",
+  "Card 5: studio backdrop, same lighting, detail-focused mid-length shot of the garment.",
+  "Card 6: fabric macro close-up of the actual material. Show the source weave, stitching and texture; no person.",
+];
+
+const POSES = [
   "Full-length front view, relaxed standing pose.",
   "Three-quarter view, casual walking pose.",
   "Side profile, full garment visible.",
   "Seated lifestyle pose, garment unobstructed.",
-  "A distinct candid lifestyle pose, garment unobstructed.",
-  "Fabric macro close-up of the actual material. Show the source weave, stitching and texture; no person.",
+  "Leaning casually against a wall, garment unobstructed.",
+  "Candid mid-step pose, looking away from camera.",
 ];
-
-const FIDELITY =
-  "Product fidelity: preserve colour, weave, wash, print, seams, logo, buttons, silhouette, hem, and fit. No added text or watermarks. Original photo is the source of truth.";
 
 const CENTERING =
   "Composition: exactly ONE model. Centre the midpoint of the full model bounding box at x=50% of frame width, equal margins left and right. Keep head, hands, garment and feet fully inside the frame.";
 
 export interface PromptImages {
-  /** true when a real model identity reference is attached as image 2 (mode 3) */
+  /** true when a real model identity reference is attached as image 2 */
   identity?: boolean;
   /** true when card 1's result is attached as the consistency reference (mode 1, cards 2-5) */
   firstCard?: boolean;
@@ -32,29 +38,60 @@ export interface PromptImages {
   revision?: boolean;
 }
 
+function preset(c: Config) {
+  return CATEGORY_PRESETS[c.category] ?? CATEGORY_PRESETS.Other;
+}
+
+/** Scene for a given card, cycling through the category's scene list. */
+export function sceneFor(c: Config, card: number): string {
+  const scenes = preset(c).scenes;
+  return scenes[(card - 1) % scenes.length];
+}
+
 /** Build the full generation prompt for one card. Deterministic so it can be stored and audited. */
 export function buildPrompt(c: Config, card: number, edit = "", images: PromptImages = {}): string {
-  const parts = [
+  const p = preset(c);
+  const fidelity = `Product fidelity: preserve ${p.fidelity}. Preserve colour, seams, logo, buttons, silhouette, hem and fit exactly. No added text or watermarks. The original photo is the source of truth.`;
+  const parts: string[] = [
     MODE_PROMPTS[c.mode],
-    `Category: ${c.category}. Source type: ${c.input}. Model direction: ${c.modelDescription}.`,
-    c.mode === "1"
-      ? SHOTS[card - 1]
-      : "Full garment visible, premium fashion lifestyle composition.",
-    FIDELITY,
-    c.center && card !== FABRIC_CARD ? CENTERING : "",
-    c.prompt,
-    edit
-      ? `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`
-      : "",
+    `Category: ${c.category}. Source type: ${c.input}.`,
   ];
+
+  if (c.mode === "1") {
+    parts.push(`Model direction: ${c.modelDescription}.`);
+    parts.push(MODE1_SHOTS[card - 1]);
+    if (card === 1) parts.push(`Location: ${c.prompt} ${sceneFor(c, 1)}`);
+    if (card > 1 && card < FABRIC_CARD)
+      parts.push(
+        "Use the exact same model face, hair, body and garment as card 1. Studio setting only.",
+      );
+  } else if (c.mode === "2") {
+    parts.push(`Model direction: ${c.modelDescription}.`);
+    parts.push(`Lifestyle scene: ${c.prompt} ${sceneFor(c, card)}`);
+    parts.push(POSES[(card - 1) % POSES.length]);
+  } else if (c.mode === "3") {
+    parts.push(`New pose: ${POSES[(card - 1) % POSES.length]}`);
+    parts.push(`Setting: ${c.prompt} ${sceneFor(c, card)}`);
+  } else {
+    parts.push(`New background for this image: ${sceneFor(c, card)} ${c.prompt}`);
+    parts.push("Keep the model, pose, framing and garment exactly as in the source photo.");
+  }
+
+  parts.push(fidelity);
+  if (c.center && card !== FABRIC_CARD && c.mode !== "4") parts.push(CENTERING);
+  if (edit)
+    parts.push(
+      `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
+    );
+
   const roles: string[] = ["Image 1 is the exact garment source."];
   if (images.identity) roles.push("Image 2 is the real model identity reference.");
   if (images.firstCard)
     roles.push(
-      "Image 2 establishes model identity, location and lighting. Keep this exact same model and setting across the lifestyle cards.",
+      "Image 2 is card 1: it establishes the model's face, hair and body. Keep this exact same model across the studio cards.",
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
-  if (roles.length > 1 || images.revision) parts.push(roles.join(" "));
+  if (roles.length > 1) parts.push(roles.join(" "));
   return parts.filter(Boolean).join("\n\n");
 }
 

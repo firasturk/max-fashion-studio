@@ -17,6 +17,19 @@ export interface Batch {
   last_error?: string | null;
   created: number;
   updated: number;
+  /** Present on the batches list only. */
+  total?: number;
+  completed?: number;
+  review?: number;
+  failed?: number;
+  queued?: number;
+}
+
+export interface EngineModel {
+  slug: string;
+  name: string;
+  enabled: boolean;
+  reason: string;
 }
 
 export interface Source {

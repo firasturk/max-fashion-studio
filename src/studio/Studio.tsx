@@ -22,12 +22,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { get, post, postForm } from "@/api";
+import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob } from "@/lib/zip";
-import { DEFAULT_CONFIG, type Config } from "@shared/config";
+import { DEFAULT_CONFIG, cardsPerSource, exportsOriginals, type Config } from "@shared/config";
 import { outputName, safeArchiveName, stemKey } from "@shared/naming";
-import type { Batch, StateResponse, Task, User } from "@shared/types";
+import type { Batch, EngineModel, StateResponse, Task, User } from "@shared/types";
+import type { PickedFile } from "@/lib/files";
+import BatchesView from "./BatchesView";
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards from "./ModeCards";
@@ -53,10 +55,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<Task | null>(null);
-  const [identityName, setIdentityName] = useState("");
   const [batchName, setBatchName] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
+  const [page, setPage] = useState<"studio" | "batches">("studio");
+  const [models, setModels] = useState<EngineModel[]>([]);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const { batch, sources, tasks, active, open, close, refresh, action, remove } = useBatch();
 
   const loadState = useCallback(async () => {
@@ -70,9 +74,28 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }, []);
 
+  const loadModels = useCallback(async () => {
+    try {
+      const d = await get<{ models: EngineModel[] }>("/api/studio/engine/models");
+      setModels(d.models);
+    } catch {
+      setModels([]);
+    }
+  }, []);
+
   useEffect(() => {
+    void loadState().then(loadModels);
+  }, [loadState, loadModels]);
+
+  // The batches page always shows fresh counts, including batches still generating in the background.
+  useEffect(() => {
+    if (page !== "batches") return;
     void loadState();
-  }, [loadState]);
+    const timer = setInterval(() => {
+      if (!document.hidden) void loadState();
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [page, loadState]);
 
   // Keep the review dialog on the latest copy of its task while the batch refreshes.
   useEffect(() => {
@@ -97,19 +120,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const queued = tasks.filter((t) => t.status === "queued");
   const completed = tasks.filter((t) => !!t.output).length;
 
-  function addFiles(list: FileList | null) {
-    if (!list) return;
-    const names = new Set(pending.map((p) => stemKey(p.file.name)));
+  function addFiles(picked: PickedFile[]) {
+    const names = new Set(pending.map((p) => stemKey(p.name)));
     const additions: Pending[] = [];
     let rejected = 0;
-    for (const f of Array.from(list)) {
-      const key = stemKey(f.name);
-      if (!ACCEPTED_TYPES.includes(f.type) || f.size > MAX_UPLOAD_BYTES || names.has(key)) {
+    for (const { file, path } of picked) {
+      const name = path.replace(/^\/+/, "");
+      const key = stemKey(name);
+      if (!ACCEPTED_TYPES.includes(file.type) || file.size > MAX_UPLOAD_BYTES || names.has(key)) {
         rejected++;
         continue;
       }
       names.add(key);
-      additions.push({ file: f, url: URL.createObjectURL(f), role: "lead" });
+      additions.push({ file, name, url: URL.createObjectURL(file), role: "lead" });
     }
     setPending((p) => [...p, ...additions]);
     if (rejected)
@@ -121,9 +144,28 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   async function openBatch(id: string) {
     if (uploading) return;
     setSelection(new Set());
+    setOpeningId(id);
     try {
       await open(id);
       setTab("results");
+      setPage("studio");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setOpeningId(null);
+    }
+  }
+
+  async function deleteBatchById(b: Batch) {
+    if (
+      !window.confirm(`Delete "${b.name}" with all originals and results? This cannot be undone.`)
+    )
+      return;
+    try {
+      if (batch?.id === b.id) await remove();
+      else await del(`/api/studio/batch?batch=${encodeURIComponent(b.id)}`);
+      await loadState();
+      toast.success("Batch deleted.");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -138,10 +180,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   async function saveBatch() {
     if (!pending.length || uploading) return;
-    if (config.mode === "3" && !config.identity) {
-      toast.error("Add the model identity reference.");
-      return;
-    }
     setUploading(true);
     try {
       const id = batch
@@ -157,6 +195,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       for (const p of pending) {
         const form = new FormData();
         form.append("file", p.file);
+        form.append("name", p.name);
         form.append("role", p.role);
         try {
           form.append("reference", await makeReference(p.file), "reference.jpg");
@@ -165,7 +204,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           URL.revokeObjectURL(p.url);
         } catch (e) {
           remaining.push(p);
-          toast.error(`${p.file.name}: ${(e as Error).message}`);
+          toast.error(`${p.name}: ${(e as Error).message}`);
         }
       }
       setPending(remaining);
@@ -220,20 +259,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }
 
-  async function setIdentity(file: File) {
-    const form = new FormData();
-    try {
-      form.append("file", await makeReference(file), "identity-reference.jpg");
-      form.append("name", file.name);
-      const d = await postForm<{ id: string }>("/api/studio/identity", form);
-      setConfig((c) => ({ ...c, identity: d.id }));
-      setIdentityName(file.name);
-      toast.success("Identity reference saved.");
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   async function deleteBatch() {
     if (!batch || active) return;
     if (
@@ -255,6 +280,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   async function downloadZip() {
     if (!batch || exporting) return;
     const mode = viewConfig.mode;
+    const total = cardsPerSource(viewConfig);
     const chosen = ready.filter((t) => selection.size === 0 || selection.has(t.id));
     if (!chosen.length) {
       toast.error("Select at least one ready or approved result.");
@@ -264,10 +290,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
       const entries = chosen.map((t) => ({
-        name: outputName(byId.get(t.source)!.name, t.card, mode),
+        name: outputName(byId.get(t.source)!.name, t.card, mode, total),
         url: outputUrl(t),
       }));
-      const originalsIncluded = mode === "2" || mode === "3";
+      const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
         for (const s of sources)
           entries.push({ name: `originals/${s.name}`, url: sourceUrl(s.id, "original") });
@@ -276,7 +302,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         engine: engine.model,
         generated: chosen.map((t) => ({
           original: byId.get(t.source)?.name,
-          file: outputName(byId.get(t.source)!.name, t.card, mode),
+          file: outputName(byId.get(t.source)!.name, t.card, mode, total),
           status: t.status,
           prompt: t.prompt,
           qa: t.qa ? JSON.parse(t.qa) : null,
@@ -316,6 +342,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             IMAGE STUDIO<span>CREATIVE OPERATIONS</span>
           </span>
         </a>
+        <nav className="nav-tabs" aria-label="Pages">
+          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
+            Studio
+          </button>
+          <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
+            Batches <span>{batches.length}</span>
+          </button>
+        </nav>
         <div className="top-actions">
           <span className="engine-tag">
             <Sparkles size={15} /> Higgsfield · {engine.model || "…"}
@@ -334,222 +368,260 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       </header>
 
       <main>
-        <div className="page-heading">
-          <div>
-            <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
-            <h1>From shoot to lifestyle.</h1>
-            <p>One collection. Every image. Your creative direction.</p>
-          </div>
-          <button className="secondary" onClick={newBatch} disabled={uploading}>
-            <ImagePlus size={17} />
-            New batch
-          </button>
-        </div>
-
-        <ModeCards
-          value={viewConfig.mode}
-          disabled={locked}
-          onChange={(mode) =>
-            setConfig((c) => ({ ...c, mode, input: mode === "4" ? "model" : c.input }))
-          }
-        />
-
-        <div className="workbench">
-          <CreativePanel
-            config={viewConfig}
-            locked={locked}
-            saved={!!batch}
-            identityName={identityName}
-            onChange={(patch) => setConfig((c) => ({ ...c, ...patch }))}
-            onIdentity={setIdentity}
-          />
-
-          <section className="media-panel">
-            <div className="media-heading">
+        {page === "batches" ? (
+          <>
+            <div className="page-heading">
               <div>
-                <span className="step">03</span>
-                <h2>{batch ? batch.name : "Your image batch"}</h2>
+                <div className="eyebrow">SAVED BATCHES</div>
+                <h1>Every collection you have processed.</h1>
+                <p>
+                  Open a batch to review, revise or export. Generation continues on the server while
+                  you are away.
+                </p>
               </div>
-              {batches.length > 0 && (
-                <Select value={batch?.id || ""} onValueChange={openBatch} disabled={uploading}>
-                  <SelectTrigger className="batch-picker" aria-label="Saved batches">
-                    <FolderOpen size={15} />
-                    <SelectValue placeholder="Saved batches" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {batches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <button
+                className="secondary"
+                onClick={() => {
+                  newBatch();
+                  setPage("studio");
+                }}
+                disabled={uploading}
+              >
+                <ImagePlus size={17} />
+                New batch
+              </button>
+            </div>
+            <section className="batches-page">
+              <BatchesView
+                batches={batches}
+                busyId={openingId}
+                onOpen={(id) => void openBatch(id)}
+                onDelete={(b) => void deleteBatchById(b)}
+              />
+            </section>
+          </>
+        ) : (
+          <>
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
+                <h1>From shoot to lifestyle.</h1>
+                <p>One collection. Every image. Your creative direction.</p>
+              </div>
+              <button className="secondary" onClick={newBatch} disabled={uploading}>
+                <ImagePlus size={17} />
+                New batch
+              </button>
             </div>
 
-            {error && (
-              <div role="alert" className="error-banner">
-                {error}
-                <button onClick={() => void loadState()}>Retry</button>
-              </div>
-            )}
-            {batch?.last_error && batch.state === "paused" && (
-              <div role="alert" className="error-banner">
-                Paused: {batch.last_error}
-                <button onClick={() => void runAction("retry")}>Resume</button>
-              </div>
-            )}
+            <ModeCards
+              value={viewConfig.mode}
+              disabled={locked}
+              onChange={(mode) =>
+                setConfig((c) => ({ ...c, mode, input: mode === "4" ? "model" : c.input }))
+              }
+            />
 
-            <Tabs value={tab} onValueChange={setTab} className="media-tabs">
-              <div className="tabbar">
-                <TabsList className="tabs-list">
-                  <TabsTrigger value="sources">
-                    Originals <span>{batch ? sources.length : pending.length}</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="results">
-                    Results <span>{completed}</span>
-                  </TabsTrigger>
-                </TabsList>
-                <span className="format-note">JPG · PNG · WEBP</span>
-              </div>
-              <TabsContent value="sources">
-                <SourcesTab
-                  batchOpen={!!batch}
-                  config={viewConfig}
-                  sources={sources}
-                  pending={pending}
-                  uploading={uploading}
-                  batchName={batchName}
-                  sourceUrl={(id) => sourceUrl(id)}
-                  onFiles={addFiles}
-                  onRemove={(url) => {
-                    URL.revokeObjectURL(url);
-                    setPending((a) => a.filter((x) => x.url !== url));
-                  }}
-                  onRole={(url, role) =>
-                    setPending((a) => a.map((x) => (x.url === url ? { ...x, role } : x)))
-                  }
-                  onBatchName={setBatchName}
-                />
-              </TabsContent>
-              <TabsContent value="results">
-                <ResultsTab
-                  tasks={tasks}
-                  sources={sources}
-                  mode={viewConfig.mode}
-                  running={running}
-                  selection={selection}
-                  outputUrl={outputUrl}
-                  onSelect={(id, on) =>
-                    setSelection((a) => {
-                      const n = new Set(a);
-                      if (on) n.add(id);
-                      else n.delete(id);
-                      return n;
-                    })
-                  }
-                  onClearSelection={() => setSelection(new Set())}
-                  onOpen={setSelected}
-                  onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
-                />
-              </TabsContent>
-            </Tabs>
+            <div className="workbench">
+              <CreativePanel
+                config={viewConfig}
+                locked={locked}
+                saved={!!batch}
+                models={models}
+                defaultModel={engine.model}
+                onChange={(patch) => setConfig((c) => ({ ...c, ...patch }))}
+              />
 
-            {batch && pending.length > 0 && (
-              <div className="error-banner">
-                {pending.length} uploads need retry.
-                <button onClick={() => void saveBatch()} disabled={uploading}>
-                  Retry uploads
-                </button>
-              </div>
-            )}
+              <section className="media-panel">
+                <div className="media-heading">
+                  <div>
+                    <span className="step">03</span>
+                    <h2>{batch ? batch.name : "Your image batch"}</h2>
+                  </div>
+                  {batches.length > 0 && (
+                    <Select value={batch?.id || ""} onValueChange={openBatch} disabled={uploading}>
+                      <SelectTrigger className="batch-picker" aria-label="Saved batches">
+                        <FolderOpen size={15} />
+                        <SelectValue placeholder="Saved batches" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {batches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
 
-            <footer className="batch-footer">
-              <div>
-                <strong>
-                  {batch ? `${ready.length} ready to export` : `${pending.length} images selected`}
-                </strong>
-                <span>
-                  {running
-                    ? "Generation continues on the server even if you close this tab."
-                    : batch
-                      ? "Originals and results are saved."
-                      : "Originals will be saved before generation."}
-                </span>
-              </div>
-              <div className="footer-actions">
-                {!batch ? (
-                  <button
-                    className="primary"
-                    onClick={() => void saveBatch()}
-                    disabled={!pending.length || uploading}
-                  >
-                    {uploading ? (
-                      <LoaderCircle className="spinning" size={17} />
-                    ) : (
-                      <Upload size={17} />
-                    )}
-                    Save batch
-                  </button>
-                ) : (
-                  <>
-                    {running ? (
-                      <button
-                        className="secondary"
-                        onClick={() => void runAction("pause")}
-                        disabled={acting}
-                      >
-                        <Pause size={17} />
-                        Pause
-                      </button>
-                    ) : (
+                {error && (
+                  <div role="alert" className="error-banner">
+                    {error}
+                    <button onClick={() => void loadState()}>Retry</button>
+                  </div>
+                )}
+                {batch?.last_error && batch.state === "paused" && (
+                  <div role="alert" className="error-banner">
+                    Paused: {batch.last_error}
+                    <button onClick={() => void runAction("retry")}>Resume</button>
+                  </div>
+                )}
+
+                <Tabs value={tab} onValueChange={setTab} className="media-tabs">
+                  <div className="tabbar">
+                    <TabsList className="tabs-list">
+                      <TabsTrigger value="sources">
+                        Originals <span>{batch ? sources.length : pending.length}</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="results">
+                        Results <span>{completed}</span>
+                      </TabsTrigger>
+                    </TabsList>
+                    <span className="format-note">JPG · PNG · WEBP</span>
+                  </div>
+                  <TabsContent value="sources">
+                    <SourcesTab
+                      batchOpen={!!batch}
+                      config={viewConfig}
+                      sources={sources}
+                      pending={pending}
+                      uploading={uploading}
+                      batchName={batchName}
+                      sourceUrl={(id) => sourceUrl(id)}
+                      onFiles={addFiles}
+                      onRemove={(url) => {
+                        URL.revokeObjectURL(url);
+                        setPending((a) => a.filter((x) => x.url !== url));
+                      }}
+                      onRole={(url, role) =>
+                        setPending((a) => a.map((x) => (x.url === url ? { ...x, role } : x)))
+                      }
+                      onBatchName={setBatchName}
+                    />
+                  </TabsContent>
+                  <TabsContent value="results">
+                    <ResultsTab
+                      tasks={tasks}
+                      sources={sources}
+                      mode={viewConfig.mode}
+                      running={running}
+                      selection={selection}
+                      outputUrl={outputUrl}
+                      onSelect={(id, on) =>
+                        setSelection((a) => {
+                          const n = new Set(a);
+                          if (on) n.add(id);
+                          else n.delete(id);
+                          return n;
+                        })
+                      }
+                      onClearSelection={() => setSelection(new Set())}
+                      onOpen={setSelected}
+                      onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
+                    />
+                  </TabsContent>
+                </Tabs>
+
+                {batch && pending.length > 0 && (
+                  <div className="error-banner">
+                    {pending.length} uploads need retry.
+                    <button onClick={() => void saveBatch()} disabled={uploading}>
+                      Retry uploads
+                    </button>
+                  </div>
+                )}
+
+                <footer className="batch-footer">
+                  <div>
+                    <strong>
+                      {batch
+                        ? `${ready.length} ready to export`
+                        : `${pending.length} images selected`}
+                    </strong>
+                    <span>
+                      {running
+                        ? "Generation continues on the server even if you close this tab."
+                        : batch
+                          ? "Originals and results are saved."
+                          : "Originals will be saved before generation."}
+                    </span>
+                  </div>
+                  <div className="footer-actions">
+                    {!batch ? (
                       <button
                         className="primary"
-                        onClick={() =>
-                          void (failed.length && !queued.length ? runAction("retry") : start())
-                        }
-                        disabled={acting || (!queued.length && !failed.length)}
+                        onClick={() => void saveBatch()}
+                        disabled={!pending.length || uploading}
                       >
-                        {acting ? (
+                        {uploading ? (
                           <LoaderCircle className="spinning" size={17} />
-                        ) : engine.configured ? (
-                          failed.length && !queued.length ? (
-                            <RotateCcw size={17} />
-                          ) : (
-                            <Play size={17} />
-                          )
                         ) : (
-                          <KeyRound size={17} />
+                          <Upload size={17} />
                         )}
-                        {engine.configured ? startLabel : "Connect & generate"}
+                        Save batch
                       </button>
+                    ) : (
+                      <>
+                        {running ? (
+                          <button
+                            className="secondary"
+                            onClick={() => void runAction("pause")}
+                            disabled={acting}
+                          >
+                            <Pause size={17} />
+                            Pause
+                          </button>
+                        ) : (
+                          <button
+                            className="primary"
+                            onClick={() =>
+                              void (failed.length && !queued.length ? runAction("retry") : start())
+                            }
+                            disabled={acting || (!queued.length && !failed.length)}
+                          >
+                            {acting ? (
+                              <LoaderCircle className="spinning" size={17} />
+                            ) : engine.configured ? (
+                              failed.length && !queued.length ? (
+                                <RotateCcw size={17} />
+                              ) : (
+                                <Play size={17} />
+                              )
+                            ) : (
+                              <KeyRound size={17} />
+                            )}
+                            {engine.configured ? startLabel : "Connect & generate"}
+                          </button>
+                        )}
+                        <button
+                          className="secondary"
+                          onClick={() => void downloadZip()}
+                          disabled={!ready.length || exporting}
+                        >
+                          {exporting ? (
+                            <LoaderCircle className="spinning" size={17} />
+                          ) : (
+                            <Download size={17} />
+                          )}
+                          Download ZIP
+                        </button>
+                        <button
+                          className="secondary danger"
+                          onClick={() => void deleteBatch()}
+                          disabled={active || acting}
+                          aria-label="Delete batch"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </>
                     )}
-                    <button
-                      className="secondary"
-                      onClick={() => void downloadZip()}
-                      disabled={!ready.length || exporting}
-                    >
-                      {exporting ? (
-                        <LoaderCircle className="spinning" size={17} />
-                      ) : (
-                        <Download size={17} />
-                      )}
-                      Download ZIP
-                    </button>
-                    <button
-                      className="secondary danger"
-                      onClick={() => void deleteBatch()}
-                      disabled={active || acting}
-                      aria-label="Delete batch"
-                    >
-                      <Trash2 size={17} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </footer>
-          </section>
-        </div>
+                  </div>
+                </footer>
+              </section>
+            </div>
+          </>
+        )}
         <footer className="page-footer">
           <span>max fashion / image studio</span>
           <span>AI results require visual approval before publishing.</span>
@@ -560,7 +632,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         open={connection}
         engine={engine}
         onClose={() => setConnection(false)}
-        onChanged={loadState}
+        onChanged={async () => {
+          await loadState();
+          await loadModels();
+        }}
       />
       <ReviewDialog
         task={selected}
