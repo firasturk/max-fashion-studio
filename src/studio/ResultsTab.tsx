@@ -4,6 +4,14 @@ import { Progress } from "@/components/ui/progress";
 import { STATUS_LABEL } from "./constants";
 import type { Source, Task } from "@shared/types";
 
+function cardLabel(mode: string, card: number): string {
+  if (mode === "1")
+    return card === 1 ? "Lifestyle" : card === 6 ? "Fabric detail" : `Studio ${card - 1}`;
+  if (mode === "4") return `Background ${card}`;
+  if (mode === "3") return `Pose ${card}`;
+  return `Lifestyle ${card}`;
+}
+
 export default function ResultsTab({
   tasks,
   sources,
@@ -125,13 +133,7 @@ export default function ResultsTab({
               </button>
               <div className="image-info">
                 <strong title={s?.name}>{s?.name}</strong>
-                <span>
-                  {t.card === 6
-                    ? "Fabric detail"
-                    : mode === "1"
-                      ? `Lifestyle ${t.card}`
-                      : "Lifestyle image"}
-                </span>
+                <span>{cardLabel(mode, t.card)}</span>
                 {t.error && <span className="image-error">{t.error}</span>}
                 {t.status === "failed" && (
                   <button className="text-button" onClick={() => onRetryTask(t)}>
