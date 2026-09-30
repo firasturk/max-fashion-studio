@@ -9,6 +9,7 @@ import {
   MAX_COUNT,
   RATIOS,
   SIZES,
+  backdropColors,
   type Config,
 } from "@shared/config";
 import type { EngineModel } from "@shared/types";
@@ -33,7 +34,7 @@ export default function CreativePanel({
   const enabled = models.filter((m) => m.enabled);
   const modelItems = enabled.length ? enabled.map((m) => m.slug) : [config.model || defaultModel];
   const modelLabel = (slug: string) => models.find((m) => m.slug === slug)?.name ?? slug;
-  const realModelOnly = config.mode !== "1";
+  const realModelOnly = config.mode !== "1" && config.mode !== "6";
 
   return (
     <aside className="config-panel">
@@ -86,7 +87,27 @@ export default function CreativePanel({
         onChange={(v) => onChange({ input: v as Config["input"] })}
       />
 
-      {config.mode !== "1" && (
+      {config.mode === "6" && (
+        <>
+          <label className="field-label" htmlFor="colors">
+            Background colours (comma-separated, one image each)
+          </label>
+          <input
+            id="colors"
+            className="text-input"
+            disabled={locked}
+            value={config.colors}
+            onChange={(e) => onChange({ colors: e.target.value })}
+            placeholder="pure white, warm beige, #F2E8DA"
+          />
+          <div className="prompt-tip">
+            {backdropColors(config).length} colour{backdropColors(config).length > 1 ? "s" : ""}:{" "}
+            {backdropColors(config).join(" · ")}
+          </div>
+        </>
+      )}
+
+      {config.mode !== "1" && config.mode !== "6" && (
         <>
           <label className="field-label">
             {config.mode === "4"
@@ -162,9 +183,11 @@ export default function CreativePanel({
         <label className="field-label" htmlFor="prompt">
           {config.mode === "4"
             ? "Background direction"
-            : config.mode === "5"
-              ? "City / mood preference (optional)"
-              : "Background & lifestyle prompt"}
+            : config.mode === "6"
+              ? "Extra instructions (optional)"
+              : config.mode === "5"
+                ? "City / mood preference (optional)"
+                : "Background & lifestyle prompt"}
         </label>
         <button
           className="text-button"
@@ -209,7 +232,7 @@ export default function CreativePanel({
         </div>
       </div>
 
-      {config.mode !== "4" && (
+      {config.mode !== "4" && config.mode !== "6" && (
         <>
           <div className="centering">
             <ScanLine size={21} />

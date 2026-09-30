@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MODES = ["1", "2", "3", "4", "5"] as const;
+export const MODES = ["1", "2", "3", "4", "5", "6"] as const;
 export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
@@ -18,6 +18,8 @@ export const configSchema = z.object({
   model: z.string().max(120).optional(),
   /** Images per original for modes 2-4. Mode 1 always produces six. */
   count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  /** Backdrop-colour mode: comma-separated colours, one image per colour. */
+  colors: z.string().max(400).default("pure white, warm beige, light grey"),
   /** Editorial mode: look of a generated face when the reference face is not visible. */
   market: z.enum(MARKETS).default("auto"),
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
@@ -31,9 +33,20 @@ export type Config = z.infer<typeof configSchema>;
 export const FABRIC_CARD = 6;
 export const MODE1_CARDS = 6;
 
+/** Colours for the backdrop-colour workflow, in order, at most MAX_COUNT. */
+export function backdropColors(c: Config): string[] {
+  const list = (c.colors || "")
+    .split(/[,\n;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return (list.length ? list : ["pure white"]).slice(0, MAX_COUNT);
+}
+
 /** How many generation tasks one lead upload creates. */
 export function cardsPerSource(c: Config): number {
-  return c.mode === "1" ? MODE1_CARDS : Math.min(MAX_COUNT, Math.max(1, c.count || 1));
+  if (c.mode === "1") return MODE1_CARDS;
+  if (c.mode === "6") return backdropColors(c).length;
+  return Math.min(MAX_COUNT, Math.max(1, c.count || 1));
 }
 
 /** Women's categories as named on maxfashion.com (UAE). Each carries lifestyle scenes and product-fidelity notes. */
@@ -224,6 +237,7 @@ export const DEFAULT_CONFIG: Config = {
   count: 3,
   backdrop: "warm beige seamless paper backdrop",
   market: "auto",
+  colors: "pure white, warm beige, light grey",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,
 };

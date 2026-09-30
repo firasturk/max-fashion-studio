@@ -1,11 +1,12 @@
 import type { Config } from "./config";
-import { CATEGORY_PRESETS, FABRIC_CARD } from "./config";
+import { CATEGORY_PRESETS, FABRIC_CARD, backdropColors } from "./config";
 
 export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "1": "Fashion catalogue production from a mannequin or flat-lay reference. Replace the mannequin with a fully clothed photorealistic adult model wearing exactly this garment. Do not invent unseen product construction.",
   "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the category. Never reuse the original person's face.",
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
   "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
+  "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
 
@@ -87,6 +88,12 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   } else if (c.mode === "3") {
     parts.push(`New pose: ${POSES[(card - 1) % POSES.length]}`);
     parts.push(`Setting: ${c.prompt} ${sceneFor(c, card)}`);
+  } else if (c.mode === "6") {
+    const colour = backdropColors(c)[(card - 1) % backdropColors(c).length];
+    parts.push(
+      `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
+    );
+    if (c.prompt) parts.push(c.prompt);
   } else if (c.mode === "5") {
     parts.push("Editorial prompt is written per image by the prompt builder before generation.");
     if (c.prompt) parts.push(`City / mood preference: ${c.prompt}`);
@@ -100,7 +107,7 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
     parts.push(
       "Output must be a flat textile macro photograph only. If a person would appear, the result is wrong.",
     );
-  if (c.center && card !== FABRIC_CARD && c.mode !== "4") parts.push(CENTERING);
+  if (c.center && card !== FABRIC_CARD && c.mode !== "4" && c.mode !== "6") parts.push(CENTERING);
   if (edit)
     parts.push(
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,

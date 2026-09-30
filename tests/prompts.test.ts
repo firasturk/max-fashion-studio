@@ -81,6 +81,20 @@ describe("config rules", () => {
     expect(createsTasks({ ...base, mode: "1" }, "supporting")).toBe(false);
     expect(createsTasks({ ...base, mode: "2" }, "lead")).toBe(true);
   });
+  it("backdrop-colour mode makes one card per colour and only recolours the background", () => {
+    const c: Config = {
+      ...base,
+      mode: "6",
+      input: "flatlay",
+      colors: "pure white, #F2E8DA; light grey",
+    };
+    expect(cardsPerSource(c)).toBe(3);
+    const p2 = buildPrompt(c, 2);
+    expect(p2).toContain("change ONLY the background colour");
+    expect(p2).toContain("solid #F2E8DA backdrop");
+    expect(p2).not.toContain("exactly ONE model");
+    expect(cardsPerSource({ ...c, colors: "" })).toBe(1);
+  });
   it("creates six cards for mode 1 and the chosen count otherwise", () => {
     expect(cardsPerSource(base)).toBe(6);
     expect(cardsPerSource({ ...base, mode: "4", count: 3 })).toBe(3);

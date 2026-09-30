@@ -422,7 +422,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               value={viewConfig.mode}
               disabled={locked}
               onChange={(mode) =>
-                setConfig((c) => ({ ...c, mode, input: mode === "4" ? "model" : c.input }))
+                setConfig((c) => ({
+                  ...c,
+                  mode,
+                  input: mode === "1" || mode === "6" ? c.input : "model",
+                }))
               }
             />
 

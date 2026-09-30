@@ -1,7 +1,15 @@
-import { Camera, Layers, Sparkles, UserRound, Wand2, type LucideIcon } from "lucide-react";
+import {
+  Camera,
+  Layers,
+  PaintBucket,
+  Sparkles,
+  UserRound,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface ModeInfo {
-  id: "1" | "2" | "3" | "4" | "5";
+  id: "1" | "2" | "3" | "4" | "5" | "6";
   title: string;
   caption: string;
   icon: LucideIcon;
@@ -52,6 +60,16 @@ export const EDITORIAL_MODE: ModeInfo = {
     "From your real model photo: a vision model runs the Fashion Editorial Prompt Builder skill on each image, writes a detailed Zara / Splash-style prompt (exact outfit, preserved face when visible, new location, real editorial pose) and generates it. Every image gets a different scene and pose.",
 };
 MODES.push(EDITORIAL_MODE);
+
+export const BACKDROP_MODE: ModeInfo = {
+  id: "6",
+  title: "Backdrop colour",
+  caption: "Product untouched · one image per colour",
+  icon: PaintBucket,
+  detail:
+    "Packshot recolour: keep the product exactly as shot and swap only the background for a flat solid colour. List the colours you need and get one image per colour.",
+};
+MODES.push(BACKDROP_MODE);
 
 export const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
