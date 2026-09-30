@@ -8,9 +8,11 @@ import {
   engineConfigured,
   makeClient,
   makeOpenAIClient,
+  makeGoogleClient,
   keyLooksValid,
 } from "./engine";
 import { OPENAI_MODELS } from "./openai";
+import { GOOGLE_MODELS } from "./google";
 import {
   resolveEngineKey,
   resolveEngineModel,
@@ -21,6 +23,8 @@ import {
   ENGINE_MODEL_SETTING,
   OPENAI_KEY_SETTING,
   resolveOpenAIKey,
+  GOOGLE_KEY_SETTING,
+  resolveGoogleKey,
 } from "./settings";
 import {
   configSchema,
@@ -103,7 +107,8 @@ studioRoutes.get("/state", async (c) => {
       configured: keyLooksValid(engineKey.key),
       source: engineKey.source,
       openai: (await resolveOpenAIKey(c.env)).source,
-      review: !!c.env.GEMINI_API_KEY,
+      google: (await resolveGoogleKey(c.env)).source,
+      review: !!(await resolveGoogleKey(c.env)).key,
     },
   });
 });
@@ -118,6 +123,24 @@ studioRoutes.post("/engine/openai-key", async (c) => {
   await setSetting(c.env, OPENAI_KEY_SETTING, key);
   await deleteSetting(c.env, MODELS_CACHE);
   return c.json({ ok: true, message: check.message });
+});
+
+/** Save a Google AI Studio key from the app. It also powers the automatic review. */
+studioRoutes.post("/engine/google-key", async (c) => {
+  if (c.env.GEMINI_API_KEY)
+    throw new StudioError("The Google key is managed as a Worker secret on this deployment.", 409);
+  const { key } = await body(c, z.object({ key: z.string().trim().min(20).max(400) }));
+  const check = await (await makeGoogleClient(c.env, key)).verify();
+  if (!check.ok) throw new StudioError(`Google rejected this key: ${check.message}`, 400);
+  await setSetting(c.env, GOOGLE_KEY_SETTING, key);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/google-key", async (c) => {
+  await deleteSetting(c.env, GOOGLE_KEY_SETTING);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true });
 });
 
 studioRoutes.delete("/engine/openai-key", async (c) => {
@@ -149,6 +172,21 @@ studioRoutes.get("/engine/models", async (c) => {
     }
   }
   const models: { slug: string; name: string; enabled: boolean; reason: string }[] = [];
+  const googleKey = (await resolveGoogleKey(c.env)).key;
+  if (googleKey) {
+    try {
+      const g = await makeGoogleClient(c.env, googleKey);
+      for (const m of GOOGLE_MODELS) {
+        const ok = await g.hasModel(m.slug);
+        models.push({ ...m, enabled: ok, reason: ok ? "" : "not available to this Google key" });
+      }
+    } catch (e) {
+      for (const m of GOOGLE_MODELS) models.push({ ...m, enabled: false, reason: errorMessage(e) });
+    }
+  } else {
+    for (const m of GOOGLE_MODELS)
+      models.push({ ...m, enabled: false, reason: "add a Google key" });
+  }
   const openaiKey = (await resolveOpenAIKey(c.env)).key;
   if (openaiKey) {
     try {
@@ -240,6 +278,13 @@ studioRoutes.get("/engine/probe", async (c) => {
 studioRoutes.post("/engine/model", async (c) => {
   const { model } = await body(c, z.object({ model: z.string().trim().min(1).max(120) }));
   if (!/^[\w./-]+$/.test(model)) throw new StudioError("Invalid model slug.");
+  if (GOOGLE_MODELS.some((m) => m.slug === model)) {
+    const g = await makeGoogleClient(c.env);
+    if (!(await g.hasModel(model)))
+      throw new StudioError(`"${model}" is not available to your Google key.`);
+    await setSetting(c.env, ENGINE_MODEL_SETTING, model);
+    return c.json({ ok: true, message: `Model "${model}" is available.` });
+  }
   if (OPENAI_MODELS.some((m) => m.slug === model)) {
     const oa = await makeOpenAIClient(c.env);
     if (!(await oa.hasModel(model)))

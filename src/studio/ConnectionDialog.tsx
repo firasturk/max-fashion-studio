@@ -15,6 +15,7 @@ export interface EngineInfo {
   configured: boolean;
   source: "secret" | "stored" | "none";
   openai: "secret" | "stored" | "none";
+  google: "secret" | "stored" | "none";
   review: boolean;
 }
 
@@ -34,6 +35,8 @@ export default function ConnectionDialog({
   const [key, setKey] = useState("");
   const [model, setModel] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [googleKey, setGoogleKey] = useState("");
+  const [savingGoogle, setSavingGoogle] = useState(false);
   const [savingOpenai, setSavingOpenai] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -61,6 +64,39 @@ export default function ConnectionDialog({
       setResult({ ok: false, message: (e as Error).message });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveGoogle() {
+    setSavingGoogle(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/google-key", {
+        key: googleKey,
+      });
+      setGoogleKey("");
+      setResult(r);
+      await onChanged();
+      toast.success("Google key saved and verified.");
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSavingGoogle(false);
+    }
+  }
+
+  async function removeGoogle() {
+    if (
+      !window.confirm(
+        "Remove the saved Google key? Nano Banana models and automatic review stop until a new key is added.",
+      )
+    )
+      return;
+    try {
+      await del("/api/studio/engine/google-key");
+      setResult(null);
+      await onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -206,6 +242,67 @@ export default function ConnectionDialog({
 
         <div className="qa-heading" style={{ marginTop: 12 }}>
           <KeyRound size={18} />
+          <strong>Google (Nano Banana Pro)</strong>
+        </div>
+        {engine.google !== "none" ? (
+          <div className="success-note">
+            <Check size={19} />
+            {engine.google === "secret"
+              ? "A Google key is configured as a server secret."
+              : "A Google key is saved on the server."}{" "}
+            It also powers the automatic review.
+          </div>
+        ) : (
+          <p className="quality-note">
+            Add a Google AI Studio key to use Nano Banana Pro directly. Create it at{" "}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noreferrer"
+              className="text-link"
+            >
+              aistudio.google.com/apikey
+            </a>{" "}
+            on a project with billing enabled.
+          </p>
+        )}
+        {engine.google !== "secret" && (
+          <div className="footer-actions">
+            <input
+              id="google-key"
+              type="password"
+              autoComplete="off"
+              placeholder="AIza..."
+              aria-label="Google API key"
+              value={googleKey}
+              onChange={(e) => setGoogleKey(e.target.value.trim())}
+            />
+            <button
+              className="primary"
+              onClick={() => void saveGoogle()}
+              disabled={savingGoogle || !googleKey}
+            >
+              {savingGoogle ? (
+                <LoaderCircle className="spinning" size={17} />
+              ) : (
+                <KeyRound size={17} />
+              )}
+              {engine.google === "stored" ? "Replace" : "Save"}
+            </button>
+            {engine.google === "stored" && (
+              <button
+                className="secondary danger"
+                onClick={() => void removeGoogle()}
+                aria-label="Remove Google key"
+              >
+                <Trash2 size={17} />
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="qa-heading" style={{ marginTop: 12 }}>
+          <KeyRound size={18} />
           <strong>OpenAI (GPT Image 2.5 Sunburst / Flare)</strong>
         </div>
         {engine.openai !== "none" ? (
@@ -280,6 +377,8 @@ export default function ConnectionDialog({
             <option value="flux-2-pro" />
             <option value="flux-2-max" />
             <option value="qwen-image-edit" />
+            <option value="gemini-3-pro-image" />
+            <option value="gemini-3.1-flash-image" />
             <option value="gpt-image-2.5-sunburst" />
             <option value="gpt-image-2.5-flare" />
             <option value="gpt-image-2" />
@@ -302,7 +401,9 @@ export default function ConnectionDialog({
           <span>Image model</span>
           <strong>{engine.model}</strong>
           <span>Automatic review</span>
-          <strong>{engine.review ? "Gemini 2.5 Flash" : "Off (manual approval)"}</strong>
+          <strong>
+            {engine.review ? "Gemini 2.5 Flash (Google key)" : "Off until a Google key is added"}
+          </strong>
         </div>
       </DialogContent>
     </Dialog>

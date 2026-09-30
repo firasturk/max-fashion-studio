@@ -48,6 +48,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     configured: false,
     source: "none",
     openai: "none",
+    google: "none",
     review: false,
   });
   const [tab, setTab] = useState("sources");
@@ -235,7 +236,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }
 
   async function start() {
-    if (!engine.configured && engine.openai === "none") {
+    if (!engine.configured && engine.openai === "none" && engine.google === "none") {
       setConnection(true);
       return;
     }
@@ -356,11 +357,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             <Sparkles size={15} /> {engine.model || "…"}
           </span>
           <button
-            className={`connection-button ${engine.configured || engine.openai !== "none" ? "connected" : ""}`}
+            className={`connection-button ${engine.configured || engine.openai !== "none" || engine.google !== "none" ? "connected" : ""}`}
             onClick={() => setConnection(true)}
           >
             <KeyRound size={16} />
-            {engine.configured || engine.openai !== "none" ? "Connected" : "Not connected"}
+            {engine.configured || engine.openai !== "none" || engine.google !== "none"
+              ? "Connected"
+              : "Not connected"}
           </button>
           <button className="user-button" onClick={() => void signOut()} title={user.email}>
             <LogOut size={15} /> {user.name}
@@ -592,7 +595,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                             ) : (
                               <KeyRound size={17} />
                             )}
-                            {engine.configured || engine.openai !== "none"
+                            {engine.configured ||
+                            engine.openai !== "none" ||
+                            engine.google !== "none"
                               ? startLabel
                               : "Connect & generate"}
                           </button>

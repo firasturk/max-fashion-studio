@@ -101,3 +101,14 @@ export async function resolveOpenAIKey(
   const stored = await getSetting(env, OPENAI_KEY_SETTING);
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
+
+export const GOOGLE_KEY_SETTING = "google_api_key";
+
+/** Google AI Studio credential: the GEMINI_API_KEY secret wins, otherwise the key saved from the app. */
+export async function resolveGoogleKey(
+  env: Env,
+): Promise<{ key: string | null; source: EngineKeySource }> {
+  if (env.GEMINI_API_KEY) return { key: env.GEMINI_API_KEY, source: "secret" };
+  const stored = await getSetting(env, GOOGLE_KEY_SETTING);
+  return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
+}

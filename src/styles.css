@@ -1391,3 +1391,10 @@ input[type="checkbox"] {
   font-size: 14px;
   margin-bottom: 4px;
 }
+.connection-dialog input#google-key {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}

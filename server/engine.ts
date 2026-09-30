@@ -14,7 +14,13 @@ import { StudioError, errorMessage, isFatalEngineError } from "./errors";
 import { buildPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
-import { resolveEngineKey, resolveEngineModel, resolveOpenAIKey } from "./settings";
+import {
+  resolveEngineKey,
+  resolveEngineModel,
+  resolveOpenAIKey,
+  resolveGoogleKey,
+} from "./settings";
+import { GoogleImageClient, isGoogleModel } from "./google";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
 interface BatchRow {
@@ -87,6 +93,13 @@ function webhookUrl(env: Env, batchId: string): string | undefined {
 
 export type Background = (p: Promise<unknown>) => void;
 
+export async function makeGoogleClient(env: Env, key?: string): Promise<GoogleImageClient> {
+  const apiKey = key ?? (await resolveGoogleKey(env)).key;
+  if (!apiKey)
+    throw new StudioError("Google is not connected. Add the API key in Connection.", 428, true);
+  return new GoogleImageClient(apiKey);
+}
+
 export async function makeOpenAIClient(env: Env, key?: string): Promise<OpenAIImageClient> {
   const apiKey = key ?? (await resolveOpenAIKey(env)).key;
   if (!apiKey)
@@ -135,7 +148,7 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
         await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
       continue;
     }
-    if (task.request_id.startsWith("openai:")) {
+    if (task.request_id.startsWith("openai:") || task.request_id.startsWith("sync:")) {
       // Synchronous engine: the background job finalises the task itself; only guard against a lost isolate.
       if (age > OPENAI_TIMEOUT_MS)
         await failTask(
@@ -219,7 +232,8 @@ async function storeResultBytes(
   });
 
   let qa: QA;
-  if (env.GEMINI_API_KEY) {
+  const reviewKey = (await resolveGoogleKey(env)).key;
+  if (reviewKey) {
     try {
       const source = await first<SourceRow>(
         env.DB,
@@ -229,7 +243,7 @@ async function storeResultBytes(
       const ref = source ? await env.BUCKET.get(source.reference_key || source.key) : null;
       if (!ref) throw new StudioError("Original unavailable for review.");
       qa = await inspectWithGemini(
-        env.GEMINI_API_KEY,
+        reviewKey,
         { bytes: await ref.arrayBuffer(), mime: ref.httpMetadata?.contentType || "image/jpeg" },
         result,
         task.card === FABRIC_CARD,
@@ -362,12 +376,22 @@ async function submitNext(
   background?: Background,
 ): Promise<void> {
   const openai = isOpenAIModel(config.model);
+  const google = isGoogleModel(config.model);
   if (openai) {
     if (!(await resolveOpenAIKey(env)).key) {
       await pauseBatch(
         env,
         batch.id,
         "OpenAI is not connected. Add the API key in Connection and resume.",
+      );
+      return;
+    }
+  } else if (google) {
+    if (!(await resolveGoogleKey(env)).key) {
+      await pauseBatch(
+        env,
+        batch.id,
+        "Google is not connected. Add the API key in Connection and resume.",
       );
       return;
     }
@@ -387,7 +411,7 @@ async function submitNext(
   const slots = concurrency(env) - (processing?.n ?? 0);
   if (slots <= 0) return;
   const candidates = await eligibleQueued(env, batch, config, slots);
-  const client = openai ? null : await makeClient(env, undefined, config.model);
+  const client = openai || google ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
     const token = uuid();
@@ -621,7 +645,7 @@ async function submitOpenAITask(
   if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
   await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
 
-  const requestId = `openai:${uuid()}`;
+  const requestId = `sync:${uuid()}`;
   // Record the id before the slow call so a concurrent driver sees the task as in flight.
   await run(
     env.DB,
@@ -632,7 +656,9 @@ async function submitOpenAITask(
     lease,
   );
 
-  const client = await makeOpenAIClient(env);
+  const client = isGoogleModel(config.model)
+    ? await makeGoogleClient(env)
+    : await makeOpenAIClient(env);
   const job = (async () => {
     try {
       const result = await client.edit({
