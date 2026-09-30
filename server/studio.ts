@@ -134,7 +134,9 @@ studioRoutes.get("/engine/models", async (c) => {
       }
     }),
   );
-  await setSetting(c.env, MODELS_CACHE, JSON.stringify({ at: now(), models }));
+  // Never cache a scan in which nothing answered (network trouble), so the next open re-probes.
+  if (models.some((m) => m.enabled))
+    await setSetting(c.env, MODELS_CACHE, JSON.stringify({ at: now(), models }));
   return c.json({ models });
 });
 
