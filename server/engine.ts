@@ -335,9 +335,16 @@ async function storeResultBytes(
         );
         if (firstCard?.output) identity = await outputBytes(env, firstCard);
       }
-      qa = googleKey
-        ? await reviewWithGoogle(googleKey, ref, result, task.card === FABRIC_CARD, identity)
-        : await reviewWithOpenAI(openaiKey!, ref, result, task.card === FABRIC_CARD, identity);
+      try {
+        qa = googleKey
+          ? await reviewWithGoogle(googleKey, ref, result, task.card === FABRIC_CARD, identity)
+          : await reviewWithOpenAI(openaiKey!, ref, result, task.card === FABRIC_CARD, identity);
+      } catch (e) {
+        const oa = googleKey ? (await resolveOpenAIKey(env)).key : null;
+        if (oa && /location is not supported/i.test(errorMessage(e)))
+          qa = await reviewWithOpenAI(oa, ref, result, task.card === FABRIC_CARD, identity);
+        else throw e;
+      }
     } catch (e) {
       qa = manualQA(`Automatic review unavailable (${errorMessage(e)}). Check manually.`);
     }
@@ -718,9 +725,18 @@ async function ensureBrief(
       true,
     );
   const preferOpenAI = isOpenAIModel(config.model) ? !!openai : !google;
-  const brief = preferOpenAI
-    ? await buildBriefWithOpenAI(openai!, req)
-    : await buildBriefWithGoogle(google!, req);
+  let brief: EditorialBrief;
+  if (preferOpenAI) brief = await buildBriefWithOpenAI(openai!, req);
+  else {
+    try {
+      brief = await buildBriefWithGoogle(google!, req);
+    } catch (e) {
+      // Gemini refuses some Cloudflare regions ("User location is not supported"); OpenAI does not.
+      if (openai && /location is not supported/i.test(errorMessage(e)))
+        brief = await buildBriefWithOpenAI(openai, req);
+      else throw e;
+    }
+  }
   if (plan.mood) brief.mood = plan.mood;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
