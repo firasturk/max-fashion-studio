@@ -1021,6 +1021,23 @@ h2 {
   width: 100%;
   margin-bottom: 9px;
 }
+.revision-progress {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #1746bd;
+  background: #eef3ff;
+  border: 1px solid #c9d7fb;
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin: 10px 0 6px;
+}
+.revision-progress svg {
+  flex: none;
+  margin-top: 2px;
+}
 .revision-note {
   font-size: 11px;
   line-height: 1.6;

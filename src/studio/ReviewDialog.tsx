@@ -87,6 +87,7 @@ export default function ReviewDialog({
     : null;
   const fabric = task?.card === 6;
   const canApprove = !!task && (task.status === "ready" || task.status === "review");
+  const inFlight = !!task && (task.status === "processing" || task.status === "queued");
 
   // Keyboard: A approve, R revise, arrows navigate, 1/2/3 switch views. Ignored while typing.
   useEffect(() => {
@@ -247,6 +248,15 @@ export default function ReviewDialog({
               <p className="quality-note">Spent on this image so far ≈ ${task.cost.toFixed(2)}.</p>
             )}
 
+            {inFlight && (
+              <p className="revision-progress">
+                <LoaderCircle className="spinning" size={15} />
+                {task?.status === "queued"
+                  ? "A new version of this image is queued. "
+                  : "A new version of this image is being generated. "}
+                The current result stays until it arrives; with Economy mode this can take a while.
+              </p>
+            )}
             <label className="field-label" htmlFor="revision">
               Edit this result
             </label>
@@ -274,10 +284,10 @@ export default function ReviewDialog({
             <button
               className="primary"
               onClick={() => onRevise(edit).then(() => setEdit(""))}
-              disabled={busy || !edit.trim() || task?.status === "processing"}
+              disabled={busy || !edit.trim() || inFlight}
             >
               {busy ? <LoaderCircle className="spinning" size={17} /> : <RefreshCw size={17} />}
-              Generate revision
+              {inFlight ? "Revision in progress…" : "Generate revision"}
             </button>
             <button
               className="secondary"
