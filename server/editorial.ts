@@ -120,6 +120,7 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `User city / mood preference: ${req.preference}`
       : "No city or mood preference given.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
+    "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
     "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
     "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt).",
   ]
