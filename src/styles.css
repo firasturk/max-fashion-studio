@@ -422,6 +422,9 @@ h2 {
   vertical-align: -2px;
   margin-right: 2px;
 }
+.text-button.danger-text {
+  color: #b42318;
+}
 .skill-dialog .text-input {
   width: 100%;
 }

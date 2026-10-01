@@ -123,7 +123,9 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
     );
 
-  const roles: string[] = ["Image 1 is the exact garment source."];
+  const roles: string[] = [
+    "Image 1 is the exact source for the outfit, footwear and any accessories worn: keep them identical.",
+  ];
   if (images.identity) roles.push("Image 2 is the real model identity reference.");
   if (images.firstCard)
     roles.push(
@@ -151,11 +153,11 @@ export function buildEditorialPrompt(
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
     );
   const roles: string[] = [
-    "The attached first image is the reference photo of the outfit and model.",
+    "The attached first image is the reference photo of the outfit and model: keep every garment, the footwear and any accessory worn in it identical, nothing added or removed.",
   ];
   if (images.mood)
     roles.push(
-      "Image 2 is a visual reference: use it only for the background/setting, the pose and the lighting; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).",
+      "Image 2 is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).",
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));

@@ -42,9 +42,13 @@ export const CORE_RULES = `## Inputs
 4. **Styling gaps**: which parts of the look are missing. They may be completed only with neutral, non-competing pieces that never distract from the product.
 5. **Framing of the upload**: \`FULL_BODY\` (head to footwear), \`UPPER_BODY\` (cropped around the waist or hips) or \`LOWER_BODY\` (waist down). This is a lock: the output keeps the same framing and roughly the same crop line, so an upper-body upload gives an upper-body image and a lower-body upload gives a lower-body image. Adapt any pose to that crop.
 
+## Outfit, footwear and accessories lock (image 1)
+
+Everything the model wears in image 1 stays exactly as it is: every garment, the footwear, and any accessory already in the photo (bag, belt, hat, glasses, jewellery, watch). Nothing is added, removed, recoloured, restyled or swapped. Items not visible in image 1 are "not supplied" and may be completed only with neutral, non-competing basics stated as secondary styling.
+
 ## Reference image (when image 2 is attached)
 
-Take from it ONLY three things: the background/setting, the model's pose and body language, and the lighting (direction, quality, time of day). Ignore everything else in it: its clothing, colours of the outfit, face, hair, hats, caps, bags, sunglasses, jewellery, props and accessories. The garment comes from image 1 alone. Produce a sibling of the reference, not a copy: same kind of place and light, a different exact spot and details.
+Take from it ONLY: the background/setting, the model's pose and body language (standing, sitting, walking, leaning), the lighting (direction, quality, time of day) and the camera angle and distance. Ignore everything else in it: its clothing, colours of the outfit, face, hair, hats, caps, bags, sunglasses, jewellery, props and accessories. The garment, footwear and accessories come from image 1 alone. Produce a sibling of the reference, not a copy: same kind of place, light and camera, a different exact spot and details.
 
 ${SAFE_WORDING_RULE}
 

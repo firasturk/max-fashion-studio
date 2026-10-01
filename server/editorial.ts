@@ -126,7 +126,7 @@ export function builderInstruction(req: EditorialRequest): string {
   const skill = skillFor(req);
   const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
   const mood = req.reference
-    ? "REFERENCE FIRST. Image 2 is the primary creative source for this run: build the scene, the pose and the lighting from it. Describe its kind of place, surfaces, depth, time of day and light with full density, and give the model a pose in the same spirit, then change the exact spot and details so the result is a sibling, not a copy. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone and the framing follows image 1. The skill's written direction and library are secondary: use them for mood, colour and the avoid list, and only draw a scene from the library when it fits the reference."
+    ? "REFERENCE FIRST. Image 2 is the primary creative source for this run: build the scene, the pose and stance (standing, sitting, walking, leaning), the lighting and the camera angle from it. Describe its kind of place, surfaces, depth, time of day and light with full density, and give the model a pose in the same spirit, then change the exact spot and details so the result is a sibling, not a copy. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone and the framing follows image 1. The skill's written direction and library are secondary: use them for mood, colour and the avoid list, and only draw a scene from the library when it fits the reference."
     : "";
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
@@ -151,8 +151,9 @@ export function builderInstruction(req: EditorialRequest): string {
       : "",
     `Market preference for a generated face (only when the face is not visible): ${market}.`,
     req.preference
-      ? `User city / mood preference: ${req.preference}`
-      : "No city or mood preference given.",
+      ? `EXTRA REQUESTS FROM THE USER for this batch (apply them to the prompt; they override the skill's direction and library but never the fixed rules): ${req.preference}`
+      : "No extra requests from the user.",
+    "Fixed rules for every prompt: (1) everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added or removed; (2) a reference image contributes only setting, pose and stance, lighting and camera angle; (3) never copy hats, bags, sunglasses, jewellery or props from a reference; (4) keep the upload's framing (full, upper or lower body); (5) catalogue-safe wording only.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
     "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",

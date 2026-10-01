@@ -34,6 +34,7 @@ const EMPTY: SkillInfo = {
 - `,
   builtIn: false,
   edited: false,
+  auto: true,
 };
 
 /** Create or edit a skill: the direction (goal) and library text are what the prompt builder reads. */
@@ -53,10 +54,20 @@ export default function SkillDialog({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) setForm(skill ?? EMPTY);
+    if (open) {
+      setForm(skill ?? EMPTY);
+      setShowText(false);
+      setBuiltFromPhotos(false);
+    }
   }, [open, skill]);
 
   const set = (patch: Partial<SkillInfo>) => setForm((f) => ({ ...f, ...patch }));
+  const [showText, setShowText] = useState(false);
+  const [builtFromPhotos, setBuiltFromPhotos] = useState(false);
+  const creating = !skill;
+  // Editing the direction or library by hand switches the skill to manual text.
+  const textTouched =
+    !!skill && (form.goal !== skill.goal || form.library !== skill.library);
 
   async function save() {
     setBusy(true);
@@ -66,8 +77,9 @@ export default function SkillDialog({
         title: form.title,
         caption: form.caption,
         description: form.description,
-        goal: form.goal,
-        library: form.library,
+        goal: creating ? "" : form.goal,
+        library: creating ? "" : form.library,
+        auto: creating ? true : builtFromPhotos ? true : textTouched ? false : form.auto,
       });
       onSaved(r.skills, r.id);
       toast.success(skill ? "Skill saved." : "Skill created.");
@@ -120,11 +132,12 @@ export default function SkillDialog({
     if (!skill) return;
     setBusy(true);
     try {
-      const r = await post<{ goal: string; library: string }>(
+      const r = await post<{ description: string; goal: string; library: string }>(
         `/api/studio/skills/${skill.id}/analyze`,
         { title: form.title || skill.title },
       );
-      set({ goal: r.goal, library: r.library });
+      set({ goal: r.goal, library: r.library, description: r.description || form.description, auto: true });
+      setBuiltFromPhotos(true);
       toast.success("Direction and library written from the reference photos. Review, then Save.");
     } catch (e) {
       toast.error((e as Error).message);
@@ -139,15 +152,8 @@ export default function SkillDialog({
         <DialogHeader>
           <DialogTitle>{skill ? `Edit skill · ${skill.title}` : "New skill"}</DialogTitle>
         </DialogHeader>
-        {skill?.builtIn && !skill.goal && (
-          <p className="quality-note">
-            This built-in skill has a verbatim text. Saving an edit rebuilds it from the direction
-            and library you write here, with the shared analysis and safety rules. Reset restores
-            the original at any time.
-          </p>
-        )}
-        <div className="two-fields">
-          <div>
+        {creating ? (
+          <>
             <label className="field-label" htmlFor="skill-title">
               Name
             </label>
@@ -157,11 +163,10 @@ export default function SkillDialog({
               value={form.title}
               onChange={(e) => set({ title: e.target.value })}
               placeholder="e.g. Ramadan evening"
+              autoFocus
             />
-          </div>
-          <div>
             <label className="field-label" htmlFor="skill-caption">
-              Short tagline
+              Short tagline (optional)
             </label>
             <input
               id="skill-caption"
@@ -170,56 +175,102 @@ export default function SkillDialog({
               onChange={(e) => set({ caption: e.target.value })}
               placeholder="e.g. Lanterns, courtyards, dusk"
             />
-          </div>
-        </div>
-        <label className="field-label" htmlFor="skill-description">
-          Description (shown under the picker)
-        </label>
-        <input
-          id="skill-description"
-          className="text-input"
-          value={form.description}
-          onChange={(e) => set({ description: e.target.value })}
-        />
-        <div className="field-row">
-          <label className="field-label" htmlFor="skill-goal">
-            Direction: what this skill is for and how every image should feel
-          </label>
-          {skill && (
-            <button
-              type="button"
-              className="text-button"
-              disabled={busy}
-              onClick={() => void buildFromReferences()}
-            >
-              <Sparkles size={13} /> Build from reference photos
-            </button>
-          )}
-        </div>
-        <textarea
-          id="skill-goal"
-          className="prompt"
-          rows={6}
-          value={form.goal}
-          onChange={(e) => set({ goal: e.target.value })}
-          placeholder="Goal: write ONE prompt for ... Settings are ... Poses are ... Light is ... The garment stays exactly as supplied."
-        />
-        <label className="field-label" htmlFor="skill-library">
-          Library: numbered scene families (rotated per image), poses, light, camera, colour, avoid
-        </label>
-        <textarea
-          id="skill-library"
-          className="prompt prompt-tall"
-          rows={14}
-          value={form.library}
-          onChange={(e) => set({ library: e.target.value })}
-        />
-        <p className="prompt-tip">
-          Reference photos lead: each image is built from one of them (background, pose, light), and
-          this text is secondary guidance. Leave the direction empty for a reference-only skill, or
-          add photos first and press "Build from reference photos" to have it written for you. The
-          shared rules (outfit lock, face policy, framing lock, safe wording) are added automatically.
-        </p>
+            <p className="prompt-tip">
+              That is all. After saving, add reference photos to the skill's library: its direction
+              and scene library are written from them automatically and refreshed whenever you add
+              or remove photos. Every image borrows background, pose, light and camera angle from
+              one photo; the original outfit, footwear and accessories never change.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="two-fields">
+              <div>
+                <label className="field-label" htmlFor="skill-title">
+                  Name
+                </label>
+                <input
+                  id="skill-title"
+                  className="text-input"
+                  value={form.title}
+                  onChange={(e) => set({ title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="skill-caption">
+                  Short tagline
+                </label>
+                <input
+                  id="skill-caption"
+                  className="text-input"
+                  value={form.caption}
+                  onChange={(e) => set({ caption: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="prompt-tip">
+              {form.auto && !textTouched
+                ? "Text is automatic: written from the reference photos and refreshed when they change. Editing the text below switches this skill to manual."
+                : "Text is manual: it stays as written here. Use \"Build from reference photos\" to rewrite it from the library and go back to automatic."}
+            </p>
+            <div className="field-row">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setShowText((v) => !v)}
+              >
+                {showText ? "Hide text" : "Show text"}
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={() => void buildFromReferences()}
+              >
+                <Sparkles size={13} /> Build from reference photos
+              </button>
+            </div>
+            {showText && (
+              <>
+                <label className="field-label" htmlFor="skill-description">
+                  Description (shown under the picker)
+                </label>
+                <input
+                  id="skill-description"
+                  className="text-input"
+                  value={form.description}
+                  onChange={(e) => set({ description: e.target.value })}
+                />
+                <label className="field-label" htmlFor="skill-goal">
+                  Direction
+                </label>
+                <textarea
+                  id="skill-goal"
+                  className="prompt"
+                  rows={6}
+                  value={form.goal}
+                  onChange={(e) => set({ goal: e.target.value })}
+                />
+                <label className="field-label" htmlFor="skill-library">
+                  Library (numbered scene families, poses, light, camera, colour, avoid)
+                </label>
+                <textarea
+                  id="skill-library"
+                  className="prompt prompt-tall"
+                  rows={14}
+                  value={form.library}
+                  onChange={(e) => set({ library: e.target.value })}
+                />
+              </>
+            )}
+            <p className="prompt-tip">
+              Shared rules apply to every skill automatically: the original outfit, footwear and
+              accessories stay identical; references give only setting, pose, light and camera
+              angle; nothing is copied from a reference's hats, bags or props; one reference is
+              picked at random per image; the upload's framing is kept; catalogue-safe wording.
+            </p>
+          </>
+        )}
         <div className="footer-actions">
           {skill && (
             <button className="secondary danger" onClick={() => void remove()} disabled={busy}>

@@ -10,6 +10,7 @@ import type { SkillInfo } from "@shared/types";
 
 interface SkillRow extends SkillDraft {
   hidden: number;
+  auto: number;
 }
 
 function rowToInfo(r: SkillRow, builtIn: boolean): SkillInfo {
@@ -22,6 +23,7 @@ function rowToInfo(r: SkillRow, builtIn: boolean): SkillInfo {
     library: r.library,
     builtIn,
     edited: builtIn,
+    auto: !!r.auto,
   };
 }
 
@@ -35,13 +37,14 @@ function builtInInfo(s: SkillDef): SkillInfo {
     library: s.library,
     builtIn: true,
     edited: false,
+    auto: true,
   };
 }
 
 export async function listSkills(env: Env): Promise<SkillInfo[]> {
   const rows = await all<SkillRow>(
     env.DB,
-    "SELECT id, title, caption, description, goal, library, hidden FROM skills ORDER BY created",
+    "SELECT id, title, caption, description, goal, library, hidden, auto FROM skills ORDER BY created",
   );
   const byId = new Map(rows.map((r) => [r.id, r]));
   const out: SkillInfo[] = [];
@@ -59,7 +62,7 @@ export async function resolveSkill(env: Env, id: string | undefined): Promise<Sk
   const row = id
     ? await first<SkillRow>(
         env.DB,
-        "SELECT id, title, caption, description, goal, library, hidden FROM skills WHERE id = ?",
+        "SELECT id, title, caption, description, goal, library, hidden, auto FROM skills WHERE id = ?",
         id,
       )
     : null;

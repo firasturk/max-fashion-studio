@@ -213,6 +213,8 @@ const skillBody = z.object({
   description: z.string().trim().max(400).default(""),
   goal: z.string().trim().max(20000).default(""),
   library: z.string().trim().max(20000).default(""),
+  /** true keeps the skill on automatic text (written from its photos); false means the team wrote it. */
+  auto: z.boolean().optional(),
 });
 
 studioRoutes.post("/skills", async (c) => {
@@ -220,7 +222,9 @@ studioRoutes.post("/skills", async (c) => {
   if (d.id === "zaid") throw new StudioError("Zaid's direction is edited from its own workflow.");
   const goal =
     d.goal ||
-    `Goal: write ONE prompt for "${d.title}". The reference photos in this skill's library are the creative source: build the scene, pose and light from the attached reference as a sibling of it. The garment stays exactly as supplied; the output keeps the upload's framing.`;
+    `Goal: write ONE prompt for "${d.title}". The reference photos in this skill's library are the creative source: build the scene, pose and stance, light and camera angle from the attached reference as a sibling of it. The garment, footwear and accessories stay exactly as supplied; the output keeps the upload's framing.`;
+  // A skill saved with its own text is manual; a name-only skill stays automatic.
+  const auto = d.auto ?? !d.goal;
   const id =
     d.id ||
     d.title
@@ -231,26 +235,34 @@ studioRoutes.post("/skills", async (c) => {
     uuid().slice(0, 8);
   await run(
     c.env.DB,
-    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, created, updated)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET title = excluded.title, caption = excluded.caption, description = excluded.description,
-       goal = excluded.goal, library = excluded.library, hidden = 0, updated = excluded.updated`,
+       goal = excluded.goal, library = excluded.library, hidden = 0, auto = excluded.auto, updated = excluded.updated`,
     id,
     d.title,
     d.caption,
     d.description,
     goal,
     d.library,
+    auto ? 1 : 0,
     now(),
     now(),
   );
   return c.json({ ok: true, id, skills: await listSkills(c.env) });
 });
 
-/** Writes a skill's direction and library from its reference photos (returned for review, not saved). */
+/**
+ * Writes a skill's direction and library from its reference photos. With `save` the result is
+ * stored and the skill stays automatic (the panel calls this after every library change);
+ * without it the texts come back for review in the editor.
+ */
 studioRoutes.post("/skills/:id/analyze", async (c) => {
   const id = c.req.param("id");
-  const { title } = await body(c, z.object({ title: z.string().trim().min(2).max(60) }));
+  const { title, save } = await body(
+    c,
+    z.object({ title: z.string().trim().min(2).max(60), save: z.boolean().optional() }),
+  );
   const rows = await all<{ key: string }>(
     c.env.DB,
     "SELECT key FROM refs WHERE skill = ? ORDER BY created LIMIT 10",
@@ -265,7 +277,27 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
         mime: obj.httpMetadata?.contentType || "image/jpeg",
       });
   }
-  return c.json(await buildSkillFromReferences(c.env, title, images));
+  const built = await buildSkillFromReferences(c.env, title, images);
+  if (save) {
+    const current = (await listSkills(c.env)).find((s) => s.id === id);
+    await run(
+      c.env.DB,
+      `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET goal = excluded.goal, library = excluded.library, description = excluded.description,
+         hidden = 0, auto = 1, updated = excluded.updated`,
+      id,
+      current?.title ?? title,
+      current?.caption ?? "",
+      built.description,
+      built.goal,
+      built.library,
+      now(),
+      now(),
+    );
+    return c.json({ ...built, skills: await listSkills(c.env) });
+  }
+  return c.json(built);
 });
 
 /** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */

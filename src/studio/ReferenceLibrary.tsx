@@ -13,7 +13,16 @@ interface Reference {
  * Inspiration photos for one skill. Each generation borrows background, pose and lighting from
  * one of them (never clothing or accessories); the team adds and removes photos here.
  */
-export default function ReferenceLibrary({ skill, title }: { skill: string; title: string }) {
+export default function ReferenceLibrary({
+  skill,
+  title,
+  onChanged,
+}: {
+  skill: string;
+  title: string;
+  /** Called after photos were added or removed, with the new count. */
+  onChanged?: (count: number) => void | Promise<void>;
+}) {
   const [items, setItems] = useState<Reference[]>([]);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -44,6 +53,7 @@ export default function ReferenceLibrary({ skill, title }: { skill: string; titl
       if (!r.ok) throw new Error(((await r.json()) as { error?: string }).error || "Upload failed.");
       await load();
       toast.success(`${files.length} reference${files.length > 1 ? "s" : ""} added.`);
+      await onChanged?.(items.length + files.length);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -57,6 +67,7 @@ export default function ReferenceLibrary({ skill, title }: { skill: string; titl
     try {
       await del(`/api/studio/references/${id}`);
       setItems((l) => l.filter((r) => r.id !== id));
+      await onChanged?.(items.length - 1);
     } catch (e) {
       toast.error((e as Error).message);
     }

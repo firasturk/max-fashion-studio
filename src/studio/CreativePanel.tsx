@@ -79,6 +79,41 @@ export default function CreativePanel({
     skill: null,
   });
   const currentSkill = skills.find((s) => s.id === config.skill) ?? skills[0];
+  const [rebuilding, setRebuilding] = useState(false);
+
+  /** After the library changes, an automatic skill gets its text rewritten from the photos. */
+  async function libraryChanged(count: number) {
+    if (!currentSkill?.auto) return;
+    if (count === 0) return;
+    setRebuilding(true);
+    try {
+      const r = await post<{ skills: SkillInfo[] }>(
+        `/api/studio/skills/${currentSkill.id}/analyze`,
+        { title: currentSkill.title, save: true },
+      );
+      onSkillsChanged?.(r.skills, currentSkill.id);
+      toast.success("Skill text updated from its reference photos.");
+    } catch (e) {
+      toast.error(`Could not update the skill text: ${(e as Error).message}`);
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
+  async function deleteSkill() {
+    if (!currentSkill) return;
+    const msg = currentSkill.builtIn
+      ? `Hide the built-in skill "${currentSkill.title}"? You can restore it later from Edit.`
+      : `Delete the skill "${currentSkill.title}"? Its reference photos stay in the library.`;
+    if (!window.confirm(msg)) return;
+    try {
+      const r = await del<{ skills: SkillInfo[] }>(`/api/studio/skills/${currentSkill.id}`);
+      onSkillsChanged?.(r.skills);
+      toast.success(currentSkill.builtIn ? "Skill hidden." : "Skill deleted.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
   const [presetName, setPresetName] = useState("");
   const [savingPreset, setSavingPreset] = useState(false);
   const [savingDirection, setSavingDirection] = useState(false);
@@ -316,6 +351,15 @@ export default function CreativePanel({
                   <Pencil size={13} /> Edit
                 </button>
               )}
+              {currentSkill && currentSkill.id !== "editorial" && (
+                <button
+                  type="button"
+                  className="text-button danger-text"
+                  onClick={() => void deleteSkill()}
+                >
+                  <Trash2 size={13} /> Delete
+                </button>
+              )}
               <button
                 type="button"
                 className="text-button"
@@ -341,12 +385,18 @@ export default function CreativePanel({
               </button>
             ))}
           </div>
-          {currentSkill && <div className="prompt-tip">{currentSkill.description}</div>}
+          {currentSkill && (
+            <div className="prompt-tip">
+              {currentSkill.description || "Add reference photos: the skill writes itself from them."}
+              {rebuilding && " Updating the skill text from its photos…"}
+            </div>
+          )}
           {currentSkill && (
             <ReferenceLibrary
               key={currentSkill.id}
               skill={currentSkill.id}
               title={`${currentSkill.title} reference library`}
+              onChanged={libraryChanged}
             />
           )}
           <SkillDialog
@@ -442,7 +492,7 @@ export default function CreativePanel({
             : config.mode === "6"
               ? "Extra instructions (optional)"
               : config.mode === "5"
-                ? "City / mood preference (optional)"
+                ? "Extra requests for this skill (optional)"
                 : config.mode === "7"
                   ? "Extra direction for this batch (optional)"
                   : "Background & lifestyle prompt"}

@@ -91,6 +91,8 @@ export interface SkillInfo {
   library: string;
   builtIn: boolean;
   edited: boolean;
+  /** Text is written from the reference photos and refreshed when they change. */
+  auto: boolean;
 }
 
 export interface StateResponse {
