@@ -351,7 +351,7 @@ export default function CreativePanel({
                   <Pencil size={13} /> Edit
                 </button>
               )}
-              {currentSkill && currentSkill.id !== "editorial" && (
+              {currentSkill && skills.length > 1 && (
                 <button
                   type="button"
                   className="text-button danger-text"

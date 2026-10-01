@@ -303,7 +303,9 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
 /** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */
 studioRoutes.delete("/skills/:id", async (c) => {
   const id = c.req.param("id");
-  if (id === "editorial") throw new StudioError("The Fashion editorial skill is the fallback and cannot be deleted.");
+  const visible = await listSkills(c.env);
+  if (visible.length <= 1 && visible.some((s) => s.id === id))
+    throw new StudioError("Keep at least one skill. Create another one before deleting this.");
   if (SKILLS.some((s) => s.id === id)) {
     await run(
       c.env.DB,

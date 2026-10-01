@@ -68,5 +68,11 @@ export async function resolveSkill(env: Env, id: string | undefined): Promise<Sk
     : null;
   if (row && !row.hidden) return deriveSkill(row);
   const builtIn = SKILLS.find((s) => s.id === id && !row?.hidden);
-  return builtIn ?? SKILLS[0];
+  if (builtIn) return builtIn;
+  // Unknown or hidden id: the first skill the team still has, else the editorial text as a last resort.
+  const fallback = (await listSkills(env))[0];
+  if (!fallback) return SKILLS[0];
+  return fallback.builtIn && !fallback.edited
+    ? (SKILLS.find((s) => s.id === fallback.id) ?? SKILLS[0])
+    : deriveSkill(fallback);
 }

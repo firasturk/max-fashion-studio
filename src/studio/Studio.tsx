@@ -105,7 +105,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   const loadSkills = useCallback(async () => {
     try {
-      setSkills((await get<{ skills: SkillInfo[] }>("/api/studio/skills")).skills);
+      const list = (await get<{ skills: SkillInfo[] }>("/api/studio/skills")).skills;
+      setSkills(list);
+      // A hidden or deleted skill must not stay selected for new batches.
+      setConfig((c) => (list.length && !list.some((s) => s.id === c.skill) ? { ...c, skill: list[0].id } : c));
     } catch {
       setSkills([]);
     }
