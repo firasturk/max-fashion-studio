@@ -81,3 +81,21 @@ describe("fal.ai client", () => {
     expect(e.perImage).toBeCloseTo(0.135 + 0.01, 3);
   });
 });
+
+describe("fal.ai key verification", () => {
+  it("treats a validation error as a working key and 401 as rejected", async () => {
+    const good = new FalClient(
+      KEY,
+      vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+        expect(init?.method).toBe("POST");
+        return new Response(JSON.stringify({ detail: [{ msg: "field required" }] }), { status: 422 });
+      }) as unknown as typeof fetch,
+    );
+    expect((await good.verify()).ok).toBe(true);
+    const bad = new FalClient(
+      KEY,
+      vi.fn(async () => new Response(JSON.stringify({ detail: "Authentication is required" }), { status: 401 })) as unknown as typeof fetch,
+    );
+    expect((await bad.verify()).ok).toBe(false);
+  });
+});

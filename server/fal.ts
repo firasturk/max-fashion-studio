@@ -99,15 +99,22 @@ export class FalClient {
     return { "Content-Type": "application/json", Authorization: `Key ${this.apiKey}` };
   }
 
-  /** A status lookup for a random id: a bad key is refused, a good one gets a 404. */
+  /**
+   * Credential check without spending: an empty submission is refused with 401 on a bad key and
+   * with a 422 validation error (missing prompt) on a good one.
+   */
   async verify(): Promise<{ ok: boolean; message: string }> {
-    const r = await this.fetchImpl(
-      `${QUEUE}/${falModelId(FAL_MODELS[0].slug)}/requests/${crypto.randomUUID()}/status`,
-      { headers: this.headers(), signal: AbortSignal.timeout(20_000) },
-    );
-    if (r.status === 401 || r.status === 403) return { ok: false, message: "API key rejected." };
-    if (r.status === 404 || r.status === 422 || r.ok)
+    const r = await this.fetchImpl(`${QUEUE}/${falModelId(FAL_MODELS[0].slug)}`, {
+      method: "POST",
+      headers: { ...this.headers(), "X-Fal-No-Retry": "1" },
+      body: "{}",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (r.status === 401 || r.status === 403)
+      return { ok: false, message: `API key rejected: ${await readError(r)}` };
+    if (r.status === 422 || r.status === 400 || r.ok)
       return { ok: true, message: "Connected to fal.ai." };
+    if (r.status === 402) return { ok: false, message: `fal.ai billing: ${await readError(r)}` };
     return { ok: false, message: `Unexpected response ${r.status}: ${await readError(r)}` };
   }
 
