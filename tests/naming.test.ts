@@ -51,3 +51,16 @@ describe("naming", () => {
     expect(safeArchiveName("")).toBe("batch");
   });
 });
+
+describe("product sets", () => {
+  it("groups files that share an id with a trailing counter", async () => {
+    const { productKey } = await import("../shared/naming");
+    expect(productKey("169800580_01.jpg")).toBe("169800580");
+    expect(productKey("169800580_02.JPG")).toBe("169800580");
+    expect(productKey("Dresses/169800580-3.png")).toBe("dresses/169800580");
+    expect(productKey("MAX_001 (2).jpg")).toBe("max_001");
+    expect(productKey("MAX_001-AI.png")).toBe("max_001");
+    expect(productKey("MAX_001_02.png")).toBe("max_001");
+    expect(productKey("blue-shirt.jpg")).toBe("blue-shirt");
+  });
+});

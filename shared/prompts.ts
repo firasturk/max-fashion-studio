@@ -53,8 +53,10 @@ export interface PromptImages {
   studio?: boolean;
   /** true when the latest result is attached as the last image for a revision */
   revision?: boolean;
-  /** true when a mood-board photo is attached as image 2 (mode 7) */
+  /** true when a reference-library photo is attached after the garment photo */
   mood?: boolean;
+  /** true when an already generated image of the same product set is attached after the reference */
+  set?: boolean;
 }
 
 /** Scene for a given card, cycling through the scene list. */
@@ -155,9 +157,14 @@ export function buildEditorialPrompt(
   const roles: string[] = [
     "The attached first image is the reference photo of the outfit and model: keep every garment, the footwear and any accessory worn in it identical, nothing added or removed.",
   ];
+  let idx = 2;
   if (images.mood)
     roles.push(
-      "Image 2 is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).",
+      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).`,
+    );
+  if (images.set)
+    roles.push(
+      `Image ${idx++} is an already generated image of the same product: reproduce its background, lighting, colour grade and camera distance exactly so both images read as one shoot; only the pose and the crop follow image 1.`,
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));

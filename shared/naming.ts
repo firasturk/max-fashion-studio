@@ -11,6 +11,19 @@ export function stemKey(name: string): string {
 }
 
 /**
+ * Files of one product share a key: `169800580_01.jpg` and `169800580_02.jpg` -> `169800580`
+ * (folder kept, extension, "-AI" and a trailing one- or two-digit counter such as _01 / -2 / (3)
+ * removed, case-insensitive). Three-digit endings like MAX_001 are part of the id.
+ * Images of one product are generated as one set with the same scene and light.
+ */
+export function productKey(name: string): string {
+  return stemOf(name)
+    .normalize("NFC")
+    .replace(/(?:[\s_-]+\d{1,2}|\s*\(\d{1,3}\))$/, "")
+    .toLowerCase();
+}
+
+/**
  * `MAX_001.jpg` -> `MAX_001-AI.png`; six-card sets -> `MAX_001/card-01/MAX_001-AI.png`;
  * multi-image sets -> `MAX_001-AI-02.png`. The extension follows the bytes the engine returned.
  */

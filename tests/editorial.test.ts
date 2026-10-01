@@ -148,3 +148,19 @@ describe("scene rotation", () => {
     expect(libraryScenes(skillById("ecommerce-studio").library)).toHaveLength(6); // its backdrops rotate instead
   });
 });
+
+describe("product sets", () => {
+  it("tells the builder to reuse the sibling's scene and light", () => {
+    const text = builderInstruction({
+      ...req,
+      skill: "kids",
+      scene: "Overcast meadow with a timber fence.",
+      reference: "r1",
+      set: { scene: "Overcast meadow with a timber fence.", light: "soft overcast", pose: "sitting on the fence", hasImage: true },
+    });
+    expect(text).toContain("SAME PRODUCT SET");
+    expect(text).toContain('Scene to reuse: "Overcast meadow with a timber fence."');
+    expect(text).toContain("generated sibling is attached as the last image");
+    expect(text).not.toContain("Scene assigned to this run");
+  });
+});

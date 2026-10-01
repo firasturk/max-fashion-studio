@@ -40,6 +40,7 @@ import {
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { sanitizePrompt } from "@shared/safety";
+import { productKey } from "@shared/naming";
 import { resolveSkill } from "./skills";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
@@ -466,6 +467,7 @@ async function eligibleQueued(
     "SELECT t.*, s.name AS source_name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.status = 'queued' ORDER BY s.name, t.card",
     batch.id,
   );
+  if (SKILL_MODES.has(config.mode)) return setAwareQueue(env, batch, queued, limit);
   if (config.mode !== "1") return queued.slice(0, limit);
   const out: TaskRow[] = [];
   for (const t of queued) {
@@ -710,11 +712,24 @@ async function ensureBrief(
     used,
   };
   // Draw the scene here so the mood photo attached to the builder is the one the text names.
-  const plan = planRun(req);
+  const leader = await setLeader(env, batch, task, source);
+  const leaderBrief = leader ? (JSON.parse(leader.brief) as EditorialBrief) : null;
+  const plan = leaderBrief
+    ? { scene: leaderBrief.scene || null, mood: leaderBrief.mood }
+    : planRun(req);
   req.scene = plan.scene;
   if (plan.mood) {
     req.reference = plan.mood;
     req.extraImages = [await referenceBytes(env, plan.mood)];
+  }
+  if (leader && leaderBrief) {
+    req.set = {
+      scene: leaderBrief.scene,
+      light: leaderBrief.light,
+      pose: leaderBrief.pose,
+      hasImage: true,
+    };
+    req.extraImages = [...(req.extraImages ?? []), await outputBytes(env, leader)];
   }
   // The builder follows the image engine's vendor when possible (OpenAI model -> OpenAI builder),
   // so one key is enough and errors come from a single provider.
@@ -740,6 +755,7 @@ async function ensureBrief(
     }
   }
   if (plan.mood) brief.mood = plan.mood;
+  if (leader) brief.setOf = leader.id;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
 }
@@ -798,7 +814,14 @@ async function submitTask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const imageUrls = [await sourceEngineUrl(env, client, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
+  const roles = {
+    identity: false,
+    firstCard: false,
+    studio: false,
+    revision: false,
+    mood: false,
+    set: false,
+  };
 
   if (config.mode === "3" && config.identity) {
     imageUrls.push(await identityEngineUrl(env, client, batch.owner, config.identity));
@@ -836,6 +859,11 @@ async function submitTask(
     if (brief.mood) {
       imageUrls.push(await referenceEngineUrl(env, client, brief.mood));
       roles.mood = true;
+    }
+    const sibling = brief.setOf ? await setSibling(env, brief.setOf) : null;
+    if (sibling) {
+      imageUrls.push(await outputEngineUrl(env, client, sibling));
+      roles.set = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -887,7 +915,14 @@ async function submitOpenAITask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
+  const roles = {
+    identity: false,
+    firstCard: false,
+    studio: false,
+    revision: false,
+    mood: false,
+    set: false,
+  };
 
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
@@ -921,6 +956,11 @@ async function submitOpenAITask(
     if (brief.mood) {
       images.push(await referenceBytes(env, brief.mood));
       roles.mood = true;
+    }
+    const sibling = brief.setOf ? await setSibling(env, brief.setOf) : null;
+    if (sibling) {
+      images.push(await outputBytes(env, sibling));
+      roles.set = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -1143,6 +1183,71 @@ async function finalizeFal(
   }
 }
 
+/**
+ * Product sets: images named <id>_01, <id>_02 ... are one product. The first file of a set (by name)
+ * generates alone; the others wait for it and then copy its scene, light and reference so the set
+ * looks like one shoot. Different sets run in parallel as usual.
+ */
+async function setAwareQueue(
+  env: Env,
+  batch: BatchRow,
+  queued: (TaskRow & { source_name: string })[],
+  limit: number,
+): Promise<TaskRow[]> {
+  const rows = await all<{ id: string; status: string; output: string | null; card: number; name: string }>(
+    env.DB,
+    "SELECT t.id, t.status, t.output, t.card, s.name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? ORDER BY s.name, t.card",
+    batch.id,
+  );
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = `${productKey(r.name)}#${r.card}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  const out: TaskRow[] = [];
+  const claimedGroups = new Set<string>();
+  for (const t of queued) {
+    const k = `${productKey(t.source_name)}#${t.card}`;
+    const g = groups.get(k) ?? [];
+    if (g.length > 1) {
+      const leaderDone = g.some((r) => !!r.output && !["processing", "finalizing", "queued"].includes(r.status));
+      const inFlight = g.some((r) => ["processing", "finalizing"].includes(r.status));
+      const isFirst = g[0]?.id === t.id;
+      // One at a time per set until the leader exists; then the rest may run in parallel.
+      if (!leaderDone && (inFlight || claimedGroups.has(k) || !isFirst)) continue;
+      if (!leaderDone) claimedGroups.add(k);
+    }
+    out.push(t);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** The sibling task of a set, if its output still exists. */
+async function setSibling(env: Env, id: string): Promise<TaskRow | null> {
+  const t = await first<TaskRow>(env.DB, "SELECT * FROM tasks WHERE id = ?", id);
+  return t?.output ? t : null;
+}
+
+/** The already generated image of the same product (same card) whose scene this task must match. */
+async function setLeader(
+  env: Env,
+  batch: BatchRow,
+  task: TaskRow,
+  source: SourceRow,
+): Promise<(TaskRow & { brief: string }) | null> {
+  const key = productKey(source.name);
+  const rows = await all<TaskRow & { name: string }>(
+    env.DB,
+    "SELECT t.*, s.name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.card = ? AND t.id != ? AND t.output IS NOT NULL AND t.brief IS NOT NULL ORDER BY s.name",
+    batch.id,
+    task.card,
+    task.id,
+  );
+  const leader = rows.find((r) => productKey(r.name) === key);
+  return leader ? (leader as TaskRow & { brief: string }) : null;
+}
+
 /** Reference images as bytes (garment, card 1, card 2, latest result) for the synchronous engines. */
 async function collectReferenceBytes(
   env: Env,
@@ -1151,13 +1256,20 @@ async function collectReferenceBytes(
   task: TaskRow,
 ): Promise<{
   images: ImageBytes[];
-  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean; mood: boolean };
+  roles: PromptImages;
   source: SourceRow;
 }> {
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
+  const roles = {
+    identity: false,
+    firstCard: false,
+    studio: false,
+    revision: false,
+    mood: false,
+    set: false,
+  };
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
       env.DB,
@@ -1190,6 +1302,11 @@ async function collectReferenceBytes(
     if (brief.mood) {
       images.push(await referenceBytes(env, brief.mood));
       roles.mood = true;
+    }
+    const sibling = brief.setOf ? await setSibling(env, brief.setOf) : null;
+    if (sibling) {
+      images.push(await outputBytes(env, sibling));
+      roles.set = true;
     }
   }
   const edit = task.edit?.trim() ?? "";

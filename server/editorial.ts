@@ -22,6 +22,8 @@ export interface EditorialBrief {
   mood?: string;
   /** FULL_BODY | UPPER_BODY | LOWER_BODY, read from the upload and locked for the output. */
   framing?: string;
+  /** Task id of the already generated image of the same product set this one is matched to. */
+  setOf?: string;
 }
 
 export interface EditorialRequest {
@@ -42,8 +44,10 @@ export interface EditorialRequest {
   usedReferences?: string[];
   /** The reference photo chosen for this run, attached after the garment photo. */
   reference?: string;
-  /** Extra images attached after the garment photo (the chosen reference). */
+  /** Extra images attached after the garment photo (the chosen reference, then the set sibling). */
   extraImages?: ImageBytes[];
+  /** Same-product set: the scene and light already used for the sibling image, to be matched exactly. */
+  set?: { scene: string; light: string; pose: string; hasImage: boolean };
   /** "auto" | "arab" | "european" | "mixed" */
   market: string;
   /** Free-text city / mood preference from the batch. */
@@ -128,6 +132,9 @@ export function builderInstruction(req: EditorialRequest): string {
   const mood = req.reference
     ? "REFERENCE FIRST. Image 2 is the primary creative source for this run: build the scene, the pose and stance (standing, sitting, walking, leaning), the lighting and the camera angle from it. Describe its kind of place, surfaces, depth, time of day and light with full density, and give the model a pose in the same spirit, then change the exact spot and details so the result is a sibling, not a copy. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone and the framing follows image 1. The skill's written direction and library are secondary: use them for mood, colour and the avoid list, and only draw a scene from the library when it fits the reference."
     : "";
+  const set = req.set
+    ? `SAME PRODUCT SET (overrides everything about the scene): this upload is another photo of the SAME product as an image already generated. Use exactly the same location and background, the same light and time of day, the same colour grade and camera distance, so the two images sit side by side as one shoot. Scene to reuse: "${req.set.scene}". Light to reuse: "${req.set.light}".${req.set.hasImage ? " The generated sibling is attached as the last image: match its background, light and colour grade precisely." : ""} Only the pose and crop follow this upload (same framing as image 1); the pose may differ from the sibling's ("${req.set.pose}") so the two are not identical.`
+    : "";
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
         .slice(0, 12)
@@ -146,7 +153,8 @@ export function builderInstruction(req: EditorialRequest): string {
     `Run number: ${req.run}. ${used}`,
     recent,
     mood,
-    scene && !req.reference
+    set,
+    scene && !req.reference && !req.set
       ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
       : "",
     `Market preference for a generated face (only when the face is not visible): ${market}.`,
