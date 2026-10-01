@@ -15,12 +15,14 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
+import { ZAID_DEFAULT_DIRECTION } from "@shared/skills";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
   FAL_KEY_SETTING,
   GOOGLE_KEY_SETTING,
   OPENAI_KEY_SETTING,
+  ZAID_DIRECTION_SETTING,
   deleteSetting,
   getSetting,
   resolveEngineKey,
@@ -110,6 +112,7 @@ studioRoutes.get("/state", async (c) => {
     user,
     batches,
     spendThreshold: adminSettings.spendThreshold,
+    zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || ZAID_DEFAULT_DIRECTION,
     engine: {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
@@ -186,6 +189,13 @@ const MODEL_CANDIDATES: { slug: string; name: string }[] = [
   { slug: "gpt-image-2", name: "GPT Image 2 (via Higgsfield)" },
 ];
 const MODELS_CACHE = "engine_models_cache";
+
+/** Shared default text for the Zaid creative direction workflow (mode 7). */
+studioRoutes.post("/direction", async (c) => {
+  const { text } = await body(c, z.object({ text: z.string().max(20000) }));
+  await setSetting(c.env, ZAID_DIRECTION_SETTING, text.trim());
+  return c.json({ ok: true, text: text.trim() || ZAID_DEFAULT_DIRECTION });
+});
 
 /** Raw Higgsfield model catalogue for the connected key. */
 studioRoutes.get("/engine/catalog", async (c) => {

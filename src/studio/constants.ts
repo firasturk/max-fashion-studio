@@ -2,6 +2,7 @@ import {
   Camera,
   Layers,
   PaintBucket,
+  PenLine,
   Sparkles,
   UserRound,
   Wand2,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 
 export interface ModeInfo {
-  id: "1" | "2" | "3" | "4" | "5" | "6";
+  id: "1" | "2" | "3" | "4" | "5" | "6" | "7";
   title: string;
   caption: string;
   icon: LucideIcon;
@@ -70,6 +71,16 @@ export const BACKDROP_MODE: ModeInfo = {
     "Packshot recolour: keep the product exactly as shot and swap only the background for a flat solid colour. List the colours you need and get one image per colour.",
 };
 MODES.push(BACKDROP_MODE);
+
+export const ZAID_MODE: ModeInfo = {
+  id: "7",
+  title: "Zaid creative direction",
+  caption: "Custom direction · fresh scene each image",
+  icon: PenLine,
+  detail:
+    "From your real model photo: the prompt builder follows Zaid's own creative direction text (scenes, poses, light, camera, mood) and writes a detailed prompt per image. Edit the direction below and save it as the default for everyone.",
+};
+MODES.push(ZAID_MODE);
 
 export const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",

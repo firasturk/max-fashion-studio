@@ -4,7 +4,7 @@
  * ready-made entries in shared/skills.ts. Google Gemini is
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
-import { skillById } from "@shared/skills";
+import { skillById, zaidSkill } from "@shared/skills";
 import { StudioError } from "./errors";
 import type { ImageBytes } from "./openai";
 
@@ -25,6 +25,8 @@ export interface EditorialRequest {
   run: number;
   /** Skill id from shared/skills.ts; unknown ids fall back to the editorial skill. */
   skill?: string;
+  /** Mode 7: the creative direction text the "zaid" skill is built from. */
+  direction?: string;
   /** "auto" | "arab" | "european" | "mixed" */
   market: string;
   /** Free-text city / mood preference from the batch. */
@@ -93,7 +95,7 @@ export function builderInstruction(req: EditorialRequest): string {
         .map((u, i) => `run ${i + 1}: scene "${u.scene}", pose "${u.pose}"`)
         .join("; ")}.`
     : "This is the first run for this outfit.";
-  const skill = skillById(req.skill);
+  const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
   const scene = pickScene(req, libraryScenes(skill.library));
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent

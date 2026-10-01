@@ -46,6 +46,8 @@ export default function CreativePanel({
   onCancel,
   presets = [],
   onPresetsChanged,
+  defaultDirection = "",
+  onDirectionSaved,
 }: {
   config: Config;
   locked: boolean;
@@ -61,9 +63,26 @@ export default function CreativePanel({
   onCancel?: () => void;
   presets?: Preset[];
   onPresetsChanged?: () => Promise<void>;
+  /** Mode 7: the shared default direction text. */
+  defaultDirection?: string;
+  onDirectionSaved?: (text: string) => void;
 }) {
   const [presetName, setPresetName] = useState("");
   const [savingPreset, setSavingPreset] = useState(false);
+  const [savingDirection, setSavingDirection] = useState(false);
+
+  async function saveDirection() {
+    setSavingDirection(true);
+    try {
+      const r = await post<{ text: string }>("/api/studio/direction", { text: config.prompt });
+      onDirectionSaved?.(r.text);
+      toast.success("Saved as the default direction for everyone.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingDirection(false);
+    }
+  }
 
   async function savePreset() {
     if (!presetName.trim()) return;
@@ -312,6 +331,28 @@ export default function CreativePanel({
         </>
       )}
 
+      {config.mode === "7" && (
+        <>
+          <label className="field-label">Generated face (when the reference face is hidden)</label>
+          <Picker
+            value={config.market}
+            label="Market look"
+            disabled={locked}
+            items={MARKETS}
+            render={(v) =>
+              v === "auto"
+                ? "Auto (alternate Arab / European)"
+                : v === "arab"
+                  ? "Arab / Middle-Eastern"
+                  : v === "european"
+                    ? "European"
+                    : "Mixed"
+            }
+            onChange={(v) => onChange({ market: v as Config["market"] })}
+          />
+        </>
+      )}
+
       {config.mode === "1" && (
         <>
           <label className="field-label" htmlFor="backdrop">
@@ -351,24 +392,45 @@ export default function CreativePanel({
               ? "Extra instructions (optional)"
               : config.mode === "5"
                 ? "City / mood preference (optional)"
-                : "Background & lifestyle prompt"}
+                : config.mode === "7"
+                  ? "Zaid creative direction"
+                  : "Background & lifestyle prompt"}
         </label>
-        <button
-          className="text-button"
-          disabled={locked}
-          onClick={() => onChange({ prompt: DEFAULT_PROMPT })}
-        >
-          Reset
-        </button>
+        {config.mode === "7" ? (
+          <span className="field-row-actions">
+            <button
+              className="text-button"
+              disabled={locked || savingDirection || !config.prompt.trim()}
+              onClick={() => void saveDirection()}
+            >
+              {savingDirection ? "Saving…" : "Save as default"}
+            </button>
+            <button
+              className="text-button"
+              disabled={locked}
+              onClick={() => onChange({ prompt: defaultDirection })}
+            >
+              Reset
+            </button>
+          </span>
+        ) : (
+          <button
+            className="text-button"
+            disabled={locked}
+            onClick={() => onChange({ prompt: DEFAULT_PROMPT })}
+          >
+            Reset
+          </button>
+        )}
       </div>
       <textarea
         id="prompt"
-        className="prompt"
+        className={config.mode === "7" ? "prompt prompt-tall" : "prompt"}
         value={config.prompt}
         disabled={locked}
         onChange={(e) => onChange({ prompt: e.target.value })}
       />
-      {config.mode !== "5" && config.mode !== "6" && (
+      {config.mode !== "5" && config.mode !== "6" && config.mode !== "7" && (
         <div className="prompt-tip">
           Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
         </div>
@@ -397,7 +459,7 @@ export default function CreativePanel({
         </div>
       </div>
 
-      {config.mode !== "4" && config.mode !== "6" && config.mode !== "5" && (
+      {config.mode !== "4" && config.mode !== "6" && config.mode !== "5" && config.mode !== "7" && (
         <>
           <div className="centering">
             <ScanLine size={21} />

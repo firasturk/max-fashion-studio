@@ -668,9 +668,10 @@ async function ensureBrief(
     image,
     run: task.card,
     recent,
-    skill: config.skill,
+    skill: config.mode === "7" ? "zaid" : config.skill,
+    direction: config.mode === "7" ? config.prompt : undefined,
     market: config.market || "auto",
-    preference: config.prompt,
+    preference: config.mode === "7" ? "" : config.prompt,
     aspectRatio: config.ratio,
     used,
   };
@@ -703,7 +704,7 @@ async function promptFor(
   roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean },
 ): Promise<string> {
   let prompt: string;
-  if (config.mode === "5") {
+  if (config.mode === "5" || config.mode === "7") {
     const brief = await ensureBrief(env, batch, config, task, source);
     prompt = buildEditorialPrompt(brief.prompt, brief.negative, edit, roles);
   } else {

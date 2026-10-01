@@ -72,6 +72,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [spendThreshold, setSpendThreshold] = useState(20);
+  const [zaidDirection, setZaidDirection] = useState("");
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
@@ -85,6 +86,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       setBatches(d.batches);
       setEngine(d.engine);
       setSpendThreshold(d.spendThreshold ?? 20);
+      setZaidDirection(d.zaidDirection ?? "");
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -560,9 +562,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   prompt:
                     mode === "5"
                       ? ""
-                      : c.mode === "5" && !c.prompt
-                        ? DEFAULT_PROMPT
-                        : c.prompt,
+                      : mode === "7"
+                        ? zaidDirection
+                        : c.mode === "5" || c.mode === "7"
+                          ? DEFAULT_PROMPT
+                          : c.prompt,
                 }))
               }
             />
@@ -587,6 +591,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 onCancel={() => setDraft(null)}
                 presets={presets}
                 onPresetsChanged={loadPresets}
+                defaultDirection={zaidDirection}
+                onDirectionSaved={setZaidDirection}
               />
 
               <section className="media-panel">

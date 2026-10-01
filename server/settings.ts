@@ -130,6 +130,7 @@ export async function resolveFalKey(
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
 
+export const ZAID_DIRECTION_SETTING = "zaid_direction";
 export const INVITE_CODE_SETTING = "invite_code";
 export const SPEND_THRESHOLD_SETTING = "spend_threshold";
 export const RETENTION_DAYS_SETTING = "retention_days";

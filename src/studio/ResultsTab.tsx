@@ -11,6 +11,7 @@ function cardLabel(mode: string, card: number): string {
   if (mode === "4") return `Background ${card}`;
   if (mode === "3") return `Pose ${card}`;
   if (mode === "5") return `Editorial ${card}`;
+  if (mode === "7") return `Zaid ${card}`;
   if (mode === "6") return `Colour ${card}`;
   return `Lifestyle ${card}`;
 }

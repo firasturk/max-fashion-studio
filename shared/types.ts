@@ -85,6 +85,7 @@ export interface StateResponse {
   user: User;
   batches: Batch[];
   spendThreshold: number;
+  zaidDirection: string;
   engine: {
     model: string;
     configured: boolean;

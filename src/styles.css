@@ -372,6 +372,13 @@ h2 {
   line-height: 1.5;
   margin-top: 9px;
 }
+.prompt-tall {
+  min-height: 260px;
+}
+.field-row-actions {
+  display: flex;
+  gap: 12px;
+}
 .skills {
   display: grid;
   grid-template-columns: 1fr 1fr;

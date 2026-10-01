@@ -6,6 +6,7 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the garment. Never reuse the original person's face.",
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
   "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
+  "7": "Fashion imagery written per image by the prompt builder following Zaid's creative direction. The outfit is the hero and is never changed.",
   "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
@@ -65,7 +66,7 @@ export function sceneFor(_c: Config, card: number): string {
  */
 export function centeringApplies(c: Config, card: number): boolean {
   return (
-    c.center && card !== FABRIC_CARD && c.mode !== "4" && c.mode !== "5" && c.mode !== "6"
+    c.center && card !== FABRIC_CARD && c.mode !== "4" && c.mode !== "5" && c.mode !== "6" && c.mode !== "7"
   );
 }
 
@@ -101,6 +102,9 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   } else if (c.mode === "5") {
     parts.push("Editorial prompt is written per image by the prompt builder before generation.");
     if (c.prompt) parts.push(`City / mood preference: ${c.prompt}`);
+  } else if (c.mode === "7") {
+    parts.push("Prompt is written per image by the prompt builder from Zaid's creative direction.");
+    if (c.prompt) parts.push(`Creative direction: ${c.prompt}`);
   } else {
     parts.push(`New background for this image: ${sceneFor(c, card)} ${c.prompt}`);
     parts.push("Keep the model, pose, framing and garment exactly as in the source photo.");

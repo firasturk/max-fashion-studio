@@ -79,7 +79,7 @@ export function estimateCost(c: Config, images: number, cards?: number[]): CostE
       cost +=
         rate.perReference *
         Math.max(0, referencesFor(c, card) - (rate.firstReferenceFree ? 1 : 0));
-    if (c.mode === "5") cost += PROMPT_BUILDER_COST;
+    if (c.mode === "5" || c.mode === "7") cost += PROMPT_BUILDER_COST;
     total += cost;
   }
   return {

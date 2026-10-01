@@ -38,3 +38,19 @@ describe("ready-made skills", () => {
     expect(builderInstruction(req)).toContain("Fashion Editorial Prompt Builder");
   });
 });
+
+describe("zaid creative direction", () => {
+  it("builds a skill from free text and exposes numbered scenes for rotation", async () => {
+    const { zaidSkill, ZAID_DEFAULT_DIRECTION } = await import("../shared/skills");
+    const { libraryScenes } = await import("../server/editorial");
+    const s = zaidSkill("Mood: warm.\n1. Souk alley at dusk.\n2) Marina at noon.");
+    expect(s.instructions).toContain("Souk alley at dusk");
+    expect(s.instructions).toContain("Step 1");
+    expect(libraryScenes(s.library)).toEqual(["Souk alley at dusk.", "Marina at noon."]);
+    expect(zaidSkill("").instructions).toContain(ZAID_DEFAULT_DIRECTION.slice(0, 40));
+    const text = builderInstruction({ ...req, skill: "zaid", direction: "Only rooftops.\n1. Rooftop A." });
+    expect(text).toContain("Zaid creative direction Prompt Builder");
+    expect(text).toContain("Only rooftops");
+    expect(text).toContain("Scene assigned to this run");
+  });
+});

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MODES = ["1", "2", "3", "4", "5", "6"] as const;
+export const MODES = ["1", "2", "3", "4", "5", "6", "7"] as const;
 export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
@@ -99,7 +99,9 @@ export function validateConfig(c: Config): string | null {
   if (c.mode === "4" && c.input !== "model") return "Fresh backgrounds need a real model photo.";
   if (c.mode === "3" && c.input !== "model") return "New poses need a real model photo.";
   if (c.mode === "2" && c.input !== "model") return "New face lifestyle needs a real model photo.";
-  if (c.mode === "5" && c.input !== "model") return "Editorial campaign needs a real model photo.";
+  if (c.mode === "5" && c.input !== "model") return "Skill campaign needs a real model photo.";
+  if (c.mode === "7" && c.input !== "model")
+    return "Zaid creative direction needs a real model photo.";
   return null;
 }
 
