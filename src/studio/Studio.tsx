@@ -57,6 +57,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     source: "none",
     openai: "none",
     google: "none",
+    fal: "none",
     review: false,
   });
   const [tab, setTab] = useState("sources");
@@ -296,7 +297,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }
 
   async function start() {
-    if (!engine.configured && engine.openai === "none" && engine.google === "none") {
+    if (
+      !engine.configured &&
+      engine.openai === "none" &&
+      engine.google === "none" &&
+      engine.fal === "none"
+    ) {
       setConnection(true);
       return;
     }
@@ -467,11 +473,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             {models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "…"}
           </span>
           <button
-            className={`connection-button ${engine.configured || engine.openai !== "none" || engine.google !== "none" ? "connected" : ""}`}
+            className={`connection-button ${engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "connected" : ""}`}
             onClick={() => setConnection(true)}
           >
             <KeyRound size={16} />
-            {engine.configured || engine.openai !== "none" || engine.google !== "none"
+            {engine.configured ||
+            engine.openai !== "none" ||
+            engine.google !== "none" ||
+            engine.fal !== "none"
               ? "Connected"
               : "Not connected"}
           </button>
@@ -746,7 +755,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                             )}
                             {engine.configured ||
                             engine.openai !== "none" ||
-                            engine.google !== "none"
+                            engine.google !== "none" ||
+                            engine.fal !== "none"
                               ? startLabel
                               : "Connect & generate"}
                           </button>

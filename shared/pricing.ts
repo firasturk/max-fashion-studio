@@ -14,6 +14,8 @@ interface Rate {
   perReference?: number;
   /** multiplier when economy (Flex) mode is on */
   economy?: number;
+  /** the first reference image is included in the base price */
+  firstReferenceFree?: boolean;
 }
 
 const RATES: Record<string, Rate> = {
@@ -23,6 +25,15 @@ const RATES: Record<string, Rate> = {
   "gpt-image-2.5-sunburst": { "1K": 0.0132, "2K": 0.0527, "4K": 0.0937, perReference: 0.008 },
   "gpt-image-2.5-flare": { "1K": 0.0132, "2K": 0.0527, "4K": 0.0937, perReference: 0.008 },
   "gpt-image-2": { "1K": 0.0132, "2K": 0.0527, "4K": 0.0937, perReference: 0.008 },
+  "fal/bytedance/seedream/v5/pro/edit": {
+    "1K": 0.0675,
+    "2K": 0.135,
+    "4K": 0.135,
+    perReference: 0.0045,
+    firstReferenceFree: true,
+  },
+  "fal/fal-ai/bytedance/seedream/v5/lite/edit": { "1K": 0.035, "2K": 0.035, "4K": 0.035 },
+  "fal/fal-ai/bytedance/seedream/v4.5/edit": { "1K": 0.03, "2K": 0.03, "4K": 0.03 },
   "nano-banana-pro": { "1K": 0.15, "2K": 0.15, "4K": 0.3 },
   "flux-2-pro": { "1K": 0.08, "2K": 0.08, "4K": 0.08 },
   "flux-2-max": { "1K": 0.1, "2K": 0.1, "4K": 0.1 },
@@ -64,7 +75,10 @@ export function estimateCost(c: Config, images: number, cards?: number[]): CostE
   const list = cards ?? Array.from({ length: images }, (_, i) => (i % cardsPerSource(c)) + 1);
   for (const card of list) {
     let cost = size * multiplier;
-    if (rate.perReference) cost += rate.perReference * referencesFor(c, card);
+    if (rate.perReference)
+      cost +=
+        rate.perReference *
+        Math.max(0, referencesFor(c, card) - (rate.firstReferenceFree ? 1 : 0));
     if (c.mode === "5") cost += PROMPT_BUILDER_COST;
     total += cost;
   }

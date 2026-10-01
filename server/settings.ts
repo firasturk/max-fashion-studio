@@ -119,6 +119,17 @@ export async function resolveGoogleKey(
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
 
+export const FAL_KEY_SETTING = "fal_api_key";
+
+/** fal.ai credential: the FAL_KEY secret wins, otherwise the key saved from the app. */
+export async function resolveFalKey(
+  env: Env,
+): Promise<{ key: string | null; source: EngineKeySource }> {
+  if (env.FAL_KEY) return { key: env.FAL_KEY, source: "secret" };
+  const stored = await getSetting(env, FAL_KEY_SETTING);
+  return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
+}
+
 export const INVITE_CODE_SETTING = "invite_code";
 export const SPEND_THRESHOLD_SETTING = "spend_threshold";
 export const RETENTION_DAYS_SETTING = "retention_days";

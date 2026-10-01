@@ -6,25 +6,29 @@ import { all, first, run, now, uuid } from "./db";
 import {
   advanceBatch,
   engineConfigured,
-  makeClient,
-  makeOpenAIClient,
-  makeGoogleClient,
   keyLooksValid,
+  makeClient,
+  makeFalClient,
+  makeGoogleClient,
+  makeOpenAIClient,
 } from "./engine";
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
+import { FAL_MODELS } from "./fal";
 import {
-  resolveEngineKey,
-  resolveEngineModel,
-  getSetting,
-  setSetting,
-  deleteSetting,
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
-  OPENAI_KEY_SETTING,
-  resolveOpenAIKey,
+  FAL_KEY_SETTING,
   GOOGLE_KEY_SETTING,
+  OPENAI_KEY_SETTING,
+  deleteSetting,
+  getSetting,
+  resolveEngineKey,
+  resolveEngineModel,
+  resolveFalKey,
   resolveGoogleKey,
+  resolveOpenAIKey,
+  setSetting,
 } from "./settings";
 import {
   configSchema,
@@ -112,6 +116,7 @@ studioRoutes.get("/state", async (c) => {
       source: engineKey.source,
       openai: (await resolveOpenAIKey(c.env)).source,
       google: (await resolveGoogleKey(c.env)).source,
+      fal: (await resolveFalKey(c.env)).source,
       review: !!(await resolveGoogleKey(c.env)).key,
     },
   });
@@ -147,6 +152,23 @@ studioRoutes.delete("/engine/google-key", async (c) => {
   return c.json({ ok: true });
 });
 
+studioRoutes.post("/engine/fal-key", async (c) => {
+  if (c.env.FAL_KEY)
+    throw new StudioError("The fal.ai key is managed as a Worker secret on this deployment.", 409);
+  const { key } = await body(c, z.object({ key: z.string().trim().min(20).max(400) }));
+  const check = await (await makeFalClient(c.env, key)).verify();
+  if (!check.ok) throw new StudioError(`fal.ai rejected this key: ${check.message}`, 400);
+  await setSetting(c.env, FAL_KEY_SETTING, key);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/fal-key", async (c) => {
+  await deleteSetting(c.env, FAL_KEY_SETTING);
+  await deleteSetting(c.env, MODELS_CACHE);
+  return c.json({ ok: true });
+});
+
 studioRoutes.delete("/engine/openai-key", async (c) => {
   await deleteSetting(c.env, OPENAI_KEY_SETTING);
   await deleteSetting(c.env, MODELS_CACHE);
@@ -164,6 +186,11 @@ const MODEL_CANDIDATES: { slug: string; name: string }[] = [
   { slug: "gpt-image-2", name: "GPT Image 2 (via Higgsfield)" },
 ];
 const MODELS_CACHE = "engine_models_cache";
+
+/** Raw Higgsfield model catalogue for the connected key. */
+studioRoutes.get("/engine/catalog", async (c) => {
+  return c.json(await (await makeClient(c.env)).catalog());
+});
 
 studioRoutes.get("/engine/models", async (c) => {
   const refresh = c.req.query("refresh") === "1";
@@ -209,6 +236,19 @@ studioRoutes.get("/engine/models", async (c) => {
   } else {
     for (const m of OPENAI_MODELS)
       models.push({ ...m, enabled: false, reason: "add an OpenAI key" });
+  }
+  const falKey = (await resolveFalKey(c.env)).key;
+  if (falKey) {
+    let reason = "";
+    try {
+      const check = await (await makeFalClient(c.env, falKey)).verify();
+      if (!check.ok) reason = check.message;
+    } catch (e) {
+      reason = errorMessage(e);
+    }
+    for (const m of FAL_MODELS) models.push({ ...m, enabled: !reason, reason });
+  } else {
+    for (const m of FAL_MODELS) models.push({ ...m, enabled: false, reason: "add a fal.ai key" });
   }
   if (await engineConfigured(c.env)) {
     const client = await makeClient(c.env);
@@ -286,6 +326,12 @@ studioRoutes.post("/engine/model", async (c) => {
     const g = await makeGoogleClient(c.env);
     if (!(await g.hasModel(model)))
       throw new StudioError(`"${model}" is not available to your Google key.`);
+    await setSetting(c.env, ENGINE_MODEL_SETTING, model);
+    return c.json({ ok: true, message: `Model "${model}" is available.` });
+  }
+  if (FAL_MODELS.some((m) => m.slug === model)) {
+    const check = await (await makeFalClient(c.env)).verify();
+    if (!check.ok) throw new StudioError(`fal.ai key problem: ${check.message}`);
     await setSetting(c.env, ENGINE_MODEL_SETTING, model);
     return c.json({ ok: true, message: `Model "${model}" is available.` });
   }
@@ -594,7 +640,8 @@ studioRoutes.post("/start", async (c) => {
   if (
     !(await engineConfigured(c.env)) &&
     !(await resolveGoogleKey(c.env)).key &&
-    !(await resolveOpenAIKey(c.env)).key
+    !(await resolveOpenAIKey(c.env)).key &&
+    !(await resolveFalKey(c.env)).key
   )
     throw new StudioError("No image engine is connected. Add an API key in Connection.", 428);
   await run(

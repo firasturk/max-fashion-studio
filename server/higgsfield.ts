@@ -239,6 +239,16 @@ export class HiggsfieldClient {
     return { status: r.status, detail: await readError(r) };
   }
 
+  /** The account's model catalogue as the API returns it (shape not fixed; callers inspect it). */
+  async catalog(): Promise<unknown> {
+    const r = await this.fetchImpl(this.url("models"), {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!r.ok) throw await engineError(r);
+    return r.json();
+  }
+
   /** Cheap credential check: an authenticated GET on a random request id returns 404, an unauthenticated one 401/403. */
   async verify(): Promise<{ ok: boolean; message: string }> {
     const r = await this.fetchImpl(this.url(`requests/${crypto.randomUUID()}/status`), {

@@ -91,6 +91,7 @@ export interface StateResponse {
     source: "secret" | "stored" | "none";
     openai: "secret" | "stored" | "none";
     google: "secret" | "stored" | "none";
+    fal: "secret" | "stored" | "none";
     review: boolean;
   };
 }

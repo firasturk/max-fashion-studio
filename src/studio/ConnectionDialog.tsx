@@ -16,6 +16,7 @@ export interface EngineInfo {
   source: "secret" | "stored" | "none";
   openai: "secret" | "stored" | "none";
   google: "secret" | "stored" | "none";
+  fal: "secret" | "stored" | "none";
   review: boolean;
 }
 
@@ -37,6 +38,8 @@ export default function ConnectionDialog({
   const [openaiKey, setOpenaiKey] = useState("");
   const [googleKey, setGoogleKey] = useState("");
   const [savingGoogle, setSavingGoogle] = useState(false);
+  const [falKey, setFalKey] = useState("");
+  const [savingFal, setSavingFal] = useState(false);
   const [savingOpenai, setSavingOpenai] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -81,6 +84,34 @@ export default function ConnectionDialog({
       setResult({ ok: false, message: (e as Error).message });
     } finally {
       setSavingGoogle(false);
+    }
+  }
+
+  async function saveFal() {
+    setSavingFal(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/fal-key", {
+        key: falKey,
+      });
+      setFalKey("");
+      await onChanged();
+      toast.success(r.message || "fal.ai key saved and verified.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingFal(false);
+    }
+  }
+
+  async function removeFal() {
+    if (!window.confirm("Remove the saved fal.ai key? Seedream models stop until a new key is added."))
+      return;
+    try {
+      await del("/api/studio/engine/fal-key");
+      await onChanged();
+      toast.success("fal.ai key removed.");
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -294,6 +325,62 @@ export default function ConnectionDialog({
                 className="secondary danger"
                 onClick={() => void removeGoogle()}
                 aria-label="Remove Google key"
+              >
+                <Trash2 size={17} />
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="qa-heading" style={{ marginTop: 12 }}>
+          <KeyRound size={18} />
+          <strong>fal.ai (Seedream 5)</strong>
+        </div>
+        {engine.fal !== "none" ? (
+          <div className="success-note">
+            <Check size={19} />
+            {engine.fal === "secret"
+              ? "A fal.ai key is configured as a server secret."
+              : "A fal.ai key is saved on the server."}
+          </div>
+        ) : (
+          <p className="quality-note">
+            Add a fal.ai key to use Seedream 5.0 Pro and Lite. Create it at{" "}
+            <a
+              href="https://fal.ai/dashboard/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-link"
+            >
+              fal.ai/dashboard/keys
+            </a>{" "}
+            and add credit under Billing.
+          </p>
+        )}
+        {engine.fal !== "secret" && (
+          <div className="footer-actions">
+            <input
+              id="fal-key"
+              type="password"
+              autoComplete="off"
+              placeholder="key_id:key_secret"
+              aria-label="fal.ai API key"
+              value={falKey}
+              onChange={(e) => setFalKey(e.target.value.trim())}
+            />
+            <button
+              className="primary"
+              onClick={() => void saveFal()}
+              disabled={savingFal || !falKey}
+            >
+              {savingFal ? <LoaderCircle className="spinning" size={17} /> : <KeyRound size={17} />}
+              {engine.fal === "stored" ? "Replace" : "Save"}
+            </button>
+            {engine.fal === "stored" && (
+              <button
+                className="secondary danger"
+                onClick={() => void removeFal()}
+                aria-label="Remove fal.ai key"
               >
                 <Trash2 size={17} />
               </button>

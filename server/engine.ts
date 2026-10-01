@@ -20,10 +20,12 @@ import type { QA } from "@shared/types";
 import {
   resolveEngineKey,
   resolveEngineModel,
-  resolveOpenAIKey,
+  resolveFalKey,
   resolveGoogleKey,
+  resolveOpenAIKey,
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
+import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
@@ -119,6 +121,13 @@ export async function makeGoogleClient(env: Env, key?: string): Promise<GoogleIm
   return new GoogleImageClient(apiKey);
 }
 
+export async function makeFalClient(env: Env, key?: string): Promise<FalClient> {
+  const apiKey = key ?? (await resolveFalKey(env)).key;
+  if (!apiKey)
+    throw new StudioError("fal.ai is not connected. Add the API key in Connection.", 428, true);
+  return new FalClient(apiKey);
+}
+
 export async function makeOpenAIClient(env: Env, key?: string): Promise<OpenAIImageClient> {
   const apiKey = key ?? (await resolveOpenAIKey(env)).key;
   if (!apiKey)
@@ -188,6 +197,10 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
     }
     if (task.request_id.startsWith("google:")) {
       await finalizeGoogleFlex(env, batch, config, task);
+      continue;
+    }
+    if (task.request_id.startsWith("fal:")) {
+      await finalizeFal(env, batch, config, task);
       continue;
     }
     if (task.request_id.startsWith("openai:") || task.request_id.startsWith("sync:")) {
@@ -470,9 +483,15 @@ async function submitNext(
 ): Promise<void> {
   const openai = isOpenAIModel(config.model);
   const google = isGoogleModel(config.model);
+  const fal = isFalModel(config.model);
   const sync = openai || (google && !config.economy);
   if (sync && deferSync) return;
-  if (openai) {
+  if (fal) {
+    if (!(await resolveFalKey(env)).key) {
+      await pauseBatch(env, batch.id, "fal.ai is not connected. Add the API key in Connection and resume.");
+      return;
+    }
+  } else if (openai) {
     if (!(await resolveOpenAIKey(env)).key) {
       await pauseBatch(
         env,
@@ -506,7 +525,7 @@ async function submitNext(
   const slots = concurrency(env) - (processing?.n ?? 0);
   if (slots <= 0) return;
   const candidates = await eligibleQueued(env, batch, config, slots);
-  const client = openai || google ? null : await makeClient(env, undefined, config.model);
+  const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
     const token = uuid();
@@ -527,9 +546,11 @@ async function submitNext(
     try {
       const requestId = client
         ? await submitTask(env, client, batch, config, task)
-        : google && config.economy
-          ? await submitGoogleBackgroundTask(env, batch, config, task)
-          : await submitOpenAITask(env, batch, config, task, token, background);
+        : fal
+          ? await submitFalTask(env, batch, config, task)
+          : google && config.economy
+            ? await submitGoogleBackgroundTask(env, batch, config, task)
+            : await submitOpenAITask(env, batch, config, task, token, background);
       await run(
         env.DB,
         "UPDATE tasks SET request_id = ?, updated = ? WHERE id = ? AND lease = ?",
@@ -948,6 +969,81 @@ async function finalizeGoogleFlex(
   try {
     await storeResultBytes(env, batch, config, task, status.image, null);
     void client.forget(task.request_id!.slice("google:".length));
+  } catch (e) {
+    await run(
+      env.DB,
+      "UPDATE tasks SET status = 'processing', error = ?, updated = ? WHERE id = ? AND status = 'finalizing'",
+      errorMessage(e, "Could not store the result."),
+      now(),
+      task.id,
+    );
+  }
+}
+
+const FAL_TIMEOUT_MS = 20 * 60 * 1000;
+
+/** fal.ai queues the job; the finaliser polls for the image. */
+async function submitFalTask(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<string> {
+  const { images, roles, source } = await collectReferenceBytes(env, batch, config, task);
+  const edit = task.edit?.trim() ?? "";
+  const prompt = await promptFor(env, batch, config, task, source, edit, roles);
+  const client = await makeFalClient(env);
+  const handle = await client.submit({
+    model: config.model!,
+    prompt,
+    images,
+    aspectRatio: config.ratio,
+    size: config.size,
+  });
+  return encodeFalHandle(handle);
+}
+
+async function finalizeFal(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<void> {
+  const age = now() - (task.leased_at ?? now());
+  let client: FalClient;
+  try {
+    client = await makeFalClient(env);
+  } catch {
+    return;
+  }
+  let status: Awaited<ReturnType<FalClient["status"]>>;
+  try {
+    status = await client.status(decodeFalHandle(task.request_id!));
+  } catch (e) {
+    if (isFatalEngineError(e)) await pauseBatch(env, batch.id, errorMessage(e));
+    return;
+  }
+  if (status.state === "pending") {
+    if (age > FAL_TIMEOUT_MS)
+      await failTask(env, task, "fal.ai did not finish in time. Retry this image.", task.output);
+    return;
+  }
+  if (status.state === "failed") {
+    if (status.retryable && task.attempts < MAX_AUTO_ATTEMPTS)
+      await requeue(env, task, status.message);
+    else await failTask(env, task, status.message, task.output);
+    return;
+  }
+  const claimed = await run(
+    env.DB,
+    "UPDATE tasks SET status = 'finalizing', updated = ? WHERE id = ? AND status = 'processing' AND request_id = ?",
+    now(),
+    task.id,
+    task.request_id,
+  );
+  if (!claimed) return;
+  try {
+    await storeResultBytes(env, batch, config, task, status.image, null);
   } catch (e) {
     await run(
       env.DB,
