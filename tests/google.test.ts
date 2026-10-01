@@ -113,3 +113,26 @@ describe("Google image client", () => {
     });
   });
 });
+
+describe("standard-tier background submit", () => {
+  it("omits the flex service tier when economy is off", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.service_tier).toBeUndefined();
+      expect(body.background).toBe(true);
+      return new Response(JSON.stringify({ id: "int_std" }), { status: 200 });
+    });
+    const client = new GoogleImageClient("a".repeat(40), fetchMock as unknown as typeof fetch);
+    const id = await client.submitBackground(
+      {
+        model: "gemini-3-pro-image",
+        prompt: "p",
+        images: [{ bytes: new ArrayBuffer(4), mime: "image/jpeg" }],
+        aspectRatio: "1:1",
+        size: "2K",
+      },
+      false,
+    );
+    expect(id).toBe("int_std");
+  });
+});

@@ -24,6 +24,7 @@ import {
   resolveGoogleKey,
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
+import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
 interface BatchRow {
@@ -46,6 +47,7 @@ interface TaskRow {
   recenter: number;
   request_id: string | null;
   leased_at: number | null;
+  updated: number;
   prompt: string;
   brief: string | null;
 }
@@ -62,6 +64,8 @@ interface SourceRow {
 const SUBMIT_TIMEOUT_MS = 10 * 60 * 1000; // processing without a request id for this long = lost
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
+const FINALIZE_TIMEOUT_MS = 5 * 60 * 1000; // finalizing this long = the saving job was cut off
+const GOOGLE_TIMEOUT_MS = 20 * 60 * 1000; // a standard-tier Google generation still pending after this = give up
 const MAX_AUTO_ATTEMPTS = 2; // one automatic retry for transient engine failures / off-centre
 
 export function keyLooksValid(key: string | null | undefined): key is string {
@@ -142,7 +146,7 @@ export async function advanceBatch(
 async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Promise<void> {
   const inflight = await all<TaskRow>(
     env.DB,
-    "SELECT * FROM tasks WHERE batch = ? AND status = 'processing' ORDER BY leased_at",
+    "SELECT * FROM tasks WHERE batch = ? AND status IN ('processing','finalizing') ORDER BY leased_at",
     batch.id,
   );
   if (!inflight.length) return;
@@ -150,6 +154,22 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
 
   for (const task of inflight) {
     const age = now() - (task.leased_at ?? now());
+    if (task.status === "finalizing") {
+      // A saving job that never reported back (the isolate was evicted mid-way). Synchronous
+      // engines lose the bytes, so the task fails with its previous result kept; polled engines
+      // still hold the image, so the task goes back to processing and is fetched again.
+      if (now() - task.updated < FINALIZE_TIMEOUT_MS) continue;
+      if (!task.request_id || task.request_id.startsWith("sync:"))
+        await failTask(env, task, "Saving the result was interrupted. Retry this image.", task.output);
+      else
+        await run(
+          env.DB,
+          "UPDATE tasks SET status = 'processing', updated = ? WHERE id = ? AND status = 'finalizing'",
+          now(),
+          task.id,
+        );
+      continue;
+    }
     if (!task.request_id) {
       if (age > SUBMIT_TIMEOUT_MS)
         await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
@@ -242,6 +262,17 @@ async function storeResultBytes(
   await env.BUCKET.put(key, result.bytes, {
     httpMetadata: { contentType: result.mime || "image/png" },
   });
+  // Save the image before the (slow) automatic review so an evicted isolate never loses a paid
+  // result; the review then upgrades the status if it is still waiting for it.
+  await run(
+    env.DB,
+    "UPDATE tasks SET status = 'review', output = ?, output_engine_url = ?, qa = ?, edit = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, error = NULL, updated = ? WHERE id = ? AND status = 'finalizing'",
+    key,
+    url,
+    JSON.stringify(manualQA("Automatic review still running. Check manually.")),
+    now(),
+    task.id,
+  );
 
   let qa: QA;
   const googleKey = (await resolveGoogleKey(env)).key;
@@ -276,18 +307,17 @@ async function storeResultBytes(
     qa = manualQA();
   }
 
-  const wantsCenter = config.center && task.card !== FABRIC_CARD;
+  const wantsCenter = centeringApplies(config, task.card);
   const offCentre = wantsCenter && qa.automated && qa.found && !qa.centered;
   if (offCentre && task.attempts < MAX_AUTO_ATTEMPTS && !task.edit) {
     // Keep this result visible, but queue exactly one centering retry.
     await run(
       env.DB,
-      "UPDATE tasks SET status = 'queued', output = ?, output_engine_url = ?, qa = ?, recenter = 1, request_id = NULL, lease = NULL, error = NULL, updated = ? WHERE id = ?",
-      key,
-      url,
+      "UPDATE tasks SET status = 'queued', qa = ?, recenter = 1, updated = ? WHERE id = ? AND status = 'review' AND output = ?",
       JSON.stringify(qa),
       now(),
       task.id,
+      key,
     );
     return;
   }
@@ -297,15 +327,15 @@ async function storeResultBytes(
       ? "review"
       : "ready"
     : "review";
+  // Only while nobody approved or re-queued it in the meantime.
   await run(
     env.DB,
-    "UPDATE tasks SET status = ?, output = ?, output_engine_url = ?, qa = ?, edit = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, error = NULL, updated = ? WHERE id = ?",
+    "UPDATE tasks SET status = ?, qa = ?, updated = ? WHERE id = ? AND status = 'review' AND output = ?",
     status,
-    key,
-    url,
     JSON.stringify(qa),
     now(),
     task.id,
+    key,
   );
 }
 
@@ -315,8 +345,8 @@ async function failTask(
   message: string,
   previousOutput: string | null,
 ): Promise<void> {
-  // A failed revision keeps the previous result visible; a failed first generation shows as failed.
-  const status = previousOutput ? (task.edit || task.recenter ? "review" : "failed") : "failed";
+  // Any earlier result stays visible for review; only a task with nothing to show is marked failed.
+  const status = previousOutput ? "review" : "failed";
   await run(
     env.DB,
     "UPDATE tasks SET status = ?, error = ?, edit = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, updated = ? WHERE id = ? AND status IN ('processing','finalizing')",
@@ -461,8 +491,8 @@ async function submitNext(
     try {
       const requestId = client
         ? await submitTask(env, client, batch, config, task)
-        : google && config.economy
-          ? await submitGoogleFlexTask(env, batch, config, task)
+        : google
+          ? await submitGoogleBackgroundTask(env, batch, config, task)
           : await submitOpenAITask(env, batch, config, task, token, background);
       await run(
         env.DB,
@@ -801,8 +831,8 @@ async function submitOpenAITask(
   return requestId;
 }
 
-/** Economy mode: submit to Google's Flex tier in the background; the finaliser polls for the image. */
-async function submitGoogleFlexTask(
+/** Google runs in the background (Flex tier in economy mode); the finaliser polls for the image. */
+async function submitGoogleBackgroundTask(
   env: Env,
   batch: BatchRow,
   config: Config,
@@ -812,13 +842,10 @@ async function submitGoogleFlexTask(
   const edit = task.edit?.trim() ?? "";
   const prompt = await promptFor(env, batch, config, task, source, edit, roles);
   const client = await makeGoogleClient(env);
-  const id = await client.submitFlex({
-    model: config.model!,
-    prompt,
-    images,
-    aspectRatio: config.ratio,
-    size: config.size,
-  });
+  const id = await client.submitBackground(
+    { model: config.model!, prompt, images, aspectRatio: config.ratio, size: config.size },
+    config.economy,
+  );
   return `google:${id}`;
 }
 
@@ -845,11 +872,13 @@ async function finalizeGoogleFlex(
     return;
   }
   if (status.state === "pending") {
-    if (age > FLEX_TIMEOUT_MS)
+    if (age > (config.economy ? FLEX_TIMEOUT_MS : GOOGLE_TIMEOUT_MS))
       await failTask(
         env,
         task,
-        "Google Flex did not finish within a day. Retry this image.",
+        config.economy
+          ? "Google Flex did not finish within a day. Retry this image."
+          : "Google did not finish in time. Retry this image.",
         task.output,
       );
     return;
@@ -870,6 +899,7 @@ async function finalizeGoogleFlex(
   if (!claimed) return;
   try {
     await storeResultBytes(env, batch, config, task, status.image, null);
+    void client.forget(task.request_id!.slice("google:".length));
   } catch (e) {
     await run(
       env.DB,

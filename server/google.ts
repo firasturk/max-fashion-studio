@@ -152,14 +152,19 @@ export class GoogleImageClient {
   }
 
   /**
-   * Economy mode: Flex service tier at half price, run in the background and stored so it can be
-   * fetched later. Returns the interaction id to poll with `status()`.
+   * Submit a generation to run in the background and be fetched later with `status()`, so the
+   * Worker never has to hold a connection open for the whole generation. Economy mode uses the
+   * Flex service tier at half price; otherwise the standard tier.
    */
-  async submitFlex(job: GoogleJob): Promise<string> {
+  async submitBackground(job: GoogleJob, economy: boolean): Promise<string> {
     const r = await this.fetchImpl(`${BASE}/interactions`, {
       method: "POST",
       headers: this.headers(),
-      body: this.body(job, { service_tier: "flex", background: true, store: true }),
+      body: this.body(job, {
+        ...(economy ? { service_tier: "flex" } : {}),
+        background: true,
+        store: true,
+      }),
       signal: AbortSignal.timeout(60_000),
     });
     if (!r.ok) throw await googleError(r);
@@ -169,7 +174,12 @@ export class GoogleImageClient {
     return id;
   }
 
-  /** Poll a background interaction. */
+  /** Economy mode: Flex tier in the background. */
+  submitFlex(job: GoogleJob): Promise<string> {
+    return this.submitBackground(job, true);
+  }
+
+  /** Poll a background interaction. The caller forgets it once the image is safely stored. */
   async status(
     id: string,
   ): Promise<
@@ -193,7 +203,6 @@ export class GoogleImageClient {
     if (status === "completed" || status === "incomplete") {
       const img = extractImage(d);
       if (!img) return { state: "failed", message: "Google returned no image.", retryable: true };
-      void this.forget(id);
       return { state: "done", image: { bytes: fromBase64(img.data), mime: img.mime } };
     }
     if (status === "failed")
@@ -208,7 +217,7 @@ export class GoogleImageClient {
   }
 
   /** Best-effort delete of a stored interaction once its image has been collected. */
-  private async forget(id: string): Promise<void> {
+  async forget(id: string): Promise<void> {
     try {
       await this.fetchImpl(`${BASE}/interactions/${encodeURIComponent(id)}`, {
         method: "DELETE",

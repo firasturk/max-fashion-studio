@@ -95,3 +95,14 @@ describe("config rules", () => {
     expect(cardsPerSource({ ...base, mode: "2", count: 99 })).toBe(6);
   });
 });
+
+describe("centering", () => {
+  it("applies to the model workflows only", async () => {
+    const { centeringApplies } = await import("../shared/prompts");
+    expect(centeringApplies({ ...base, mode: "1" }, 1)).toBe(true);
+    expect(centeringApplies({ ...base, mode: "1" }, 6)).toBe(false);
+    expect(centeringApplies({ ...base, mode: "5", input: "model" }, 1)).toBe(false);
+    expect(centeringApplies({ ...base, mode: "4", input: "model" }, 1)).toBe(false);
+    expect(centeringApplies({ ...base, mode: "2", input: "model", center: false }, 1)).toBe(false);
+  });
+});
