@@ -124,3 +124,27 @@ describe("editorial prompt builder", () => {
     expect(p.trim().endsWith("AVOID: extra buttons, plain studio background")).toBe(true);
   });
 });
+
+describe("scene rotation", () => {
+  it("assigns a library scene that avoids used and recent ones", async () => {
+    const { libraryScenes, pickScene } = await import("../server/editorial");
+    const { skillById } = await import("../shared/skills");
+    const scenes = libraryScenes(skillById("editorial").library);
+    expect(scenes.length).toBeGreaterThan(20);
+    expect(scenes[0]).toMatch(/Haussmann/);
+    const picked = pickScene(
+      { ...req, used: [{ scene: scenes[0], pose: "x" }], recent: [scenes[1]], random: () => 0 },
+      scenes,
+    );
+    expect(picked).toBe(scenes[2]);
+    const text = builderInstruction({ ...req, recent: ["Dubai courtyard"], random: () => 0.5 });
+    expect(text).toContain("Scene assigned to this run");
+    expect(text).toContain('recent batches (avoid these families too): "Dubai courtyard"');
+  });
+  it("derived skills expose their scene families too", async () => {
+    const { libraryScenes } = await import("../server/editorial");
+    const { skillById } = await import("../shared/skills");
+    expect(libraryScenes(skillById("resort").library)).toHaveLength(8);
+    expect(libraryScenes(skillById("ecommerce-studio").library)).toHaveLength(6); // its backdrops rotate instead
+  });
+});

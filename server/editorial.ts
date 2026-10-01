@@ -32,6 +32,36 @@ export interface EditorialRequest {
   aspectRatio: string;
   /** Scenes and poses already used for this source, to avoid repeats. */
   used: { scene: string; pose: string }[];
+  /** Scenes used recently in the user's other batches, so sets do not all open on the same street. */
+  recent?: string[];
+  /** Random source for the scene draw; injectable for tests. */
+  random?: () => number;
+}
+
+/** Numbered scene lines of a skill library, in order. */
+export function libraryScenes(library: string): string[] {
+  const section = library.split(/\n## /).find((s) => /^Scene/i.test(s)) ?? library;
+  return [...section.matchAll(/^\d+\.\s+(.+)$/gm)].map((m) => m[1].trim());
+}
+
+/**
+ * Draws the scene for this run: a random library scene that was not used for this outfit or in
+ * the user's recent batches. Left to its own devices the model opens on its favourite street
+ * every time, so the draw happens here and the skill is told to use it.
+ */
+export function pickScene(req: EditorialRequest, scenes: string[]): string | null {
+  if (!scenes.length) return null;
+  const taken = [...req.used.map((u) => u.scene), ...(req.recent ?? [])]
+    .map((s) => s.toLowerCase())
+    .filter(Boolean);
+  const similar = (scene: string) => {
+    const head = scene.toLowerCase().slice(0, 28);
+    return taken.some((t) => t.includes(head) || head.includes(t.slice(0, 28)));
+  };
+  const fresh = scenes.filter((s) => !similar(s));
+  const pool = fresh.length ? fresh : scenes;
+  const random = req.random ?? Math.random;
+  return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
 }
 
 const SCHEMA = {
@@ -64,6 +94,13 @@ export function builderInstruction(req: EditorialRequest): string {
         .join("; ")}.`
     : "This is the first run for this outfit.";
   const skill = skillById(req.skill);
+  const scene = pickScene(req, libraryScenes(skill.library));
+  const recent = req.recent?.length
+    ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
+        .slice(0, 12)
+        .map((s) => `"${s}"`)
+        .join("; ")}.`
+    : "";
   return [
     "You are running the following skill. Follow it exactly and return ONLY the JSON object described at the end.",
     "=== SKILL ===",
@@ -74,6 +111,10 @@ export function builderInstruction(req: EditorialRequest): string {
     skill.library,
     "=== RUN CONTEXT ===",
     `Run number: ${req.run}. ${used}`,
+    recent,
+    scene
+      ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
+      : "",
     `Market preference for a generated face (only when the face is not visible): ${market}.`,
     req.preference
       ? `User city / mood preference: ${req.preference}`
@@ -81,7 +122,9 @@ export function builderInstruction(req: EditorialRequest): string {
     `Aspect ratio: ${req.aspectRatio} vertical.`,
     "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
     "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt).",
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function toBase64(bytes: ArrayBuffer): string {

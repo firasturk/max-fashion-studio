@@ -612,9 +612,20 @@ async function ensureBrief(
     const b = JSON.parse(t.brief!) as EditorialBrief;
     return { scene: b.scene, pose: b.pose };
   });
+  // Scenes from the owner's other recent batches, so every new batch does not open on the same street.
+  const recentRows = await all<{ brief: string }>(
+    env.DB,
+    "SELECT t.brief FROM tasks t JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.batch != ? AND t.brief IS NOT NULL ORDER BY t.updated DESC LIMIT 12",
+    batch.owner,
+    batch.id,
+  );
+  const recent = recentRows
+    .map((r) => (JSON.parse(r.brief) as EditorialBrief).scene)
+    .filter(Boolean);
   const req = {
     image,
     run: task.card,
+    recent,
     skill: config.skill,
     market: config.market || "auto",
     preference: config.prompt,
