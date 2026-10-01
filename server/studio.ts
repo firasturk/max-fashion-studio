@@ -682,7 +682,8 @@ studioRoutes.post("/retry", async (c) => {
   const b = await ownedBatch(c.env, c.get("user"), batch);
   await run(
     c.env.DB,
-    "UPDATE tasks SET status = 'queued', error = NULL, updated = ? WHERE batch = ? AND status = 'failed'",
+    // A failed image gets a freshly written prompt on retry (the cached brief may be what was refused).
+    "UPDATE tasks SET status = 'queued', error = NULL, brief = NULL, updated = ? WHERE batch = ? AND status = 'failed'",
     now(),
     b.id,
   );
@@ -789,7 +790,7 @@ studioRoutes.post("/task/retry", async (c) => {
   const b = await ownedBatch(c.env, c.get("user"), batch);
   const changed = await run(
     c.env.DB,
-    "UPDATE tasks SET status = 'queued', error = NULL, updated = ? WHERE id = ? AND batch = ? AND status = 'failed'",
+    "UPDATE tasks SET status = 'queued', error = NULL, brief = NULL, updated = ? WHERE id = ? AND batch = ? AND status = 'failed'",
     now(),
     id,
     b.id,
