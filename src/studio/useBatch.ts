@@ -49,7 +49,9 @@ export function useBatch() {
     if (!active) return;
     const id = current.current;
     if (!id) return;
-    const timer = setInterval(async () => {
+    // The tick drives generation and the server holds it open until the images it started are
+    // saved (up to a minute or two), so a separate light refresh keeps the view current meanwhile.
+    const tick = async () => {
       if (ticking.current || document.hidden) return;
       ticking.current = true;
       try {
@@ -59,8 +61,21 @@ export function useBatch() {
       } finally {
         ticking.current = false;
       }
+    };
+    void tick();
+    const timer = setInterval(tick, TICK_MS);
+    const refresher = setInterval(async () => {
+      if (!ticking.current || document.hidden) return;
+      try {
+        apply(id, await get<BatchResponse>(`/api/studio/batch?batch=${encodeURIComponent(id)}`));
+      } catch {
+        /* transient */
+      }
     }, TICK_MS);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      clearInterval(refresher);
+    };
   }, [active, apply, view.batch?.id]);
 
   const remove = useCallback(async () => {

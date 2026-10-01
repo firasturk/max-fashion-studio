@@ -591,15 +591,19 @@ async function body<T extends z.ZodTypeAny>(
 studioRoutes.post("/start", async (c) => {
   const { batch } = await body(c, batchRef);
   const b = await ownedBatch(c.env, c.get("user"), batch);
-  if (!(await engineConfigured(c.env)))
-    throw new StudioError("Higgsfield is not connected. Add the API key in Connection.", 428);
+  if (
+    !(await engineConfigured(c.env)) &&
+    !(await resolveGoogleKey(c.env)).key &&
+    !(await resolveOpenAIKey(c.env)).key
+  )
+    throw new StudioError("No image engine is connected. Add an API key in Connection.", 428);
   await run(
     c.env.DB,
     "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
+  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -618,7 +622,11 @@ studioRoutes.post("/pause", async (c) => {
 studioRoutes.post("/tick", async (c) => {
   const { batch } = await body(c, batchRef);
   const b = await ownedBatch(c.env, c.get("user"), batch);
-  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
+  // The tick keeps its connection open until the synchronous generations it started have been
+  // saved, so they are never cut off by the post-response waitUntil limit.
+  const jobs: Promise<unknown>[] = [];
+  await advanceBatch(c.env, b.id, { background: (p) => jobs.push(p) });
+  await Promise.allSettled(jobs);
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -637,7 +645,7 @@ studioRoutes.post("/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
+  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -662,7 +670,7 @@ studioRoutes.post("/revise", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
+  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -746,6 +754,6 @@ studioRoutes.post("/task/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, (p) => c.executionCtx.waitUntil(p));
+  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });

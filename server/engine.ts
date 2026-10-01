@@ -101,6 +101,17 @@ function webhookUrl(env: Env, batchId: string): string | undefined {
 
 export type Background = (p: Promise<unknown>) => void;
 
+/**
+ * How a driver wants synchronous engines (OpenAI, Google standard tier) handled. Their generation
+ * runs inside the Worker, and a request's waitUntil is cut off ~30 s after the response, so only
+ * a driver that keeps its connection open (the client tick, held until the jobs settle) or the
+ * cron (15 min budget) may start them. Quick mutations defer them to the next tick.
+ */
+export interface DriveOptions {
+  background?: Background;
+  deferSync?: boolean;
+}
+
 export async function makeGoogleClient(env: Env, key?: string): Promise<GoogleImageClient> {
   const apiKey = key ?? (await resolveGoogleKey(env)).key;
   if (!apiKey)
@@ -122,7 +133,7 @@ export async function makeOpenAIClient(env: Env, key?: string): Promise<OpenAIIm
 export async function advanceBatch(
   env: Env,
   batchId: string,
-  background?: Background,
+  options: DriveOptions = {},
 ): Promise<void> {
   const batch = await first<BatchRow>(
     env.DB,
@@ -138,7 +149,7 @@ export async function advanceBatch(
   await finalizeInFlight(env, batch, config);
 
   if (batch.state === "running") {
-    await submitNext(env, batch, config, background);
+    await submitNext(env, batch, config, options);
     await settleIdle(env, batch, config);
   }
 }
@@ -432,10 +443,12 @@ async function submitNext(
   env: Env,
   batch: BatchRow,
   config: Config,
-  background?: Background,
+  { background, deferSync }: DriveOptions,
 ): Promise<void> {
   const openai = isOpenAIModel(config.model);
   const google = isGoogleModel(config.model);
+  const sync = openai || (google && !config.economy);
+  if (sync && deferSync) return;
   if (openai) {
     if (!(await resolveOpenAIKey(env)).key) {
       await pauseBatch(
@@ -491,7 +504,7 @@ async function submitNext(
     try {
       const requestId = client
         ? await submitTask(env, client, batch, config, task)
-        : google
+        : google && config.economy
           ? await submitGoogleBackgroundTask(env, batch, config, task)
           : await submitOpenAITask(env, batch, config, task, token, background);
       await run(
@@ -831,7 +844,7 @@ async function submitOpenAITask(
   return requestId;
 }
 
-/** Google runs in the background (Flex tier in economy mode); the finaliser polls for the image. */
+/** Economy mode: Google's Flex tier runs in the background and the finaliser polls for the image. */
 async function submitGoogleBackgroundTask(
   env: Env,
   batch: BatchRow,
@@ -842,10 +855,13 @@ async function submitGoogleBackgroundTask(
   const edit = task.edit?.trim() ?? "";
   const prompt = await promptFor(env, batch, config, task, source, edit, roles);
   const client = await makeGoogleClient(env);
-  const id = await client.submitBackground(
-    { model: config.model!, prompt, images, aspectRatio: config.ratio, size: config.size },
-    config.economy,
-  );
+  const id = await client.submitFlex({
+    model: config.model!,
+    prompt,
+    images,
+    aspectRatio: config.ratio,
+    size: config.size,
+  });
   return `google:${id}`;
 }
 
