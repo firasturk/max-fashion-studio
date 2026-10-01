@@ -1,43 +1,128 @@
+import { useState } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ShieldCheck } from "lucide-react";
-import { MODES } from "./constants";
+import { Eye, EyeOff, Pencil, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
+import { post } from "@/api";
+import { MODES, type ModeInfo } from "./constants";
+import type { ModeOverride } from "@shared/types";
+
+type ModeId = ModeInfo["id"];
+
+/** Built-in cards with the team's renames applied. */
+export function applyModeOverrides(overrides: Record<string, ModeOverride>): ModeInfo[] {
+  return MODES.map((m) => ({
+    ...m,
+    title: overrides[m.id]?.title || m.title,
+    caption: overrides[m.id]?.caption || m.caption,
+  }));
+}
 
 export default function ModeCards({
   value,
   disabled,
+  overrides,
   onChange,
+  onOverridesChanged,
 }: {
   value: string;
   disabled: boolean;
-  onChange: (mode: "1" | "2" | "3" | "4" | "5" | "6" | "7") => void;
+  overrides: Record<string, ModeOverride>;
+  onChange: (mode: ModeId) => void;
+  onOverridesChanged: (modes: Record<string, ModeOverride>) => void;
 }) {
+  const [showHidden, setShowHidden] = useState(false);
+  const modes = applyModeOverrides(overrides);
+  const hiddenCount = modes.filter((m) => overrides[m.id]?.hidden).length;
+  const shown = modes.filter((m) => showHidden || !overrides[m.id]?.hidden);
+
+  async function save(patch: {
+    id: ModeId;
+    title?: string;
+    caption?: string;
+    hidden?: boolean;
+    reset?: boolean;
+  }) {
+    try {
+      const r = await post<{ modes: Record<string, ModeOverride> }>("/api/studio/modes", patch);
+      onOverridesChanged(r.modes);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  function rename(m: ModeInfo) {
+    const original = MODES.find((x) => x.id === m.id)!;
+    const title = window.prompt(`Name for approach 0${m.id}:`, m.title);
+    if (title === null) return;
+    const caption = window.prompt("Short caption under the name:", m.caption);
+    if (caption === null) return;
+    if (title.trim() === original.title && caption.trim() === original.caption)
+      void save({ id: m.id, reset: true });
+    else void save({ id: m.id, title: title.trim(), caption: caption.trim() });
+  }
+
   return (
     <>
       <div className="workflow-label">
         <span className="step">01</span>
         <h2>Choose your production approach</h2>
+        {hiddenCount > 0 && (
+          <button type="button" className="text-button" onClick={() => setShowHidden((v) => !v)}>
+            {showHidden ? "Hide hidden" : `Show ${hiddenCount} hidden`}
+          </button>
+        )}
       </div>
       <RadioGroup
         className="modes"
         value={value}
-        onValueChange={(v) => onChange(v as "1")}
+        onValueChange={(v) => onChange(v as ModeId)}
         disabled={disabled}
       >
-        {MODES.map((m) => (
-          <label key={m.id} className={`mode-card ${value === m.id ? "active" : ""}`}>
-            <div className="mode-top">
-              <m.icon size={23} />
-              <RadioGroupItem value={m.id} aria-label={m.title} />
-            </div>
-            <strong>{m.title}</strong>
-            <span>{m.caption}</span>
-            <div className="mode-number">0{m.id}</div>
-          </label>
-        ))}
+        {shown.map((m) => {
+          const hidden = !!overrides[m.id]?.hidden;
+          return (
+            <label
+              key={m.id}
+              className={`mode-card ${value === m.id ? "active" : ""} ${hidden ? "hidden-card" : ""}`}
+            >
+              <div className="mode-top">
+                <m.icon size={23} />
+                <span className="mode-tools">
+                  <button
+                    type="button"
+                    className="mode-tool"
+                    aria-label="Rename approach"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      rename(m);
+                    }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="mode-tool"
+                    aria-label={hidden ? "Show approach" : "Hide approach"}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void save({ id: m.id, hidden: !hidden });
+                    }}
+                  >
+                    {hidden ? <Eye size={13} /> : <EyeOff size={13} />}
+                  </button>
+                  <RadioGroupItem value={m.id} aria-label={m.title} disabled={disabled || hidden} />
+                </span>
+              </div>
+              <strong>{m.title}</strong>
+              <span>{m.caption}</span>
+              <div className="mode-number">0{m.id}</div>
+            </label>
+          );
+        })}
       </RadioGroup>
       <div className="mode-note">
         <ShieldCheck size={16} />
-        {MODES.find((m) => m.id === value)?.detail}
+        {modes.find((m) => m.id === value)?.detail}
       </div>
     </>
   );

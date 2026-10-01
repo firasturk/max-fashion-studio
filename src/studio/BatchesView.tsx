@@ -2,7 +2,7 @@ import { FolderOpen, LoaderCircle, Trash2 } from "lucide-react";
 import type { Batch, SkillInfo } from "@shared/types";
 import type { Config } from "@shared/config";
 
-import { MODES } from "./constants";
+import { MODES, type ModeInfo } from "./constants";
 
 const STATE_LABEL: Record<string, string> = {
   idle: "Idle",
@@ -16,9 +16,11 @@ export default function BatchesView({
   onOpen,
   onDelete,
   skills = [],
+  modes = MODES,
 }: {
   batches: Batch[];
   skills?: SkillInfo[];
+  modes?: ModeInfo[];
   busyId: string | null;
   onOpen: (id: string) => void;
   onDelete: (b: Batch) => void;
@@ -48,7 +50,7 @@ export default function BatchesView({
       </div>
       {batches.map((b) => {
         const cfg = JSON.parse(b.config) as Config;
-        const mode = MODES.find((m) => m.id === cfg.mode);
+        const mode = modes.find((m) => m.id === cfg.mode);
         const total = b.total ?? 0;
         const done = b.completed ?? 0;
         const pct = total ? Math.round((done / total) * 100) : 0;

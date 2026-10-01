@@ -268,6 +268,35 @@ h2 {
   box-shadow: 0 2px 8px #1746bd0a;
   background: #f5f8ff;
 }
+.mode-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mode-tool {
+  border: 0;
+  background: transparent;
+  color: #b8c0cc;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.mode-card:hover .mode-tool,
+.mode-card.hidden-card .mode-tool {
+  opacity: 1;
+}
+.mode-tool:hover {
+  color: #1746bd;
+}
+.mode-card.hidden-card {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.workflow-label .text-button {
+  margin-left: auto;
+}
 .mode-top {
   display: flex;
   justify-content: space-between;

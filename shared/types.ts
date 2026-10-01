@@ -97,11 +97,20 @@ export interface SkillInfo {
   favourite: boolean;
 }
 
+/** Team overrides for a production approach card. */
+export interface ModeOverride {
+  title?: string;
+  caption?: string;
+  hidden?: boolean;
+}
+
 export interface StateResponse {
   user: User;
   batches: Batch[];
   spendThreshold: number;
   zaidDirection: string;
+  /** Renamed or hidden production approaches, keyed by mode id. */
+  modes: Record<string, ModeOverride>;
   engine: {
     model: string;
     configured: boolean;

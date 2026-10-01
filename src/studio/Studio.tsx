@@ -34,13 +34,23 @@ import {
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
-import type { Batch, EngineModel, Preset, SkillInfo, StateResponse, Task, User } from "@shared/types";
+import type {
+  Batch,
+  EngineModel,
+  ModeOverride,
+  Preset,
+  SkillInfo,
+  StateResponse,
+  Task,
+  User,
+} from "@shared/types";
 import AdminView from "./AdminView";
 import type { PickedFile } from "@/lib/files";
 import BatchesView from "./BatchesView";
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
-import ModeCards from "./ModeCards";
+import ModeCards, { applyModeOverrides } from "./ModeCards";
+import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
@@ -74,6 +84,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [spendThreshold, setSpendThreshold] = useState(20);
   const [zaidDirection, setZaidDirection] = useState("");
+  const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
@@ -88,6 +99,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       setEngine(d.engine);
       setSpendThreshold(d.spendThreshold ?? 20);
       setZaidDirection(d.zaidDirection ?? "");
+      const ov = d.modes ?? {};
+      setModeOverrides(ov);
+      // A hidden approach must not stay selected for new batches.
+      setConfig((c) => {
+        if (!ov[c.mode]?.hidden) return c;
+        const firstVisible = MODES.find((m) => !ov[m.id]?.hidden);
+        return firstVisible ? { ...c, mode: firstVisible.id } : c;
+      });
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -543,6 +562,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               <BatchesView
                 batches={batches}
                 skills={skills}
+                modes={applyModeOverrides(modeOverrides)}
                 busyId={openingId}
                 onOpen={(id) => void openBatch(id)}
                 onDelete={(b) => void deleteBatchById(b)}
@@ -566,6 +586,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             <ModeCards
               value={viewConfig.mode}
               disabled={locked}
+              overrides={modeOverrides}
+              onOverridesChanged={(ov) => {
+                setModeOverrides(ov);
+                setConfig((c) => {
+                  if (!ov[c.mode]?.hidden) return c;
+                  const firstVisible = MODES.find((m) => !ov[m.id]?.hidden);
+                  return firstVisible ? { ...c, mode: firstVisible.id } : c;
+                });
+              }}
               onChange={(mode) =>
                 setConfig((c) => ({
                   ...c,

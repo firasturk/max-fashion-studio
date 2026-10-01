@@ -131,6 +131,7 @@ export async function resolveFalKey(
 }
 
 export const ZAID_DIRECTION_SETTING = "zaid_direction";
+export const MODES_SETTING = "modes_config";
 export const INVITE_CODE_SETTING = "invite_code";
 export const SPEND_THRESHOLD_SETTING = "spend_threshold";
 export const RETENTION_DAYS_SETTING = "retention_days";

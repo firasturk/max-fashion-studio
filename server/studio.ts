@@ -23,6 +23,7 @@ import {
   ENGINE_MODEL_SETTING,
   FAL_KEY_SETTING,
   GOOGLE_KEY_SETTING,
+  MODES_SETTING,
   OPENAI_KEY_SETTING,
   ZAID_DIRECTION_SETTING,
   deleteSetting,
@@ -35,15 +36,16 @@ import {
   setSetting,
 } from "./settings";
 import {
-  configSchema,
-  validateConfig,
-  createsTasks,
+  MODES,
   cardsPerSource,
+  configSchema,
+  createsTasks,
   type Config,
+  validateConfig,
 } from "@shared/config";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
-import type { User, Batch, Source, Task, Preset } from "@shared/types";
+import type { Batch, ModeOverride, Preset, Source, Task, User } from "@shared/types";
 import { readAdminSettings } from "./admin";
 
 type Variables = { user: User };
@@ -115,6 +117,7 @@ studioRoutes.get("/state", async (c) => {
     batches,
     spendThreshold: adminSettings.spendThreshold,
     zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || "",
+    modes: await readModes(c.env),
     engine: {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
@@ -191,6 +194,42 @@ const MODEL_CANDIDATES: { slug: string; name: string }[] = [
   { slug: "gpt-image-2", name: "GPT Image 2 (via Higgsfield)" },
 ];
 const MODELS_CACHE = "engine_models_cache";
+
+/** Production approach cards: team-wide renames and hidden cards. */
+async function readModes(env: Env): Promise<Record<string, ModeOverride>> {
+  try {
+    const v = JSON.parse((await getSetting(env, MODES_SETTING)) || "{}") as unknown;
+    return v && typeof v === "object" ? (v as Record<string, ModeOverride>) : {};
+  } catch {
+    return {};
+  }
+}
+
+studioRoutes.post("/modes", async (c) => {
+  const d = await body(
+    c,
+    z.object({
+      id: z.enum(MODES),
+      title: z.string().trim().max(40).optional(),
+      caption: z.string().trim().max(60).optional(),
+      hidden: z.boolean().optional(),
+      reset: z.boolean().optional(),
+    }),
+  );
+  const modes = await readModes(c.env);
+  if (d.reset) delete modes[d.id];
+  else {
+    const cur = modes[d.id] ?? {};
+    if (d.title !== undefined) cur.title = d.title || undefined;
+    if (d.caption !== undefined) cur.caption = d.caption || undefined;
+    if (d.hidden !== undefined) cur.hidden = d.hidden || undefined;
+    modes[d.id] = cur;
+  }
+  const visible = MODES.filter((id) => !modes[id]?.hidden);
+  if (!visible.length) throw new StudioError("Keep at least one production approach visible.");
+  await setSetting(c.env, MODES_SETTING, JSON.stringify(modes));
+  return c.json({ ok: true, modes });
+});
 
 /** Shared default text for the Zaid creative direction workflow (mode 7). */
 studioRoutes.post("/direction", async (c) => {
