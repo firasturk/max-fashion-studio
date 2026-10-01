@@ -119,16 +119,22 @@ export class OpenAIImageClient {
     return r.ok;
   }
 
-  /** Runs an edit and returns the PNG bytes. Takes up to a few minutes at high quality. */
-  async edit(job: OpenAIJob): Promise<ImageBytes> {
+  /**
+   * Runs an edit and returns the PNG bytes. Takes up to a few minutes at high quality. Optional
+   * tuning parameters that a model rejects as unsupported are dropped and the call is retried once.
+   */
+  async edit(job: OpenAIJob, omit: Set<string> = new Set()): Promise<ImageBytes> {
     const form = new FormData();
+    const optional: Record<string, string> = {
+      quality: QUALITY[job.size] ?? "high",
+      output_format: "png",
+      input_fidelity: "high",
+    };
     form.append("model", job.model);
     form.append("prompt", job.prompt);
     form.append("n", "1");
     form.append("size", pixelSize(job.aspectRatio, job.size));
-    form.append("quality", QUALITY[job.size] ?? "high");
-    form.append("output_format", "png");
-    form.append("input_fidelity", "high");
+    for (const [k, v] of Object.entries(optional)) if (!omit.has(k)) form.append(k, v);
     job.images.forEach((img, i) =>
       form.append(
         "image[]",
@@ -142,7 +148,14 @@ export class OpenAIImageClient {
       body: form,
       signal: AbortSignal.timeout(6 * 60 * 1000),
     });
-    if (!r.ok) throw await openaiError(r);
+    if (!r.ok) {
+      const err = await openaiError(r);
+      const unsupported = Object.keys(optional).find(
+        (k) => !omit.has(k) && r.status === 400 && new RegExp(`'${k}'`).test(err.message),
+      );
+      if (unsupported) return this.edit(job, new Set([...omit, unsupported]));
+      throw err;
+    }
     const d = (await r.json()) as { data?: { b64_json?: string; url?: string }[] };
     const item = d.data?.[0];
     if (item?.b64_json) return { bytes: b64ToBytes(item.b64_json), mime: "image/png" };

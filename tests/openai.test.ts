@@ -79,3 +79,43 @@ describe("OpenAI image client", () => {
     ).rejects.toMatchObject({ fatal: true, message: expect.stringContaining("Incorrect API key") });
   });
 });
+
+describe("unsupported parameters", () => {
+  it("drops a parameter the model rejects and retries once", async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls++;
+      const form = init?.body as FormData;
+      if (form.get("input_fidelity"))
+        return new Response(
+          JSON.stringify({
+            error: {
+              message:
+                "The model 'gpt-image-2.5-sunburst' does not support the 'input_fidelity' parameter.",
+            },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      expect(form.get("quality")).toBe("high");
+      const png = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47));
+      return new Response(JSON.stringify({ data: [{ b64_json: png }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const client = new OpenAIImageClient(
+      "sk-test-key-123456",
+      undefined,
+      fetchMock as unknown as typeof fetch,
+    );
+    const out = await client.edit({
+      model: "gpt-image-2.5-sunburst",
+      prompt: "p",
+      images: [{ bytes: new ArrayBuffer(4), mime: "image/jpeg" }],
+      aspectRatio: "2:3",
+      size: "2K",
+    });
+    expect(calls).toBe(2);
+    expect(out.bytes.byteLength).toBe(4);
+  });
+});
