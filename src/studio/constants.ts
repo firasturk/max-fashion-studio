@@ -75,10 +75,10 @@ MODES.push(BACKDROP_MODE);
 export const ZAID_MODE: ModeInfo = {
   id: "7",
   title: "Zaid creative direction",
-  caption: "Custom direction · fresh scene each image",
+  caption: "Smart direction · mood board + structure",
   icon: PenLine,
   detail:
-    "From your real model photo: the prompt builder follows Zaid's own creative direction text (scenes, poses, light, camera, mood) and writes a detailed prompt per image. Edit the direction below and save it as the default for everyone.",
+    "From your real model photo: the prompt builder studies Zaid's mood board and example prompts, then writes a new prompt in the same world, light and structure for every image, with a different scene each time. The matching mood photo is attached to the engine as a visual reference.",
 };
 MODES.push(ZAID_MODE);
 

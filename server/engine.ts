@@ -13,19 +13,33 @@ import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
 import { estimateCost } from "@shared/pricing";
 import { notify } from "./notify";
 import { StudioError, errorMessage, isFatalEngineError, isTransientEngineError } from "./errors";
-import { buildPrompt, buildEditorialPrompt, RECENTER_SUFFIX } from "@shared/prompts";
-import { buildBriefWithGoogle, buildBriefWithOpenAI, type EditorialBrief } from "./editorial";
+import {
+  buildPrompt,
+  buildEditorialPrompt,
+  RECENTER_SUFFIX,
+  type PromptImages,
+} from "@shared/prompts";
+import {
+  buildBriefWithGoogle,
+  buildBriefWithOpenAI,
+  planRun,
+  type EditorialBrief,
+  type EditorialRequest,
+} from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
 import {
+  getSetting,
   resolveEngineKey,
   resolveEngineModel,
   resolveFalKey,
   resolveGoogleKey,
   resolveOpenAIKey,
+  setSetting,
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
+import { zaidReferenceKey } from "@shared/zaid";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
@@ -664,7 +678,7 @@ async function ensureBrief(
   const recent = recentRows
     .map((r) => (JSON.parse(r.brief) as EditorialBrief).scene)
     .filter(Boolean);
-  const req = {
+  const req: EditorialRequest = {
     image,
     run: task.card,
     recent,
@@ -675,6 +689,10 @@ async function ensureBrief(
     aspectRatio: config.ratio,
     used,
   };
+  // Draw the scene here so the mood photo attached to the builder is the one the text names.
+  const plan = planRun(req);
+  req.scene = plan.scene;
+  if (plan.mood) req.extraImages = [await zaidMoodBytes(env, plan.mood)];
   // The builder follows the image engine's vendor when possible (OpenAI model -> OpenAI builder),
   // so one key is enough and errors come from a single provider.
   const google = (await resolveGoogleKey(env)).key;
@@ -689,8 +707,27 @@ async function ensureBrief(
   const brief = preferOpenAI
     ? await buildBriefWithOpenAI(openai!, req)
     : await buildBriefWithGoogle(google!, req);
+  if (plan.mood) brief.mood = plan.mood;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
+}
+
+/** A mood-board photo from R2 (uploaded once with the deployment). */
+async function zaidMoodBytes(env: Env, mood: string): Promise<ImageBytes> {
+  const obj = await env.BUCKET.get(zaidReferenceKey(mood));
+  if (!obj) throw new StudioError(`Mood-board photo "${mood}" is missing from storage.`, 500);
+  return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || "image/jpeg" };
+}
+
+/** Mood photo as a Higgsfield upload URL, cached per deployment in settings. */
+async function zaidMoodEngineUrl(env: Env, client: HiggsfieldClient, mood: string): Promise<string> {
+  const settingName = `zaid_mood_url_${mood}`;
+  const cached = await getSetting(env, settingName);
+  if (cached) return cached;
+  const img = await zaidMoodBytes(env, mood);
+  const url = await client.upload(img.bytes, img.mime);
+  await setSetting(env, settingName, url);
+  return url;
 }
 
 /** Prompt for a card: the editorial brief in mode 5, the deterministic builder otherwise. */
@@ -701,7 +738,7 @@ async function promptFor(
   task: TaskRow,
   source: SourceRow,
   edit: string,
-  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean },
+  roles: PromptImages,
 ): Promise<string> {
   let prompt: string;
   if (config.mode === "5" || config.mode === "7") {
@@ -725,7 +762,7 @@ async function submitTask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const imageUrls = [await sourceEngineUrl(env, client, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false };
+  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
 
   if (config.mode === "3" && config.identity) {
     imageUrls.push(await identityEngineUrl(env, client, batch.owner, config.identity));
@@ -756,6 +793,13 @@ async function submitTask(
         imageUrls.push(await outputEngineUrl(env, client, studioCard));
         roles.studio = true;
       }
+    }
+  }
+  if (config.mode === "7") {
+    const brief = await ensureBrief(env, batch, config, task, source);
+    if (brief.mood) {
+      imageUrls.push(await zaidMoodEngineUrl(env, client, brief.mood));
+      roles.mood = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -807,7 +851,7 @@ async function submitOpenAITask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false };
+  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
 
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
@@ -834,6 +878,13 @@ async function submitOpenAITask(
         images.push(await outputBytes(env, studioCard));
         roles.studio = true;
       }
+    }
+  }
+  if (config.mode === "7") {
+    const brief = await ensureBrief(env, batch, config, task, source);
+    if (brief.mood) {
+      images.push(await zaidMoodBytes(env, brief.mood));
+      roles.mood = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -1064,13 +1115,13 @@ async function collectReferenceBytes(
   task: TaskRow,
 ): Promise<{
   images: ImageBytes[];
-  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean };
+  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean; mood: boolean };
   source: SourceRow;
 }> {
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
-  const roles = { identity: false, firstCard: false, studio: false, revision: false };
+  const roles = { identity: false, firstCard: false, studio: false, revision: false, mood: false };
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
       env.DB,
@@ -1096,6 +1147,13 @@ async function collectReferenceBytes(
         images.push(await outputBytes(env, studioCard));
         roles.studio = true;
       }
+    }
+  }
+  if (config.mode === "7") {
+    const brief = await ensureBrief(env, batch, config, task, source);
+    if (brief.mood) {
+      images.push(await zaidMoodBytes(env, brief.mood));
+      roles.mood = true;
     }
   }
   const edit = task.edit?.trim() ?? "";

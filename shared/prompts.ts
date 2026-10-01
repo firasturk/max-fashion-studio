@@ -53,6 +53,8 @@ export interface PromptImages {
   studio?: boolean;
   /** true when the latest result is attached as the last image for a revision */
   revision?: boolean;
+  /** true when a mood-board photo is attached as image 2 (mode 7) */
+  mood?: boolean;
 }
 
 /** Scene for a given card, cycling through the scene list. */
@@ -151,6 +153,10 @@ export function buildEditorialPrompt(
   const roles: string[] = [
     "The attached first image is the reference photo of the outfit and model.",
   ];
+  if (images.mood)
+    roles.push(
+      "Image 2 is the mood-board reference: use it only for environment family, light quality, framing distance and film treatment; never copy its clothing, face or exact spot.",
+    );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));
   if (negative) parts.push(`AVOID: ${negative}`);

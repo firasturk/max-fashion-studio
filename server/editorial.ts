@@ -4,7 +4,8 @@
  * ready-made entries in shared/skills.ts. Google Gemini is
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
-import { skillById, zaidSkill } from "@shared/skills";
+import { skillById } from "@shared/skills";
+import { zaidMoodById, zaidMoodForScene, zaidSkill } from "@shared/zaid";
 import { StudioError } from "./errors";
 import type { ImageBytes } from "./openai";
 
@@ -17,6 +18,8 @@ export interface EditorialBrief {
   light: string;
   prompt: string;
   negative: string;
+  /** Mode 7: the mood-board photo attached to this run. */
+  mood?: string;
 }
 
 export interface EditorialRequest {
@@ -25,8 +28,12 @@ export interface EditorialRequest {
   run: number;
   /** Skill id from shared/skills.ts; unknown ids fall back to the editorial skill. */
   skill?: string;
-  /** Mode 7: the creative direction text the "zaid" skill is built from. */
+  /** Mode 7: extra direction text added by the team. */
   direction?: string;
+  /** Scene pre-drawn by planRun(); when absent builderInstruction draws one itself. */
+  scene?: string | null;
+  /** Mode 7: mood-board photo attached after the garment photo. */
+  extraImages?: ImageBytes[];
   /** "auto" | "arab" | "european" | "mixed" */
   market: string;
   /** Free-text city / mood preference from the batch. */
@@ -96,7 +103,11 @@ export function builderInstruction(req: EditorialRequest): string {
         .join("; ")}.`
     : "This is the first run for this outfit.";
   const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
-  const scene = pickScene(req, libraryScenes(skill.library));
+  const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
+  const mood =
+    req.skill === "zaid"
+      ? `Mood-board image attached (image 2): "${zaidMoodById(zaidMoodForScene(scene)).title}". Match its world, light, framing distance and film treatment; change the spot, pose and details.`
+      : "";
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
         .slice(0, 12)
@@ -114,6 +125,7 @@ export function builderInstruction(req: EditorialRequest): string {
     "=== RUN CONTEXT ===",
     `Run number: ${req.run}. ${used}`,
     recent,
+    mood,
     scene
       ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
       : "",
@@ -128,6 +140,17 @@ export function builderInstruction(req: EditorialRequest): string {
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** Draws the scene (and, for Zaid, the mood photo) for a run so the builder text and the attachments agree. */
+export function planRun(req: EditorialRequest): { scene: string | null; mood?: string } {
+  const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
+  const scene = pickScene(req, libraryScenes(skill.library));
+  return req.skill === "zaid" ? { scene, mood: zaidMoodForScene(scene) } : { scene };
+}
+
+function imageParts(req: EditorialRequest): ImageBytes[] {
+  return [req.image, ...(req.extraImages ?? [])];
 }
 
 function toBase64(bytes: ArrayBuffer): string {
@@ -204,7 +227,11 @@ async function buildBriefWithGoogleModel(
       store: false,
       input: [
         { type: "text", text: builderInstruction(req) },
-        { type: "image", mime_type: req.image.mime, data: toBase64(req.image.bytes) },
+        ...imageParts(req).map((img) => ({
+          type: "image",
+          mime_type: img.mime,
+          data: toBase64(img.bytes),
+        })),
       ],
       response_format: { type: "text", mime_type: "application/json", schema: SCHEMA },
     }),
@@ -248,10 +275,10 @@ export async function buildBriefWithOpenAI(
           role: "user",
           content: [
             { type: "text", text: builderInstruction(req) },
-            {
+            ...imageParts(req).map((img) => ({
               type: "image_url",
-              image_url: { url: `data:${req.image.mime};base64,${toBase64(req.image.bytes)}` },
-            },
+              image_url: { url: `data:${img.mime};base64,${toBase64(img.bytes)}` },
+            })),
           ],
         },
       ],

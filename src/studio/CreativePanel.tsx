@@ -15,6 +15,7 @@ import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import { SKILLS, skillById } from "@shared/skills";
+import { ZAID_MOODS } from "@shared/zaid";
 import {
   DEFAULT_PROMPT,
   SCENES,
@@ -333,6 +334,20 @@ export default function CreativePanel({
 
       {config.mode === "7" && (
         <>
+          <label className="field-label">Zaid's mood board</label>
+          <div className="mood-strip">
+            {ZAID_MOODS.map((m) => (
+              <figure key={m.id}>
+                <img src={`/api/studio/zaid-ref/${m.id}`} alt={m.title} loading="lazy" />
+                <figcaption>{m.title}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <div className="prompt-tip">
+            Each image gets a new scene in this world, written in Zaid's prompt structure. Add notes
+            below only when a batch needs something specific (a city, a colour story, a pose).
+          </div>
+
           <label className="field-label">Generated face (when the reference face is hidden)</label>
           <Picker
             value={config.market}
@@ -393,7 +408,7 @@ export default function CreativePanel({
               : config.mode === "5"
                 ? "City / mood preference (optional)"
                 : config.mode === "7"
-                  ? "Zaid creative direction"
+                  ? "Extra direction for this batch (optional)"
                   : "Background & lifestyle prompt"}
         </label>
         {config.mode === "7" ? (
@@ -425,7 +440,7 @@ export default function CreativePanel({
       </div>
       <textarea
         id="prompt"
-        className={config.mode === "7" ? "prompt prompt-tall" : "prompt"}
+        className="prompt"
         value={config.prompt}
         disabled={locked}
         onChange={(e) => onChange({ prompt: e.target.value })}

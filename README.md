@@ -70,6 +70,17 @@ pnpm deploy
 Then set `PUBLIC_BASE_URL` in `wrangler.jsonc` and `wrangler secret put WEBHOOK_TOKEN` if you want
 completion webhooks in addition to the cron.
 
+## Zaid creative direction (mode 7)
+
+The mood-board photos live in `assets/zaid/` and must exist in the R2 bucket under
+`refs/zaid/<id>.jpg` (ids in `shared/zaid.ts`). Upload them once per bucket:
+
+```
+for f in assets/zaid/*.jpg; do
+  npx wrangler r2 object put "max-fashion-studio/refs/zaid/$(basename "$f")" --file "$f" --content-type image/jpeg --remote
+done
+```
+
 ## Checks
 
 ```sh

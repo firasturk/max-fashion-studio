@@ -15,7 +15,7 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
-import { ZAID_DEFAULT_DIRECTION } from "@shared/skills";
+import { ZAID_MOODS, zaidReferenceKey } from "@shared/zaid";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
@@ -112,7 +112,7 @@ studioRoutes.get("/state", async (c) => {
     user,
     batches,
     spendThreshold: adminSettings.spendThreshold,
-    zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || ZAID_DEFAULT_DIRECTION,
+    zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || "",
     engine: {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
@@ -194,7 +194,21 @@ const MODELS_CACHE = "engine_models_cache";
 studioRoutes.post("/direction", async (c) => {
   const { text } = await body(c, z.object({ text: z.string().max(20000) }));
   await setSetting(c.env, ZAID_DIRECTION_SETTING, text.trim());
-  return c.json({ ok: true, text: text.trim() || ZAID_DEFAULT_DIRECTION });
+  return c.json({ ok: true, text: text.trim() });
+});
+
+/** Mood-board photos for the Zaid workflow, streamed from R2. */
+studioRoutes.get("/zaid-ref/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!ZAID_MOODS.some((m) => m.id === id)) throw new StudioError("Unknown mood photo.", 404);
+  const obj = await c.env.BUCKET.get(zaidReferenceKey(id));
+  if (!obj) throw new StudioError("Mood photo missing.", 404);
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+      "Cache-Control": "private, max-age=86400",
+    },
+  });
 });
 
 /** Raw Higgsfield model catalogue for the connected key. */

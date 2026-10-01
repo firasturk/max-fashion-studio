@@ -372,8 +372,27 @@ h2 {
   line-height: 1.5;
   margin-top: 9px;
 }
-.prompt-tall {
-  min-height: 260px;
+.mood-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.mood-strip figure {
+  margin: 0;
+}
+.mood-strip img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #dfe5ee;
+  display: block;
+}
+.mood-strip figcaption {
+  font-size: 10px;
+  color: #667085;
+  margin-top: 3px;
+  line-height: 1.3;
 }
 .field-row-actions {
   display: flex;

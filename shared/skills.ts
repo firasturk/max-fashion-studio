@@ -26,7 +26,7 @@ export interface SkillDef {
  * Rules every derived skill shares with the editorial one: how to read the upload, the face
  * policy, how to rotate scenes between runs and the shape of the final prompt.
  */
-const CORE_RULES = `## Inputs
+export const CORE_RULES = `## Inputs
 
 - Required: one image of a model wearing the outfit (plain background, any gender/age).
 - Optional: market look preference for a generated face (Arab / European / mixed), a city or mood preference, aspect ratio.
@@ -582,46 +582,6 @@ export const SKILLS: SkillDef[] = [
 ];
 
 export const DEFAULT_SKILL = EDITORIAL.id;
-
-/** Starting text for Zaid's creative direction; replaced from the app with his own prompts. */
-export const ZAID_DEFAULT_DIRECTION = `Brand feel: Max Fashion, premium high-street, warm and welcoming, Gulf and Levant customers.
-
-Scenes to rotate between:
-1. Bright modern villa living room with linen sofa, pale stone floor and tall windows.
-2. Dubai marina promenade at golden hour, white railings, yachts softly blurred.
-3. Sand-coloured old-town alley with carved wooden door and bougainvillea.
-4. Minimal white-arch architecture with crisp afternoon shadows.
-5. Rooftop cafe terrace with rattan chairs and a hazy skyline.
-6. Clean beige seamless studio with soft window-style light.
-
-Poses: natural and relaxed, mid-step or leaning, hands relaxed or in pockets, gaze to camera or just off it. No stiff catalogue stance, no exaggerated editorial drama.
-
-Light: warm natural daylight, soft shadows, true skin tones. Colour grade: warm neutrals, sand, ivory, soft terracotta; never over-saturated.
-
-Camera: 50 mm, waist height, slight low angle, full-length or three-quarter, model on a third with room for the environment.
-
-Always: the garment exactly as supplied, fully visible, naturally worn.`;
-
-/** Mode 7: the prompt builder follows a free-text creative direction instead of a fixed library. */
-export function zaidSkill(direction: string): SkillDef {
-  const text = direction.trim() || ZAID_DEFAULT_DIRECTION;
-  return {
-    id: "zaid",
-    title: "Zaid creative direction",
-    caption: "Custom direction · fresh scene each image",
-    description:
-      "The prompt builder follows Zaid's own creative direction text: scenes, poses, light, camera and mood as he wrote them.",
-    instructions: `# Zaid creative direction Prompt Builder\n\nGoal: from ONE product-on-model photo write ONE long image prompt that follows the CREATIVE DIRECTION below exactly. The direction is the brief: use its scenes, poses, light, camera and colour notes as given, filling in any gaps with choices in the same spirit. Every run must still produce a different scene and pose combination. The garment is what the customer sells and is never changed.\n\n## Creative direction\n\n${text}\n\n${CORE_RULES}`,
-    library: `# Library\n\nThe creative direction above is the library. If it lists numbered scenes, rotate through them; otherwise invent scenes consistent with it and describe them with full density (surfaces, depth layers, activity, weather, time of day, shadows).\n\n## Scene families\n${numberedLines(text)}`,
-    template: EDITORIAL_TEMPLATE,
-  };
-}
-
-/** Numbered lines of the direction, re-numbered, so the server can rotate scenes across runs. */
-function numberedLines(text: string): string {
-  const lines = [...text.matchAll(/^\s*\d+[.)]\s+(.+)$/gm)].map((m) => m[1].trim());
-  return lines.map((l, i) => `${i + 1}. ${l}`).join("\n");
-}
 
 export function skillById(id: string | undefined): SkillDef {
   return SKILLS.find((s) => s.id === id) ?? EDITORIAL;

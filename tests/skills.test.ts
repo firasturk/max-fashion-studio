@@ -40,17 +40,23 @@ describe("ready-made skills", () => {
 });
 
 describe("zaid creative direction", () => {
-  it("builds a skill from free text and exposes numbered scenes for rotation", async () => {
-    const { zaidSkill, ZAID_DEFAULT_DIRECTION } = await import("../shared/skills");
-    const { libraryScenes } = await import("../server/editorial");
-    const s = zaidSkill("Mood: warm.\n1. Souk alley at dusk.\n2) Marina at noon.");
-    expect(s.instructions).toContain("Souk alley at dusk");
-    expect(s.instructions).toContain("Step 1");
-    expect(libraryScenes(s.library)).toEqual(["Souk alley at dusk.", "Marina at noon."]);
-    expect(zaidSkill("").instructions).toContain(ZAID_DEFAULT_DIRECTION.slice(0, 40));
-    const text = builderInstruction({ ...req, skill: "zaid", direction: "Only rooftops.\n1. Rooftop A." });
-    expect(text).toContain("Zaid creative direction Prompt Builder");
-    expect(text).toContain("Only rooftops");
+  it("builds the smart-direction skill from the mood board and examples", async () => {
+    const { zaidSkill, ZAID_SCENES, zaidMoodForScene, ZAID_EXAMPLES } = await import(
+      "../shared/zaid"
+    );
+    const { libraryScenes, planRun } = await import("../server/editorial");
+    const s = zaidSkill("Prefer Munich.");
+    expect(s.instructions).toContain("Zaid creative direction Prompt Builder");
+    expect(s.instructions).toContain("ADDITIONAL DIRECTION FROM THE TEAM");
+    expect(s.instructions).toContain("Prefer Munich.");
+    expect(s.instructions).toContain(ZAID_EXAMPLES[2].prompt.slice(0, 60));
+    expect(libraryScenes(s.library)).toHaveLength(ZAID_SCENES.length);
+    expect(zaidMoodForScene(ZAID_SCENES[4].scene)).toBe("stone-wall");
+    const plan = planRun({ ...req, skill: "zaid", random: () => 0.99 });
+    expect(plan.scene).toBe(ZAID_SCENES[ZAID_SCENES.length - 1].scene);
+    expect(plan.mood).toBe("german-street");
+    const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene });
+    expect(text).toContain('Mood-board image attached (image 2): "German sidewalk"');
     expect(text).toContain("Scene assigned to this run");
   });
 });
