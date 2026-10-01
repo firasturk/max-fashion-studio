@@ -126,7 +126,7 @@ export function builderInstruction(req: EditorialRequest): string {
   const skill = skillFor(req);
   const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
   const mood = req.reference
-    ? "Reference image attached (image 2): take ONLY its background/setting, the model's pose and the lighting. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone. Make a sibling of it (same kind of place and light, different exact spot and details), adapted to the upload's framing."
+    ? "REFERENCE FIRST. Image 2 is the primary creative source for this run: build the scene, the pose and the lighting from it. Describe its kind of place, surfaces, depth, time of day and light with full density, and give the model a pose in the same spirit, then change the exact spot and details so the result is a sibling, not a copy. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone and the framing follows image 1. The skill's written direction and library are secondary: use them for mood, colour and the avoid list, and only draw a scene from the library when it fits the reference."
     : "";
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
@@ -146,7 +146,7 @@ export function builderInstruction(req: EditorialRequest): string {
     `Run number: ${req.run}. ${used}`,
     recent,
     mood,
-    scene
+    scene && !req.reference
       ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
       : "",
     `Market preference for a generated face (only when the face is not visible): ${market}.`,
@@ -175,9 +175,10 @@ function skillFor(req: EditorialRequest): SkillDef {
 
 export function planRun(req: EditorialRequest): { scene: string | null; mood?: string } {
   const skill = skillFor(req);
-  const scene = pickScene(req, libraryScenes(skill.library));
   const refs = req.references ?? [];
-  if (!refs.length) return { scene };
+  // With reference photos the photo leads and rotates; the text library's scenes only step in without photos.
+  if (!refs.length) return { scene: pickScene(req, libraryScenes(skill.library)) };
+  const scene = null;
   const taken = new Set(req.usedReferences ?? []);
   const fresh = refs.filter((r) => !taken.has(r));
   const pool = fresh.length ? fresh : refs;
@@ -250,57 +251,70 @@ export async function buildBriefWithGoogle(
   throw lastError ?? new StudioError("No Google text model available.", 502);
 }
 
-async function buildBriefWithGoogleModel(
+/** One vision call to Google returning the model's JSON text (schema-constrained). */
+export async function askVisionGoogle(
   key: string,
-  req: EditorialRequest,
-  fetchImpl: typeof fetch,
-  model: string,
-): Promise<EditorialBrief> {
-  const r = await fetchImpl("https://generativelanguage.googleapis.com/v1beta/interactions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      model,
-      store: false,
-      input: [
-        { type: "text", text: builderInstruction(req) },
-        ...imageParts(req).map((img) => ({
-          type: "image",
-          mime_type: img.mime,
-          data: toBase64(img.bytes),
-        })),
-      ],
-      response_format: { type: "text", mime_type: "application/json", schema: SCHEMA },
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!r.ok)
-    throw new StudioError(
-      `Prompt builder (Google) failed (${r.status}): ${(await r.text()).slice(0, 200)}`,
-      502,
+  instruction: string,
+  images: ImageBytes[],
+  schema: unknown,
+  fetchImpl: typeof fetch = fetch,
+  model?: string,
+): Promise<string> {
+  const candidates = model ? [model] : GOOGLE_TEXT_MODELS;
+  let lastError: StudioError | null = null;
+  for (const m of candidates) {
+    const r = await fetchImpl("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        model: m,
+        store: false,
+        input: [
+          { type: "text", text: instruction },
+          ...images.map((img) => ({
+            type: "image",
+            mime_type: img.mime,
+            data: toBase64(img.bytes),
+          })),
+        ],
+        response_format: { type: "text", mime_type: "application/json", schema },
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (r.status === 404) {
+      lastError = new StudioError(`Prompt builder (Google) failed (404): ${m}`, 502);
+      continue;
+    }
+    if (!r.ok)
+      throw new StudioError(
+        `Prompt builder (Google) failed (${r.status}): ${(await r.text()).slice(0, 200)}`,
+        502,
+      );
+    const d = (await r.json()) as {
+      steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
+      output_text?: string;
+    };
+    return (
+      d.output_text ??
+      (d.steps ?? [])
+        .filter((s) => s.type === "model_output")
+        .flatMap((s) => s.content ?? [])
+        .filter((c) => c.type === "text")
+        .map((c) => c.text ?? "")
+        .join("")
     );
-  const d = (await r.json()) as {
-    steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
-    output_text?: string;
-  };
-  const text =
-    d.output_text ??
-    (d.steps ?? [])
-      .filter((s) => s.type === "model_output")
-      .flatMap((s) => s.content ?? [])
-      .filter((c) => c.type === "text")
-      .map((c) => c.text ?? "")
-      .join("");
-  return parseBrief(text);
+  }
+  throw lastError ?? new StudioError("No Google text model available.", 502);
 }
 
-/** OpenAI chat completion with an image and JSON output. */
-export async function buildBriefWithOpenAI(
+/** One vision call to OpenAI returning the model's JSON text. */
+export async function askVisionOpenAI(
   key: string,
-  req: EditorialRequest,
+  instruction: string,
+  images: ImageBytes[],
   fetchImpl: typeof fetch = fetch,
   model = "gpt-4.1",
-): Promise<EditorialBrief> {
+): Promise<string> {
   const r = await fetchImpl("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -311,8 +325,8 @@ export async function buildBriefWithOpenAI(
         {
           role: "user",
           content: [
-            { type: "text", text: builderInstruction(req) },
-            ...imageParts(req).map((img) => ({
+            { type: "text", text: instruction },
+            ...images.map((img) => ({
               type: "image_url",
               image_url: { url: `data:${img.mime};base64,${toBase64(img.bytes)}` },
             })),
@@ -328,5 +342,28 @@ export async function buildBriefWithOpenAI(
       502,
     );
   const d = (await r.json()) as { choices?: { message?: { content?: string } }[] };
-  return parseBrief(d.choices?.[0]?.message?.content ?? "");
+  return d.choices?.[0]?.message?.content ?? "";
+}
+
+async function buildBriefWithGoogleModel(
+  key: string,
+  req: EditorialRequest,
+  fetchImpl: typeof fetch,
+  model: string,
+): Promise<EditorialBrief> {
+  return parseBrief(
+    await askVisionGoogle(key, builderInstruction(req), imageParts(req), SCHEMA, fetchImpl, model),
+  );
+}
+
+/** OpenAI chat completion with an image and JSON output. */
+export async function buildBriefWithOpenAI(
+  key: string,
+  req: EditorialRequest,
+  fetchImpl: typeof fetch = fetch,
+  model = "gpt-4.1",
+): Promise<EditorialBrief> {
+  return parseBrief(
+    await askVisionOpenAI(key, builderInstruction(req), imageParts(req), fetchImpl, model),
+  );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LoaderCircle, RotateCcw, Save, Trash2 } from "lucide-react";
+import { LoaderCircle, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { del, post } from "@/api";
@@ -114,7 +114,24 @@ export default function SkillDialog({
     }
   }
 
-  const canSave = form.title.trim().length >= 2 && form.goal.trim().length >= 10;
+  const canSave = form.title.trim().length >= 2;
+
+  async function buildFromReferences() {
+    if (!skill) return;
+    setBusy(true);
+    try {
+      const r = await post<{ goal: string; library: string }>(
+        `/api/studio/skills/${skill.id}/analyze`,
+        { title: form.title || skill.title },
+      );
+      set({ goal: r.goal, library: r.library });
+      toast.success("Direction and library written from the reference photos. Review, then Save.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -164,9 +181,21 @@ export default function SkillDialog({
           value={form.description}
           onChange={(e) => set({ description: e.target.value })}
         />
-        <label className="field-label" htmlFor="skill-goal">
-          Direction: what this skill is for and how every image should feel
-        </label>
+        <div className="field-row">
+          <label className="field-label" htmlFor="skill-goal">
+            Direction: what this skill is for and how every image should feel
+          </label>
+          {skill && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy}
+              onClick={() => void buildFromReferences()}
+            >
+              <Sparkles size={13} /> Build from reference photos
+            </button>
+          )}
+        </div>
         <textarea
           id="skill-goal"
           className="prompt"
@@ -186,8 +215,10 @@ export default function SkillDialog({
           onChange={(e) => set({ library: e.target.value })}
         />
         <p className="prompt-tip">
-          The shared rules (outfit lock, face policy, framing lock, reference handling, safe wording)
-          are added automatically. Reference photos are managed from the panel after saving.
+          Reference photos lead: each image is built from one of them (background, pose, light), and
+          this text is secondary guidance. Leave the direction empty for a reference-only skill, or
+          add photos first and press "Build from reference photos" to have it written for you. The
+          shared rules (outfit lock, face policy, framing lock, safe wording) are added automatically.
         </p>
         <div className="footer-actions">
           {skill && (

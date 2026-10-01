@@ -16,6 +16,7 @@ import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
 import { listSkills } from "./skills";
+import { buildSkillFromReferences } from "./skillbuilder";
 import { SKILLS } from "@shared/skills";
 import {
   ENGINE_KEY_SETTING,
@@ -210,13 +211,16 @@ const skillBody = z.object({
   title: z.string().trim().min(2).max(60),
   caption: z.string().trim().max(80).default(""),
   description: z.string().trim().max(400).default(""),
-  goal: z.string().trim().min(10).max(20000),
+  goal: z.string().trim().max(20000).default(""),
   library: z.string().trim().max(20000).default(""),
 });
 
 studioRoutes.post("/skills", async (c) => {
   const d = await body(c, skillBody);
   if (d.id === "zaid") throw new StudioError("Zaid's direction is edited from its own workflow.");
+  const goal =
+    d.goal ||
+    `Goal: write ONE prompt for "${d.title}". The reference photos in this skill's library are the creative source: build the scene, pose and light from the attached reference as a sibling of it. The garment stays exactly as supplied; the output keeps the upload's framing.`;
   const id =
     d.id ||
     d.title
@@ -235,12 +239,33 @@ studioRoutes.post("/skills", async (c) => {
     d.title,
     d.caption,
     d.description,
-    d.goal,
+    goal,
     d.library,
     now(),
     now(),
   );
   return c.json({ ok: true, id, skills: await listSkills(c.env) });
+});
+
+/** Writes a skill's direction and library from its reference photos (returned for review, not saved). */
+studioRoutes.post("/skills/:id/analyze", async (c) => {
+  const id = c.req.param("id");
+  const { title } = await body(c, z.object({ title: z.string().trim().min(2).max(60) }));
+  const rows = await all<{ key: string }>(
+    c.env.DB,
+    "SELECT key FROM refs WHERE skill = ? ORDER BY created LIMIT 10",
+    id,
+  );
+  const images = [];
+  for (const r of rows) {
+    const obj = await c.env.BUCKET.get(r.key);
+    if (obj)
+      images.push({
+        bytes: await obj.arrayBuffer(),
+        mime: obj.httpMetadata?.contentType || "image/jpeg",
+      });
+  }
+  return c.json(await buildSkillFromReferences(c.env, title, images));
 });
 
 /** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */

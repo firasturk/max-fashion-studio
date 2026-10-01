@@ -57,7 +57,7 @@ describe("zaid creative direction", () => {
     });
     expect(plan.mood).toBe("b");
     const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene, reference: "b" });
-    expect(text).toContain("Reference image attached (image 2)");
+    expect(text).toContain("REFERENCE FIRST");
     expect(text).toContain("Framing lock");
   });
 });
@@ -105,5 +105,26 @@ describe("team-managed skills", () => {
     expect(libraryScenes(s.library)).toEqual(["Courtyard with lanterns.", "Majlis."]);
     const text = builderInstruction({ ...req, skill: "ramadan-evening", skillDef: s });
     expect(text).toContain("# Ramadan evening Prompt Builder");
+  });
+});
+
+describe("references lead", () => {
+  it("with reference photos the photo is primary and no library scene is assigned", async () => {
+    const { planRun } = await import("../server/editorial");
+    const plan = planRun({ ...req, skill: "kids", references: ["r1", "r2"], random: () => 0 });
+    expect(plan.scene).toBeNull();
+    expect(plan.mood).toBe("r1");
+    const text = builderInstruction({ ...req, skill: "kids", scene: null, reference: "r1" });
+    expect(text).toContain("REFERENCE FIRST");
+    expect(text).not.toContain("Scene assigned to this run");
+    const noRefs = planRun({ ...req, skill: "kids", references: [], random: () => 0 });
+    expect(noRefs.scene).toBeTruthy();
+  });
+  it("the skill-builder instruction extracts setting, pose and light only", async () => {
+    const { skillBuilderInstruction } = await import("../server/skillbuilder");
+    const t = skillBuilderInstruction("Kids lifestyle", 5);
+    expect(t).toContain("5 attached reference photographs");
+    expect(t).toContain("never mention clothing");
+    expect(t).toContain("## Scene families");
   });
 });
