@@ -39,7 +39,7 @@ import {
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
-import { zaidReferenceKey } from "@shared/zaid";
+import { sanitizePrompt } from "@shared/safety";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
@@ -675,14 +675,25 @@ async function ensureBrief(
     batch.owner,
     batch.id,
   );
-  const recent = recentRows
-    .map((r) => (JSON.parse(r.brief) as EditorialBrief).scene)
-    .filter(Boolean);
+  const recentBriefs = recentRows.map((r) => JSON.parse(r.brief) as EditorialBrief);
+  const recent = recentBriefs.map((b) => b.scene).filter(Boolean);
+  const skillId = config.mode === "7" ? "zaid" : config.skill || "editorial";
+  const library = await all<{ id: string }>(
+    env.DB,
+    "SELECT id FROM refs WHERE skill = ? ORDER BY created",
+    skillId,
+  );
+  const usedReferences = [
+    ...siblings.map((t) => (JSON.parse(t.brief!) as EditorialBrief).mood),
+    ...recentBriefs.map((b) => b.mood),
+  ].filter((x): x is string => !!x);
   const req: EditorialRequest = {
     image,
     run: task.card,
     recent,
-    skill: config.mode === "7" ? "zaid" : config.skill,
+    skill: skillId,
+    references: library.map((r) => r.id),
+    usedReferences,
     direction: config.mode === "7" ? config.prompt : undefined,
     market: config.market || "auto",
     preference: config.mode === "7" ? "" : config.prompt,
@@ -692,7 +703,10 @@ async function ensureBrief(
   // Draw the scene here so the mood photo attached to the builder is the one the text names.
   const plan = planRun(req);
   req.scene = plan.scene;
-  if (plan.mood) req.extraImages = [await zaidMoodBytes(env, plan.mood)];
+  if (plan.mood) {
+    req.reference = plan.mood;
+    req.extraImages = [await referenceBytes(env, plan.mood)];
+  }
   // The builder follows the image engine's vendor when possible (OpenAI model -> OpenAI builder),
   // so one key is enough and errors come from a single provider.
   const google = (await resolveGoogleKey(env)).key;
@@ -712,23 +726,26 @@ async function ensureBrief(
   return brief;
 }
 
-/** A mood-board photo from R2 (uploaded once with the deployment). */
-async function zaidMoodBytes(env: Env, mood: string): Promise<ImageBytes> {
-  const obj = await env.BUCKET.get(zaidReferenceKey(mood));
-  if (!obj) throw new StudioError(`Mood-board photo "${mood}" is missing from storage.`, 500);
+/** A reference-library photo from R2. */
+async function referenceBytes(env: Env, id: string): Promise<ImageBytes> {
+  const row = await first<{ key: string }>(env.DB, "SELECT key FROM refs WHERE id = ?", id);
+  const obj = row ? await env.BUCKET.get(row.key) : null;
+  if (!obj) throw new StudioError("Reference photo is missing from the library.", 500);
   return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || "image/jpeg" };
 }
 
-/** Mood photo as a Higgsfield upload URL, cached per deployment in settings. */
-async function zaidMoodEngineUrl(env: Env, client: HiggsfieldClient, mood: string): Promise<string> {
-  const settingName = `zaid_mood_url_${mood}`;
+/** Reference photo as a Higgsfield upload URL, cached in settings. */
+async function referenceEngineUrl(env: Env, client: HiggsfieldClient, id: string): Promise<string> {
+  const settingName = `ref_url_${id}`;
   const cached = await getSetting(env, settingName);
   if (cached) return cached;
-  const img = await zaidMoodBytes(env, mood);
+  const img = await referenceBytes(env, id);
   const url = await client.upload(img.bytes, img.mime);
   await setSetting(env, settingName, url);
   return url;
 }
+
+const SKILL_MODES = new Set(["5", "7"]);
 
 /** Prompt for a card: the editorial brief in mode 5, the deterministic builder otherwise. */
 async function promptFor(
@@ -748,6 +765,7 @@ async function promptFor(
     prompt = buildPrompt(config, task.card, edit, roles);
   }
   if (task.recenter) prompt += `\n\n${RECENTER_SUFFIX}`;
+  prompt = sanitizePrompt(prompt);
   await run(env.DB, "UPDATE tasks SET prompt = ? WHERE id = ?", prompt, task.id);
   return prompt;
 }
@@ -795,10 +813,10 @@ async function submitTask(
       }
     }
   }
-  if (config.mode === "7") {
+  if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
     if (brief.mood) {
-      imageUrls.push(await zaidMoodEngineUrl(env, client, brief.mood));
+      imageUrls.push(await referenceEngineUrl(env, client, brief.mood));
       roles.mood = true;
     }
   }
@@ -880,10 +898,10 @@ async function submitOpenAITask(
       }
     }
   }
-  if (config.mode === "7") {
+  if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
     if (brief.mood) {
-      images.push(await zaidMoodBytes(env, brief.mood));
+      images.push(await referenceBytes(env, brief.mood));
       roles.mood = true;
     }
   }
@@ -1149,10 +1167,10 @@ async function collectReferenceBytes(
       }
     }
   }
-  if (config.mode === "7") {
+  if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
     if (brief.mood) {
-      images.push(await zaidMoodBytes(env, brief.mood));
+      images.push(await referenceBytes(env, brief.mood));
       roles.mood = true;
     }
   }

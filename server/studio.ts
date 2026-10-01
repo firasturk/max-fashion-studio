@@ -15,7 +15,6 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
-import { ZAID_MOODS, zaidReferenceKey } from "@shared/zaid";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
@@ -197,12 +196,60 @@ studioRoutes.post("/direction", async (c) => {
   return c.json({ ok: true, text: text.trim() });
 });
 
-/** Mood-board photos for the Zaid workflow, streamed from R2. */
-studioRoutes.get("/zaid-ref/:id", async (c) => {
+/** Reference library: inspiration photos per skill (background, pose and light only). */
+const MAX_REFERENCE_UPLOAD = 12 * 1024 * 1024;
+const skillRef = z.object({ skill: z.string().regex(/^[a-z0-9-]{1,40}$/) });
+
+studioRoutes.get("/references", async (c) => {
+  const { skill } = skillRef.parse({ skill: c.req.query("skill") ?? "" });
+  const items = await all<{ id: string; name: string | null; created: number }>(
+    c.env.DB,
+    "SELECT id, name, created FROM refs WHERE skill = ? ORDER BY created",
+    skill,
+  );
+  return c.json({ references: items });
+});
+
+studioRoutes.post("/references", async (c) => {
+  const form = await c.req.formData();
+  const { skill } = skillRef.parse({ skill: String(form.get("skill") ?? "") });
+  const files = form.getAll("file").filter((f): f is File => f instanceof File);
+  if (!files.length) throw new StudioError("Choose at least one image.");
+  const added: string[] = [];
+  for (const raw of files.slice(0, 20)) {
+    const f = checkImage(raw, MAX_REFERENCE_UPLOAD, "Reference");
+    const id = uuid();
+    const key = `refs/${skill}/${id}`;
+    await c.env.BUCKET.put(key, f.stream(), { httpMetadata: { contentType: f.type } });
+    await run(
+      c.env.DB,
+      "INSERT INTO refs (id, skill, key, name, created) VALUES (?, ?, ?, ?, ?)",
+      id,
+      skill,
+      key,
+      f.name.slice(0, 120),
+      now(),
+    );
+    added.push(id);
+  }
+  return c.json({ ok: true, added });
+});
+
+studioRoutes.delete("/references/:id", async (c) => {
   const id = c.req.param("id");
-  if (!ZAID_MOODS.some((m) => m.id === id)) throw new StudioError("Unknown mood photo.", 404);
-  const obj = await c.env.BUCKET.get(zaidReferenceKey(id));
-  if (!obj) throw new StudioError("Mood photo missing.", 404);
+  const row = await first<{ key: string }>(c.env.DB, "SELECT key FROM refs WHERE id = ?", id);
+  if (!row) throw new StudioError("Reference not found.", 404);
+  await c.env.BUCKET.delete(row.key);
+  await run(c.env.DB, "DELETE FROM refs WHERE id = ?", id);
+  await deleteSetting(c.env, `ref_url_${id}`);
+  return c.json({ ok: true });
+});
+
+studioRoutes.get("/references/:id/file", async (c) => {
+  const id = c.req.param("id");
+  const row = await first<{ key: string }>(c.env.DB, "SELECT key FROM refs WHERE id = ?", id);
+  const obj = row ? await c.env.BUCKET.get(row.key) : null;
+  if (!obj) throw new StudioError("Reference not found.", 404);
   return new Response(obj.body, {
     headers: {
       "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",

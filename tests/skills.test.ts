@@ -40,23 +40,49 @@ describe("ready-made skills", () => {
 });
 
 describe("zaid creative direction", () => {
-  it("builds the smart-direction skill from the mood board and examples", async () => {
-    const { zaidSkill, ZAID_SCENES, zaidMoodForScene, ZAID_EXAMPLES } = await import(
-      "../shared/zaid"
-    );
+  it("builds the smart-direction skill from the examples and picks a library reference", async () => {
+    const { zaidSkill, ZAID_SCENES, ZAID_EXAMPLES } = await import("../shared/zaid");
     const { libraryScenes, planRun } = await import("../server/editorial");
     const s = zaidSkill("Prefer Munich.");
     expect(s.instructions).toContain("Zaid creative direction Prompt Builder");
     expect(s.instructions).toContain("ADDITIONAL DIRECTION FROM THE TEAM");
-    expect(s.instructions).toContain("Prefer Munich.");
     expect(s.instructions).toContain(ZAID_EXAMPLES[2].prompt.slice(0, 60));
     expect(libraryScenes(s.library)).toHaveLength(ZAID_SCENES.length);
-    expect(zaidMoodForScene(ZAID_SCENES[4].scene)).toBe("stone-wall");
-    const plan = planRun({ ...req, skill: "zaid", random: () => 0.99 });
-    expect(plan.scene).toBe(ZAID_SCENES[ZAID_SCENES.length - 1].scene);
-    expect(plan.mood).toBe("german-street");
-    const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene });
-    expect(text).toContain('Mood-board image attached (image 2): "German sidewalk"');
-    expect(text).toContain("Scene assigned to this run");
+    const plan = planRun({
+      ...req,
+      skill: "zaid",
+      references: ["a", "b", "c"],
+      usedReferences: ["a", "c"],
+      random: () => 0.99,
+    });
+    expect(plan.mood).toBe("b");
+    const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene, reference: "b" });
+    expect(text).toContain("Reference image attached (image 2)");
+    expect(text).toContain("Framing lock");
+  });
+});
+
+describe("safe wording and framing", () => {
+  it("every skill carries the framing lock and the safe-wording rule", () => {
+    for (const s of SKILLS.filter((x) => x.id !== "editorial")) {
+      expect(s.instructions).toContain("FULL_BODY");
+      expect(s.instructions).toContain("SAFE WORDING");
+      expect(s.instructions).toContain("Reference image (when image 2 is attached)");
+    }
+  });
+  it("sanitises risky words before a prompt leaves the server", async () => {
+    const { sanitizePrompt } = await import("../shared/safety");
+    expect(sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress")).toBe(
+      "A elegant pose with a calm expression and the shoulders in a fitted dress",
+    );
+    expect(sanitizePrompt("Child model, age 6, happy, natural child proportions")).toBe(
+      "Child model, age 6, happy, natural child proportions",
+    );
+  });
+  it("the kids skill is built from the reference world and bans copied accessories", () => {
+    const kids = SKILLS.find((s) => s.id === "kids")!;
+    expect(kids.library).toContain("cactus");
+    expect(kids.library).toContain("iron handrail");
+    expect(kids.library).toMatch(/Hats, caps, bags, sunglasses or props copied/);
   });
 });

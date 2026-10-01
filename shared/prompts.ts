@@ -155,7 +155,7 @@ export function buildEditorialPrompt(
   ];
   if (images.mood)
     roles.push(
-      "Image 2 is the mood-board reference: use it only for environment family, light quality, framing distance and film treatment; never copy its clothing, face or exact spot.",
+      "Image 2 is a visual reference: use it only for the background/setting, the pose and the lighting; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).",
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));

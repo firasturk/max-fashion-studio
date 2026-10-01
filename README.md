@@ -70,6 +70,14 @@ pnpm deploy
 Then set `PUBLIC_BASE_URL` in `wrangler.jsonc` and `wrangler secret put WEBHOOK_TOKEN` if you want
 completion webhooks in addition to the cron.
 
+## Reference library
+
+Every skill (mode 5) and Zaid's direction (mode 7) has a reference library managed inside the
+app (Creative direction panel, "Add photos" / remove). Each generation borrows background, pose
+and lighting from one library photo, rotating so results differ; clothing, faces and accessories
+are never copied. Photos live in R2 under `refs/<skill>/<id>` with rows in the `refs` table. The
+starting kids references are kept in `assets/kids/` and Zaid's mood board in `assets/zaid/`.
+
 ## Zaid creative direction (mode 7)
 
 The mood-board photos live in `assets/zaid/` and must exist in the R2 bucket under

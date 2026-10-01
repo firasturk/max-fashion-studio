@@ -18,7 +18,8 @@
     "@shared/editorial-skill": "./shared/editorial-skill.ts",
     "@shared/pricing": "./shared/pricing.ts",
     "@shared/skills": "./shared/skills.ts",
-    "@shared/zaid": "./shared/zaid.ts"
+    "@shared/zaid": "./shared/zaid.ts",
+    "@shared/safety": "./shared/safety.ts"
   },
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [

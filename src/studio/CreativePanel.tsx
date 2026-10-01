@@ -15,7 +15,7 @@ import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import { SKILLS, skillById } from "@shared/skills";
-import { ZAID_MOODS } from "@shared/zaid";
+import ReferenceLibrary from "./ReferenceLibrary";
 import {
   DEFAULT_PROMPT,
   SCENES,
@@ -311,6 +311,11 @@ export default function CreativePanel({
             ))}
           </div>
           <div className="prompt-tip">{skillById(config.skill).description}</div>
+          <ReferenceLibrary
+            key={config.skill}
+            skill={skillById(config.skill).id}
+            title={`${skillById(config.skill).title} reference library`}
+          />
 
           <label className="field-label">Generated face (when the reference face is hidden)</label>
           <Picker
@@ -334,15 +339,7 @@ export default function CreativePanel({
 
       {config.mode === "7" && (
         <>
-          <label className="field-label">Zaid's mood board</label>
-          <div className="mood-strip">
-            {ZAID_MOODS.map((m) => (
-              <figure key={m.id}>
-                <img src={`/api/studio/zaid-ref/${m.id}`} alt={m.title} loading="lazy" />
-                <figcaption>{m.title}</figcaption>
-              </figure>
-            ))}
-          </div>
+          <ReferenceLibrary skill="zaid" title="Zaid's mood board" />
           <div className="prompt-tip">
             Each image gets a new scene in this world, written in Zaid's prompt structure. Add notes
             below only when a batch needs something specific (a city, a colour story, a pose).

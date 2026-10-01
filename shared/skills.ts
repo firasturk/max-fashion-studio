@@ -6,6 +6,7 @@
  * rules with their own creative direction and library.
  */
 import { EDITORIAL_LIBRARY, EDITORIAL_SKILL, EDITORIAL_TEMPLATE } from "./editorial-skill";
+import { SAFE_WORDING_RULE } from "./safety";
 
 export interface SkillDef {
   id: string;
@@ -37,6 +38,13 @@ export const CORE_RULES = `## Inputs
 2. **Face visibility**: \`FACE_VISIBLE\`, \`FACE_PARTIAL\` or \`NO_FACE\`. Treat FACE_PARTIAL as NO_FACE for identity, but keep any visible chin/hair traits consistent.
 3. **Outfit inventory — garment by garment, top to bottom** (the most important part). For each item: garment type, exact colour names, fabric and finish, fit and silhouette, length, neckline/collar, sleeves and cuffs, closures (number, colour, material), pockets, seams and topstitching, hems, waist treatment, prints (motif, scale, repeat, colours), graphics or embroidery (exact position and size, text spelled exactly), trims, layering order, how it is worn. Footwear and accessories only if they appear in the upload, otherwise "not supplied".
 4. **Styling gaps**: which parts of the look are missing. They may be completed only with neutral, non-competing pieces that never distract from the product.
+5. **Framing of the upload**: \`FULL_BODY\` (head to footwear), \`UPPER_BODY\` (cropped around the waist or hips) or \`LOWER_BODY\` (waist down). This is a lock: the output keeps the same framing and roughly the same crop line, so an upper-body upload gives an upper-body image and a lower-body upload gives a lower-body image. Adapt any pose to that crop.
+
+## Reference image (when image 2 is attached)
+
+Take from it ONLY three things: the background/setting, the model's pose and body language, and the lighting (direction, quality, time of day). Ignore everything else in it: its clothing, colours of the outfit, face, hair, hats, caps, bags, sunglasses, jewellery, props and accessories. The garment comes from image 1 alone. Produce a sibling of the reference, not a copy: same kind of place and light, a different exact spot and details.
+
+${SAFE_WORDING_RULE}
 
 ## Step 2 — Pick a fresh creative combination
 
@@ -352,46 +360,48 @@ const ACTIVEWEAR = derive({
 
 const KIDS = derive({
   id: "kids",
-  title: "Kids",
-  caption: "Playful, bright, family-safe",
+  title: "Kids lifestyle",
+  caption: "Outdoor, candid, family-safe",
   description:
-    "Family-catalogue imagery for babies, kids and teens: parks, sunny courtyards, playgrounds, classrooms and colourful doorways with natural playful poses.",
-  goal: `Goal: write ONE prompt for a bright, playful kidswear image in a premium family-catalogue tone (Zara Kids, Mango Kids). Poses are natural and age-appropriate, settings are friendly and safe. No makeup, no adult styling, no mature expressions. The garment stays exactly as supplied.`,
-  library: `# Kids library
+    "Premium kids lifestyle imagery in the spirit of the reference library: countryside fences, desert scrub, lake piers, brick stairs and colourful old doors, with candid child poses and natural light. References give background, pose and light only.",
+  goal: `Goal: write ONE prompt for a premium kids lifestyle image (Zara Kids / Mango Kids tone): a real outdoor place with character, natural light, and a candid child pose that feels caught rather than directed. The reference library sets the world: muted countryside, sun-baked desert scrub, lake piers, red-brick stairs with iron railings, old painted doors with tiles. The garment stays exactly as supplied; the output keeps the upload's framing (full body, upper body or lower body). Child safety wording applies throughout.`,
+  library: `# Kids lifestyle library
 
 ## Scene families
-1. Sunny park lawn with a wooden bench and trees, soft dappled light.
-2. Colourful painted doorway on a quiet street, bright overcast.
-3. Playground with a slide and soft rubber ground, morning sun.
-4. Light classroom with wooden desks and a chalkboard (no readable text).
-5. Family kitchen with white tiles and a fruit bowl, window light.
-6. Beach at golden hour with a bucket and a kite.
-7. Garden courtyard with terracotta pots and a hose.
-8. Pastel-coloured wall with a scooter leaning against it.
+1. Overcast countryside meadow with a rough timber fence of crossed logs, dark tree line behind, soft grey sky, dry grass.
+2. Sun-baked desert scrub with a tall cactus, pale sandy ground, dry flowering bushes, distant hills, clear blue sky.
+3. Weathered wooden lake pier in hard midday sun, still dark water, dry hills with pines behind.
+4. Old red-brick wall and stone steps with a curved iron handrail, warm afternoon light, a few weeds at the base.
+5. Faded red double door in a pale stone frame with patterned old tiles beside it, cobbled street in front.
+6. Village lane with whitewashed walls and a green wooden gate, soft late sun.
+7. Gravel path by a dry-stone wall with poppies and long grass, bright overcast.
+8. Harbour-side steps with painted railings and a pale sky, breezy.
 
-## Poses
-- Skipping toward the camera, big natural laugh.
-- Sitting on a bench swinging the legs, holding an ice-cream or a book.
-- Jumping off a low kerb mid-air.
-- Holding a scooter handle with one hand, looking back.
-- Crouching to look at something on the ground, curious.
-- Standing with hands in pockets, shy smile.
-- Teens: leaning on a wall with a backpack, relaxed and confident.
+## Poses (candid, age-appropriate)
+- Sitting on a fence rail or wall edge, legs dangling, one hand holding the rail, looking slightly away.
+- Standing in dry grass with hands clasped at the chest, gaze off to the side, quietly curious.
+- Standing on a pier shielding the eyes from the sun with one forearm, feet apart.
+- Leaning back against a wall on a step, arms stretched out along the railing, big easy smile.
+- Star-shaped stance in a doorway, arms and legs spread wide to touch the frame, delighted.
+- Walking along a path kicking a pebble, looking down.
+- Crouching to look at a flower or a bug, knees bent, hands on knees.
+- Sitting on a step hugging the knees, chin resting on them, calm.
 
 ## Light
-- Soft morning sun from the side, gentle shadows.
-- Bright overcast, even and friendly.
-- Window light indoors with a soft fill.
+- Bright overcast: soft, even, slightly cool, gentle ground shadows.
+- Hard midday sun: crisp short shadows, bright sky, squinting is allowed.
+- Warm late-afternoon sun from one side, long soft shadows on brick or stone.
+- Open shade against a wall with bright bounced light.
 
 ## Camera
-- 35 mm equivalent at the child's eye level, full-length, slightly low.
-- 50 mm equivalent, three-quarter crop with a blurred playful background.
+- 35 mm equivalent at the child's eye level, full length, a little low so the place feels big.
+- 50 mm equivalent, three-quarter or the upload's crop, background softly out of focus.
 
 ## Colour grade
-- Bright, clean and warm, cheerful colours without over-saturation, natural skin tones.
+- Soft film-like warmth, muted greens and sand, true skin tones, gentle contrast, no heavy saturation.
 
 ## Avoid
-- Makeup, sunglasses posed seductively, mature expressions, unsafe situations, readable text.`,
+- Hats, caps, bags, sunglasses or props copied from a reference; makeup; adult expressions or poses; readable signage; studio backdrops; anything unsafe (water edges without a surface to stand on, traffic).`,
 });
 
 const EVENING = derive({

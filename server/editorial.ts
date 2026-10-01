@@ -5,7 +5,7 @@
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
 import { skillById } from "@shared/skills";
-import { zaidMoodById, zaidMoodForScene, zaidSkill } from "@shared/zaid";
+import { zaidSkill } from "@shared/zaid";
 import { StudioError } from "./errors";
 import type { ImageBytes } from "./openai";
 
@@ -18,8 +18,10 @@ export interface EditorialBrief {
   light: string;
   prompt: string;
   negative: string;
-  /** Mode 7: the mood-board photo attached to this run. */
+  /** Id of the reference-library photo attached to this run, if any. */
   mood?: string;
+  /** FULL_BODY | UPPER_BODY | LOWER_BODY, read from the upload and locked for the output. */
+  framing?: string;
 }
 
 export interface EditorialRequest {
@@ -32,7 +34,13 @@ export interface EditorialRequest {
   direction?: string;
   /** Scene pre-drawn by planRun(); when absent builderInstruction draws one itself. */
   scene?: string | null;
-  /** Mode 7: mood-board photo attached after the garment photo. */
+  /** Reference-library photo ids available for this skill; planRun() picks one not used recently. */
+  references?: string[];
+  /** Reference ids already attached to sibling runs or recent batches. */
+  usedReferences?: string[];
+  /** The reference photo chosen for this run, attached after the garment photo. */
+  reference?: string;
+  /** Extra images attached after the garment photo (the chosen reference). */
   extraImages?: ImageBytes[];
   /** "auto" | "arab" | "european" | "mixed" */
   market: string;
@@ -84,8 +92,19 @@ const SCHEMA = {
     light: { type: "string" },
     prompt: { type: "string" },
     negative: { type: "string" },
+    framing: { type: "string", enum: ["FULL_BODY", "UPPER_BODY", "LOWER_BODY"] },
   },
-  required: ["subject", "faceMode", "garments", "scene", "pose", "light", "prompt", "negative"],
+  required: [
+    "subject",
+    "faceMode",
+    "garments",
+    "scene",
+    "pose",
+    "light",
+    "prompt",
+    "negative",
+    "framing",
+  ],
 };
 
 export function builderInstruction(req: EditorialRequest): string {
@@ -104,10 +123,9 @@ export function builderInstruction(req: EditorialRequest): string {
     : "This is the first run for this outfit.";
   const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
   const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
-  const mood =
-    req.skill === "zaid"
-      ? `Mood-board image attached (image 2): "${zaidMoodById(zaidMoodForScene(scene)).title}". Match its world, light, framing distance and film treatment; change the spot, pose and details.`
-      : "";
+  const mood = req.reference
+    ? "Reference image attached (image 2): take ONLY its background/setting, the model's pose and the lighting. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone. Make a sibling of it (same kind of place and light, different exact spot and details), adapted to the upload's framing."
+    : "";
   const recent = req.recent?.length
     ? `Scenes used in the user's recent batches (avoid these families too): ${req.recent
         .slice(0, 12)
@@ -134,19 +152,30 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `User city / mood preference: ${req.preference}`
       : "No city or mood preference given.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
+    "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
+    "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
     "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
-    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt).",
+    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, UPPER_BODY or LOWER_BODY).",
   ]
     .filter(Boolean)
     .join("\n\n");
 }
 
-/** Draws the scene (and, for Zaid, the mood photo) for a run so the builder text and the attachments agree. */
+/**
+ * Draws the scene and the reference photo for a run so the builder text and the attachments
+ * agree. The reference is one of the skill's library photos not used for this outfit or recently.
+ */
 export function planRun(req: EditorialRequest): { scene: string | null; mood?: string } {
   const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
   const scene = pickScene(req, libraryScenes(skill.library));
-  return req.skill === "zaid" ? { scene, mood: zaidMoodForScene(scene) } : { scene };
+  const refs = req.references ?? [];
+  if (!refs.length) return { scene };
+  const taken = new Set(req.usedReferences ?? []);
+  const fresh = refs.filter((r) => !taken.has(r));
+  const pool = fresh.length ? fresh : refs;
+  const random = req.random ?? Math.random;
+  return { scene, mood: pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))] };
 }
 
 function imageParts(req: EditorialRequest): ImageBytes[] {
@@ -179,6 +208,7 @@ function parseBrief(text: string): EditorialBrief {
     light: d.light ?? "",
     prompt: d.prompt,
     negative: d.negative ?? "",
+    framing: d.framing,
   };
 }
 

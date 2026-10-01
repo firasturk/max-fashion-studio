@@ -379,6 +379,25 @@ h2 {
 }
 .mood-strip figure {
   margin: 0;
+  position: relative;
+}
+.mood-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(16, 24, 40, 0.75);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.mood-strip .text-button svg {
+  vertical-align: -2px;
 }
 .mood-strip img {
   width: 100%;
