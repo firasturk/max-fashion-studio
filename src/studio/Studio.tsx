@@ -26,6 +26,7 @@ import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob } from "@/lib/zip";
 import { DEFAULT_CONFIG, cardsPerSource, exportsOriginals, type Config } from "@shared/config";
+import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
 import type { Batch, EngineModel, StateResponse, Task, User } from "@shared/types";
 import type { PickedFile } from "@/lib/files";
@@ -137,6 +138,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     `/api/studio/file?batch=${batch?.id}&id=${t.id}&kind=result&v=${t.output?.split("/").at(-1)}`;
 
   const ready = tasks.filter((t) => t.status === "ready" || t.status === "approved");
+  const effectiveConfig: Config = { ...viewConfig, model: viewConfig.model || engine.model };
+  const pendingLeads = pending.filter((p) => p.role === "lead").length;
+  const pendingCost = estimateCost(effectiveConfig, pendingLeads * cardsPerSource(effectiveConfig));
+  const toRun = tasks.filter((t) => t.status === "queued" || t.status === "failed");
+  const queueCost = estimateCost(
+    effectiveConfig,
+    toRun.length,
+    toRun.map((t) => t.card),
+  );
   const failed = tasks.filter((t) => t.status === "failed");
   const queued = tasks.filter((t) => t.status === "queued");
   const completed = tasks.filter((t) => !!t.output).length;
@@ -358,10 +368,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   const selectedSource = selected ? (sources.find((s) => s.id === selected.source) ?? null) : null;
   const running = batch?.state === "running";
+  const costTag = queueCost.images && queueCost.known ? ` · ≈ ${formatUsd(queueCost.total)}` : "";
   const startLabel =
-    failed.length && !queued.length
+    (failed.length && !queued.length
       ? `Retry ${failed.length}`
-      : `Generate ${queued.length || ""}`.trim();
+      : `Generate ${queued.length || ""}`.trim()) + costTag;
 
   return (
     <div className="studio">
@@ -585,15 +596,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   <div>
                     <strong>
                       {batch
-                        ? `${ready.length} ready to export`
-                        : `${pending.length} images selected`}
+                        ? `${ready.length} ready to export${queueCost.images && queueCost.known ? ` · next run ≈ ${formatUsd(queueCost.total)}` : ""}`
+                        : `${pending.length} images selected${pendingCost.images && pendingCost.known ? ` · ${pendingCost.images} AI results ≈ ${formatUsd(pendingCost.total)}` : ""}`}
                     </strong>
                     <span>
                       {running
                         ? "Generation continues on the server even if you close this tab."
                         : batch
-                          ? "Originals and results are saved."
-                          : "Originals will be saved before generation."}
+                          ? queueCost.images && queueCost.known
+                            ? `Estimate at ${formatUsd(queueCost.perImage)} per image on ${effectiveConfig.model}${queueCost.economy ? " (economy)" : ""}. Retries and revisions cost extra.`
+                            : "Originals and results are saved."
+                          : pendingCost.images && pendingCost.known
+                            ? `Estimate at ${formatUsd(pendingCost.perImage)} per image on ${effectiveConfig.model}${pendingCost.economy ? " (economy)" : ""}. Originals will be saved before generation.`
+                            : "Originals will be saved before generation."}
                     </span>
                   </div>
                   <div className="footer-actions">
