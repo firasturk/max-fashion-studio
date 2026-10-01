@@ -93,6 +93,8 @@ export interface SkillInfo {
   edited: boolean;
   /** Text is written from the reference photos and refreshed when they change. */
   auto: boolean;
+  /** Starred by the current user. */
+  favourite: boolean;
 }
 
 export interface StateResponse {

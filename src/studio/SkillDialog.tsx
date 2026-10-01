@@ -35,6 +35,7 @@ const EMPTY: SkillInfo = {
   builtIn: false,
   edited: false,
   auto: true,
+  favourite: false,
 };
 
 /** Create or edit a skill: the direction (goal) and library text are what the prompt builder reads. */

@@ -15,7 +15,7 @@ import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import SkillDialog from "./SkillDialog";
-import { Plus } from "lucide-react";
+import { Plus, Star } from "lucide-react";
 import ReferenceLibrary from "./ReferenceLibrary";
 import {
   DEFAULT_PROMPT,
@@ -97,6 +97,37 @@ export default function CreativePanel({
       toast.error(`Could not update the skill text: ${(e as Error).message}`);
     } finally {
       setRebuilding(false);
+    }
+  }
+
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  async function toggleFavourite(s: SkillInfo) {
+    try {
+      const r = await post<{ skills: SkillInfo[] }>(`/api/studio/skills/${s.id}/favourite`, {
+        on: !s.favourite,
+      });
+      onSkillsChanged?.(r.skills);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  /** Drops the dragged card before the target and saves the team-wide order. */
+  async function reorder(targetId: string) {
+    if (!dragId || dragId === targetId) return;
+    const ids = skills.map((s) => s.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    setDragId(null);
+    try {
+      const r = await post<{ skills: SkillInfo[] }>("/api/studio/skills/order", { ids });
+      onSkillsChanged?.(r.skills);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -371,20 +402,40 @@ export default function CreativePanel({
           </div>
           <div className="skills" role="radiogroup" aria-label="Skill">
             {skills.map((s) => (
-              <button
+              <div
                 key={s.id}
-                type="button"
-                role="radio"
-                aria-checked={config.skill === s.id}
-                className={`skill-card ${config.skill === s.id ? "active" : ""}`}
-                disabled={locked}
-                onClick={() => onChange({ skill: s.id })}
+                className={`skill-card ${config.skill === s.id ? "active" : ""} ${dragId === s.id ? "dragging" : ""}`}
+                draggable={!locked}
+                onDragStart={() => setDragId(s.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => void reorder(s.id)}
+                onDragEnd={() => setDragId(null)}
+                title="Drag to reorder"
               >
-                <strong>{s.title}</strong>
-                <span>{s.caption}</span>
-              </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={config.skill === s.id}
+                  className="skill-pick"
+                  disabled={locked}
+                  onClick={() => onChange({ skill: s.id })}
+                >
+                  <strong>{s.title}</strong>
+                  <span>{s.caption}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`skill-star ${s.favourite ? "on" : ""}`}
+                  aria-label={s.favourite ? "Remove from favourites" : "Add to favourites"}
+                  aria-pressed={s.favourite}
+                  onClick={() => void toggleFavourite(s)}
+                >
+                  <Star size={14} fill={s.favourite ? "currentColor" : "none"} />
+                </button>
+              </div>
             ))}
           </div>
+          <div className="prompt-tip">Drag cards to reorder (shared with the team). Starred skills stay first for you.</div>
           {currentSkill && (
             <div className="prompt-tip">
               {currentSkill.description || "Add reference photos: the skill writes itself from them."}

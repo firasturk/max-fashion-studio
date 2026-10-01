@@ -5,6 +5,7 @@
  */
 import type { Env } from "./env";
 import { all, first } from "./db";
+import { getSetting, setSetting } from "./settings";
 import { SKILLS, deriveSkill, type SkillDef, type SkillDraft } from "@shared/skills";
 import type { SkillInfo } from "@shared/types";
 
@@ -24,6 +25,7 @@ function rowToInfo(r: SkillRow, builtIn: boolean): SkillInfo {
     builtIn,
     edited: builtIn,
     auto: !!r.auto,
+    favourite: false,
   };
 }
 
@@ -38,10 +40,49 @@ function builtInInfo(s: SkillDef): SkillInfo {
     builtIn: true,
     edited: false,
     auto: true,
+    favourite: false,
   };
 }
 
-export async function listSkills(env: Env): Promise<SkillInfo[]> {
+const ORDER_SETTING = "skills_order";
+const favSetting = (userId: string) => `skill_favs_${userId}`;
+
+async function readIds(env: Env, name: string): Promise<string[]> {
+  try {
+    const v = JSON.parse((await getSetting(env, name)) || "[]") as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Team-wide display order; ids missing from the saved order keep their natural place at the end. */
+export async function saveSkillsOrder(env: Env, ids: string[]): Promise<void> {
+  await setSetting(env, ORDER_SETTING, JSON.stringify(ids.slice(0, 200)));
+}
+
+export async function setFavourite(env: Env, userId: string, id: string, on: boolean): Promise<void> {
+  const favs = new Set(await readIds(env, favSetting(userId)));
+  if (on) favs.add(id);
+  else favs.delete(id);
+  await setSetting(env, favSetting(userId), JSON.stringify([...favs]));
+}
+
+/** Skills as the team sees them: favourites of `userId` first, then the saved order. */
+export async function listSkills(env: Env, userId?: string): Promise<SkillInfo[]> {
+  const list = await listSkillsRaw(env);
+  const order = await readIds(env, ORDER_SETTING);
+  const favs = new Set(userId ? await readIds(env, favSetting(userId)) : []);
+  const rank = (id: string) => {
+    const i = order.indexOf(id);
+    return i === -1 ? order.length + list.findIndex((s) => s.id === id) : i;
+  };
+  return list
+    .map((s) => ({ ...s, favourite: favs.has(s.id) }))
+    .sort((a, b) => Number(b.favourite) - Number(a.favourite) || rank(a.id) - rank(b.id));
+}
+
+async function listSkillsRaw(env: Env): Promise<SkillInfo[]> {
   const rows = await all<SkillRow>(
     env.DB,
     "SELECT id, title, caption, description, goal, library, hidden, auto FROM skills ORDER BY created",

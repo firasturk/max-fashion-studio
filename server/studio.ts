@@ -15,7 +15,7 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
-import { listSkills } from "./skills";
+import { listSkills, saveSkillsOrder, setFavourite } from "./skills";
 import { buildSkillFromReferences } from "./skillbuilder";
 import { SKILLS } from "@shared/skills";
 import {
@@ -200,7 +200,19 @@ studioRoutes.post("/direction", async (c) => {
 });
 
 /** Team-managed skills: list, create or edit, delete (a built-in is hidden rather than removed). */
-studioRoutes.get("/skills", async (c) => c.json({ skills: await listSkills(c.env) }));
+studioRoutes.get("/skills", async (c) => c.json({ skills: await listSkills(c.env, c.get("user").id) }));
+
+studioRoutes.post("/skills/order", async (c) => {
+  const { ids } = await body(c, z.object({ ids: z.array(z.string().max(60)).max(200) }));
+  await saveSkillsOrder(c.env, ids);
+  return c.json({ ok: true, skills: await listSkills(c.env, c.get("user").id) });
+});
+
+studioRoutes.post("/skills/:id/favourite", async (c) => {
+  const { on } = await body(c, z.object({ on: z.boolean() }));
+  await setFavourite(c.env, c.get("user").id, c.req.param("id"), on);
+  return c.json({ ok: true, skills: await listSkills(c.env, c.get("user").id) });
+});
 
 const skillBody = z.object({
   id: z
@@ -249,7 +261,7 @@ studioRoutes.post("/skills", async (c) => {
     now(),
     now(),
   );
-  return c.json({ ok: true, id, skills: await listSkills(c.env) });
+  return c.json({ ok: true, id, skills: await listSkills(c.env, c.get("user").id) });
 });
 
 /**
@@ -279,7 +291,7 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
   }
   const built = await buildSkillFromReferences(c.env, title, images);
   if (save) {
-    const current = (await listSkills(c.env)).find((s) => s.id === id);
+    const current = (await listSkills(c.env, c.get("user").id)).find((s) => s.id === id);
     await run(
       c.env.DB,
       `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
@@ -295,7 +307,7 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
       now(),
       now(),
     );
-    return c.json({ ...built, skills: await listSkills(c.env) });
+    return c.json({ ...built, skills: await listSkills(c.env, c.get("user").id) });
   }
   return c.json(built);
 });
@@ -303,7 +315,7 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
 /** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */
 studioRoutes.delete("/skills/:id", async (c) => {
   const id = c.req.param("id");
-  const visible = await listSkills(c.env);
+  const visible = await listSkills(c.env, c.get("user").id);
   if (visible.length <= 1 && visible.some((s) => s.id === id))
     throw new StudioError("Keep at least one skill. Create another one before deleting this.");
   if (SKILLS.some((s) => s.id === id)) {
@@ -320,7 +332,7 @@ studioRoutes.delete("/skills/:id", async (c) => {
   } else {
     await run(c.env.DB, "DELETE FROM skills WHERE id = ?", id);
   }
-  return c.json({ ok: true, skills: await listSkills(c.env) });
+  return c.json({ ok: true, skills: await listSkills(c.env, c.get("user").id) });
 });
 
 /** Restores a hidden built-in skill to its original text. */
@@ -328,7 +340,7 @@ studioRoutes.post("/skills/:id/reset", async (c) => {
   const id = c.req.param("id");
   if (!SKILLS.some((s) => s.id === id)) throw new StudioError("Only built-in skills can be reset.");
   await run(c.env.DB, "DELETE FROM skills WHERE id = ?", id);
-  return c.json({ ok: true, skills: await listSkills(c.env) });
+  return c.json({ ok: true, skills: await listSkills(c.env, c.get("user").id) });
 });
 
 /** Reference library: inspiration photos per skill (background, pose and light only). */
