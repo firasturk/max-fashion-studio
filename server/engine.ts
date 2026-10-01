@@ -12,7 +12,7 @@ import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfiel
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
 import { estimateCost } from "@shared/pricing";
 import { notify } from "./notify";
-import { StudioError, errorMessage, isFatalEngineError } from "./errors";
+import { StudioError, errorMessage, isFatalEngineError, isTransientEngineError } from "./errors";
 import { buildPrompt, buildEditorialPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { buildBriefWithGoogle, buildBriefWithOpenAI, type EditorialBrief } from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
@@ -368,6 +368,29 @@ async function failTask(
   );
 }
 
+/**
+ * A generation attempt that threw: the engine produced nothing, so the recorded attempt cost is
+ * refunded; a transient failure gets one automatic retry, anything else fails the task.
+ */
+async function settleFailedAttempt(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+  e: unknown,
+): Promise<void> {
+  const refund =
+    estimateCost({ ...config, model: config.model || (await resolveEngineModel(env)) }, 1, [
+      task.card,
+    ]).total + (task.edit || task.recenter ? 0.008 : 0);
+  await run(env.DB, "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?", refund, task.id);
+  const message = errorMessage(e, "Generation failed.");
+  if (isTransientEngineError(e) && task.attempts < MAX_AUTO_ATTEMPTS)
+    await requeue(env, task, message);
+  else await failTask(env, task, message, task.output);
+  if (isFatalEngineError(e)) await pauseBatch(env, batch.id, message);
+}
+
 async function requeue(env: Env, task: TaskRow, message: string): Promise<void> {
   await run(
     env.DB,
@@ -516,16 +539,14 @@ async function submitNext(
         token,
       );
     } catch (e) {
-      await failTask(
+      await settleFailedAttempt(
         env,
-        { ...task, status: "processing" },
-        errorMessage(e, "Generation failed."),
-        task.output,
+        batch,
+        config,
+        { ...task, status: "processing", attempts: task.attempts + 1 },
+        e,
       );
-      if (isFatalEngineError(e)) {
-        await pauseBatch(env, batch.id, errorMessage(e));
-        return;
-      }
+      if (isFatalEngineError(e)) return;
     }
   }
 }
@@ -841,13 +862,13 @@ async function submitOpenAITask(
         null,
       );
     } catch (e) {
-      await failTask(
+      await settleFailedAttempt(
         env,
-        { ...task, status: "processing", request_id: requestId },
-        errorMessage(e, "Generation failed."),
-        task.output,
+        batch,
+        config,
+        { ...task, status: "processing", request_id: requestId, attempts: task.attempts + 1 },
+        e,
       );
-      if (isFatalEngineError(e)) await pauseBatch(env, batch.id, errorMessage(e));
     }
   })();
   if (background) background(job);
