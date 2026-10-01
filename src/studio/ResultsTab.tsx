@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, FileImage, LoaderCircle, RotateCcw, ScanLine, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -37,6 +38,8 @@ export default function ResultsTab({
   onOpen: (t: Task) => void;
   onRetryTask: (t: Task) => void;
 }) {
+  const PAGE = 48;
+  const [limit, setLimit] = useState(PAGE);
   if (!tasks.length) {
     return (
       <div className="empty-results">
@@ -92,7 +95,7 @@ export default function ResultsTab({
         )}
       </div>
       <div className="image-grid results-grid">
-        {tasks.map((t) => {
+        {tasks.slice(0, limit).map((t) => {
           const s = byId.get(t.source);
           const eligible = t.status === "ready" || t.status === "approved";
           return (
@@ -157,6 +160,17 @@ export default function ResultsTab({
           );
         })}
       </div>
+      {tasks.length > limit && (
+        <div className="show-more">
+          <span>{tasks.length - limit} more not shown</span>
+          <button className="secondary" onClick={() => setLimit((l) => l + PAGE * 2)}>
+            Show more
+          </button>
+          <button className="text-button" onClick={() => setLimit(Number.MAX_SAFE_INTEGER)}>
+            Show all
+          </button>
+        </div>
+      )}
     </>
   );
 }

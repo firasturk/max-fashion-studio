@@ -64,6 +64,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const { batch, sources, tasks, active, open, close, refresh, action, remove } = useBatch();
 
@@ -214,22 +215,32 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           ).id;
       let uploaded = 0;
       const remaining: Pending[] = [];
-      for (const p of pending) {
-        const form = new FormData();
-        form.append("file", p.file);
-        form.append("name", p.name);
-        form.append("role", p.role);
-        try {
-          form.append("reference", await makeReference(p.file), "reference.jpg");
-          await postForm(`/api/studio/upload?batch=${id}`, form);
-          uploaded++;
-          URL.revokeObjectURL(p.url);
-        } catch (e) {
-          remaining.push(p);
-          toast.error(`${p.name}: ${(e as Error).message}`);
+      const queue = [...pending];
+      setProgress({ done: 0, total: queue.length });
+      // Four uploads in flight at once: resizing happens in the browser while other files transfer.
+      const worker = async () => {
+        for (;;) {
+          const p = queue.shift();
+          if (!p) return;
+          const form = new FormData();
+          form.append("file", p.file);
+          form.append("name", p.name);
+          form.append("role", p.role);
+          try {
+            form.append("reference", await makeReference(p.file), "reference.jpg");
+            await postForm(`/api/studio/upload?batch=${id}`, form);
+            uploaded++;
+            URL.revokeObjectURL(p.url);
+          } catch (e) {
+            remaining.push(p);
+            toast.error(`${p.name}: ${(e as Error).message}`);
+          }
+          setProgress((pr) => (pr ? { ...pr, done: pr.done + 1 } : pr));
         }
-      }
+      };
+      await Promise.all(Array.from({ length: 4 }, worker));
       setPending(remaining);
+      setProgress(null);
       await open(id);
       await loadState();
       if (uploaded) {
@@ -597,7 +608,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                         ) : (
                           <Upload size={17} />
                         )}
-                        Save batch
+                        {progress ? `Saving ${progress.done} / ${progress.total}` : "Save batch"}
                       </button>
                     ) : (
                       <>

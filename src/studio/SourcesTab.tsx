@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { FolderOpen, Upload, X } from "lucide-react";
 import Picker from "./Picker";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
@@ -40,6 +40,18 @@ export default function SourcesTab({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const PAGE = 48;
+  const [limit, setLimit] = useState(PAGE);
+  const groups = new Map<string, number>();
+  for (const p of pending) {
+    const dir = p.name.split("/").slice(0, -1).join("/") || "(no folder)";
+    groups.set(dir, (groups.get(dir) ?? 0) + 1);
+  }
+  const visiblePending = pending.slice(0, limit);
+  const visibleSources = sources.slice(0, limit);
+  const hiddenCount = batchOpen
+    ? sources.length - visibleSources.length
+    : pending.length - visiblePending.length;
   const leads = pending.filter((p) => p.role === "lead").length;
   const expected = leads * cardsPerSource(config);
   const folders = new Set(
@@ -132,9 +144,22 @@ export default function SourcesTab({
           )}
         </>
       )}
+      {!batchOpen && groups.size > 1 && (
+        <div className="folder-summary">
+          <strong>{groups.size} folders</strong>
+          <ul>
+            {[...groups.entries()].slice(0, 200).map(([dir, n]) => (
+              <li key={dir}>
+                <span title={dir}>{dir}</span>
+                <small>{n}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="image-grid">
         {batchOpen
-          ? sources.map((s) => (
+          ? visibleSources.map((s) => (
               <article className="image-card" key={s.id}>
                 <div className="photo-frame">
                   <img src={sourceUrl(s.id)} alt={s.name} loading="lazy" />
@@ -148,7 +173,7 @@ export default function SourcesTab({
                 </div>
               </article>
             ))
-          : pending.map((p) => (
+          : visiblePending.map((p) => (
               <article className="image-card" key={p.url}>
                 <div className="photo-frame">
                   <img src={p.url} alt={p.name} />
@@ -176,6 +201,17 @@ export default function SourcesTab({
               </article>
             ))}
       </div>
+      {hiddenCount > 0 && (
+        <div className="show-more">
+          <span>{hiddenCount} more not shown</span>
+          <button className="secondary" onClick={() => setLimit((l) => l + PAGE * 2)}>
+            Show more
+          </button>
+          <button className="text-button" onClick={() => setLimit(Number.MAX_SAFE_INTEGER)}>
+            Show all
+          </button>
+        </div>
+      )}
       {batchOpen && sources.length === 0 && (
         <div className="empty-results">
           <Upload size={28} />
