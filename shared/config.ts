@@ -27,7 +27,9 @@ export const configSchema = z.object({
   economy: z.boolean().default(false),
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
   colors: z.string().max(400).default("pure white, warm beige, light grey"),
-  /** Editorial mode: look of a generated face when the reference face is not visible. */
+  /** Skill workflow: which ready-made prompt-builder skill writes the per-image prompt. */
+  skill: z.string().max(60).default("editorial"),
+  /** Skill workflow: look of a generated face when the reference face is not visible. */
   market: z.enum(MARKETS).default("auto"),
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
   backdrop: z.string().max(1000).default("warm beige seamless paper backdrop"),
@@ -82,6 +84,7 @@ export const DEFAULT_CONFIG: Config = {
   count: 3,
   backdrop: "warm beige seamless paper backdrop",
   market: "auto",
+  skill: "editorial",
   economy: false,
   output: "png",
   outputQuality: 90,

@@ -53,11 +53,11 @@ export const MODES: ModeInfo[] = [
 
 export const EDITORIAL_MODE: ModeInfo = {
   id: "5",
-  title: "Editorial campaign",
-  caption: "Prompt builder · fresh scene each image",
+  title: "Skill campaign",
+  caption: "Pick a skill · fresh scene each image",
   icon: Wand2,
   detail:
-    "From your real model photo: a vision model runs the Fashion Editorial Prompt Builder skill on each image, writes a detailed Zara / Splash-style prompt (exact outfit, preserved face when visible, new location, real editorial pose) and generates it. Every image gets a different scene and pose.",
+    "From your real model photo: a vision model runs the chosen skill (editorial, street style, resort, Ramadan & Eid, modest, kids and more) on each image, writes a detailed prompt (exact outfit, preserved face when visible, new scene, real pose) and generates it. Every image gets a different scene and pose.",
 };
 MODES.push(EDITORIAL_MODE);
 

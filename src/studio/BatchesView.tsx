@@ -1,6 +1,7 @@
 import { FolderOpen, LoaderCircle, Trash2 } from "lucide-react";
 import type { Batch } from "@shared/types";
 import type { Config } from "@shared/config";
+import { skillById } from "@shared/skills";
 import { MODES } from "./constants";
 
 const STATE_LABEL: Record<string, string> = {
@@ -67,7 +68,9 @@ export default function BatchesView({
               <strong>{b.name}</strong>
               <small>{new Date(b.created).toLocaleString("en-GB")}</small>
             </span>
-            <span>{mode?.title ?? cfg.mode}</span>
+            <span>
+              {cfg.mode === "5" ? `Skill · ${skillById(cfg.skill).title}` : (mode?.title ?? cfg.mode)}
+            </span>
             <span className="batches-progress">
               <span className="bar">
                 <span style={{ width: `${pct}%` }} />

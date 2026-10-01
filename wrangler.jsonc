@@ -16,7 +16,8 @@
     "@shared/naming": "./shared/naming.ts",
     "@shared/types": "./shared/types.ts",
     "@shared/editorial-skill": "./shared/editorial-skill.ts",
-    "@shared/pricing": "./shared/pricing.ts"
+    "@shared/pricing": "./shared/pricing.ts",
+    "@shared/skills": "./shared/skills.ts"
   },
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [

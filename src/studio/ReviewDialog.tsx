@@ -227,7 +227,7 @@ export default function ReviewDialog({
             )}
             {brief && (
               <div className="brief-box">
-                <strong>Editorial brief</strong>
+                <strong>Skill brief</strong>
                 <span>
                   {brief.subject} · {brief.faceMode.replace("_", " ").toLowerCase()}
                 </span>

@@ -372,6 +372,43 @@ h2 {
   line-height: 1.5;
   margin-top: 9px;
 }
+.skills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.skill-card {
+  text-align: left;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.2s;
+}
+.skill-card:hover:not(:disabled) {
+  border-color: #8aa7ed;
+}
+.skill-card.active {
+  border: 1.5px solid #1647bd;
+  background: #f5f8ff;
+}
+.skill-card:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.skill-card strong {
+  display: block;
+  font-size: 13px;
+  color: #101828;
+}
+.skill-card span {
+  display: block;
+  font-size: 11px;
+  color: #667085;
+  margin-top: 2px;
+}
 .two-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
+import { SKILLS, skillById } from "@shared/skills";
 import {
   DEFAULT_PROMPT,
   SCENES,
@@ -272,6 +273,25 @@ export default function CreativePanel({
 
       {config.mode === "5" && (
         <>
+          <label className="field-label">Skill</label>
+          <div className="skills" role="radiogroup" aria-label="Skill">
+            {SKILLS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="radio"
+                aria-checked={config.skill === s.id}
+                className={`skill-card ${config.skill === s.id ? "active" : ""}`}
+                disabled={locked}
+                onClick={() => onChange({ skill: s.id })}
+              >
+                <strong>{s.title}</strong>
+                <span>{s.caption}</span>
+              </button>
+            ))}
+          </div>
+          <div className="prompt-tip">{skillById(config.skill).description}</div>
+
           <label className="field-label">Generated face (when the reference face is hidden)</label>
           <Picker
             value={config.market}
@@ -348,9 +368,11 @@ export default function CreativePanel({
         disabled={locked}
         onChange={(e) => onChange({ prompt: e.target.value })}
       />
-      <div className="prompt-tip">
-        Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
-      </div>
+      {config.mode !== "5" && config.mode !== "6" && (
+        <div className="prompt-tip">
+          Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
+        </div>
+      )}
 
       <div className="two-fields">
         <div>

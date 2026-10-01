@@ -1,9 +1,10 @@
 /**
  * Runs the Fashion Editorial Prompt Builder skill with a vision model: the uploaded photo goes in,
- * a structured brief (analysis, long editorial prompt, negative prompt) comes out. Google Gemini is
+ * a structured brief (analysis, long prompt, negative prompt) comes out. The skill is one of the
+ * ready-made entries in shared/skills.ts. Google Gemini is
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
-import { EDITORIAL_LIBRARY, EDITORIAL_SKILL, EDITORIAL_TEMPLATE } from "@shared/editorial-skill";
+import { skillById } from "@shared/skills";
 import { StudioError } from "./errors";
 import type { ImageBytes } from "./openai";
 
@@ -22,6 +23,8 @@ export interface EditorialRequest {
   image: ImageBytes;
   /** 1-based run number; used to rotate scene families so every card differs. */
   run: number;
+  /** Skill id from shared/skills.ts; unknown ids fall back to the editorial skill. */
+  skill?: string;
   /** "auto" | "arab" | "european" | "mixed" */
   market: string;
   /** Free-text city / mood preference from the batch. */
@@ -60,14 +63,15 @@ export function builderInstruction(req: EditorialRequest): string {
         .map((u, i) => `run ${i + 1}: scene "${u.scene}", pose "${u.pose}"`)
         .join("; ")}.`
     : "This is the first run for this outfit.";
+  const skill = skillById(req.skill);
   return [
     "You are running the following skill. Follow it exactly and return ONLY the JSON object described at the end.",
     "=== SKILL ===",
-    EDITORIAL_SKILL,
+    skill.instructions,
     "=== TEMPLATE ===",
-    EDITORIAL_TEMPLATE,
+    skill.template,
     "=== LIBRARY ===",
-    EDITORIAL_LIBRARY,
+    skill.library,
     "=== RUN CONTEXT ===",
     `Run number: ${req.run}. ${used}`,
     `Market preference for a generated face (only when the face is not visible): ${market}.`,

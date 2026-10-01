@@ -569,6 +569,7 @@ async function ensureBrief(
   const req = {
     image,
     run: task.card,
+    skill: config.skill,
     market: config.market || "auto",
     preference: config.prompt,
     aspectRatio: config.ratio,

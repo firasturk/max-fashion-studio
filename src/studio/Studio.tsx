@@ -547,7 +547,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   ...c,
                   mode,
                   input: mode === "1" || mode === "6" ? c.input : "model",
-                  // The editorial builder writes its own scene text; the default prompt would only confuse it.
+                  // The skill prompt builder writes its own scene text; the default prompt would only confuse it.
                   prompt:
                     mode === "5"
                       ? ""
