@@ -21,6 +21,8 @@ export interface SkillDef {
   library: string;
   /** Prompt template the builder fills in. */
   template: string;
+  /** The editable direction text a derived skill was built from (empty for the verbatim editorial skill). */
+  goal?: string;
 }
 
 /**
@@ -67,7 +69,7 @@ Styling rules for missing pieces: complete the look only with neutral basics in 
 
 Prompt length target: 600-1100 words, in English.`;
 
-interface Draft {
+export interface SkillDraft {
   id: string;
   title: string;
   caption: string;
@@ -76,17 +78,21 @@ interface Draft {
   library: string;
 }
 
-function derive(d: Draft): SkillDef {
+/** A skill from its editable parts: the shared analysis/safety rules wrap the goal and library. */
+export function deriveSkill(d: SkillDraft): SkillDef {
   return {
     id: d.id,
     title: d.title,
     caption: d.caption,
     description: d.description,
+    goal: d.goal,
     instructions: `# ${d.title} Prompt Builder\n\n${d.goal}\n\n${CORE_RULES}`,
     library: d.library,
     template: EDITORIAL_TEMPLATE,
   };
 }
+
+const derive = deriveSkill;
 
 const EDITORIAL: SkillDef = {
   id: "editorial",

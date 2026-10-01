@@ -40,6 +40,7 @@ import {
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { sanitizePrompt } from "@shared/safety";
+import { resolveSkill } from "./skills";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
@@ -699,6 +700,7 @@ async function ensureBrief(
     run: task.card,
     recent,
     skill: skillId,
+    skillDef: skillId === "zaid" ? undefined : await resolveSkill(env, skillId),
     references: library.map((r) => r.id),
     usedReferences,
     direction: config.mode === "7" ? config.prompt : undefined,

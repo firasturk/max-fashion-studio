@@ -1,0 +1,217 @@
+import { useEffect, useState } from "react";
+import { LoaderCircle, RotateCcw, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { del, post } from "@/api";
+import type { SkillInfo } from "@shared/types";
+
+const EMPTY: SkillInfo = {
+  id: "",
+  title: "",
+  caption: "",
+  description: "",
+  goal: "",
+  library: `# Library
+
+## Scene families
+1. 
+2. 
+3. 
+
+## Poses
+- 
+
+## Light
+- 
+
+## Camera
+- 
+
+## Colour grade
+- 
+
+## Avoid
+- `,
+  builtIn: false,
+  edited: false,
+};
+
+/** Create or edit a skill: the direction (goal) and library text are what the prompt builder reads. */
+export default function SkillDialog({
+  open,
+  skill,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  /** null = new skill */
+  skill: SkillInfo | null;
+  onClose: () => void;
+  onSaved: (skills: SkillInfo[], id?: string) => void;
+}) {
+  const [form, setForm] = useState<SkillInfo>(EMPTY);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) setForm(skill ?? EMPTY);
+  }, [open, skill]);
+
+  const set = (patch: Partial<SkillInfo>) => setForm((f) => ({ ...f, ...patch }));
+
+  async function save() {
+    setBusy(true);
+    try {
+      const r = await post<{ id: string; skills: SkillInfo[] }>("/api/studio/skills", {
+        id: form.id || undefined,
+        title: form.title,
+        caption: form.caption,
+        description: form.description,
+        goal: form.goal,
+        library: form.library,
+      });
+      onSaved(r.skills, r.id);
+      toast.success(skill ? "Skill saved." : "Skill created.");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!skill) return;
+    const msg = skill.builtIn
+      ? `Hide the built-in skill "${skill.title}"? You can restore it later.`
+      : `Delete the skill "${skill.title}"? Its reference photos stay in the library.`;
+    if (!window.confirm(msg)) return;
+    setBusy(true);
+    try {
+      const r = await del<{ skills: SkillInfo[] }>(`/api/studio/skills/${skill.id}`);
+      onSaved(r.skills);
+      toast.success(skill.builtIn ? "Skill hidden." : "Skill deleted.");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reset() {
+    if (!skill?.builtIn) return;
+    if (!window.confirm(`Restore "${skill.title}" to its original text?`)) return;
+    setBusy(true);
+    try {
+      const r = await post<{ skills: SkillInfo[] }>(`/api/studio/skills/${skill.id}/reset`, {});
+      onSaved(r.skills, skill.id);
+      toast.success("Original text restored.");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canSave = form.title.trim().length >= 2 && form.goal.trim().length >= 10;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="connection-dialog skill-dialog">
+        <DialogHeader>
+          <DialogTitle>{skill ? `Edit skill · ${skill.title}` : "New skill"}</DialogTitle>
+        </DialogHeader>
+        {skill?.builtIn && !skill.goal && (
+          <p className="quality-note">
+            This built-in skill has a verbatim text. Saving an edit rebuilds it from the direction
+            and library you write here, with the shared analysis and safety rules. Reset restores
+            the original at any time.
+          </p>
+        )}
+        <div className="two-fields">
+          <div>
+            <label className="field-label" htmlFor="skill-title">
+              Name
+            </label>
+            <input
+              id="skill-title"
+              className="text-input"
+              value={form.title}
+              onChange={(e) => set({ title: e.target.value })}
+              placeholder="e.g. Ramadan evening"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="skill-caption">
+              Short tagline
+            </label>
+            <input
+              id="skill-caption"
+              className="text-input"
+              value={form.caption}
+              onChange={(e) => set({ caption: e.target.value })}
+              placeholder="e.g. Lanterns, courtyards, dusk"
+            />
+          </div>
+        </div>
+        <label className="field-label" htmlFor="skill-description">
+          Description (shown under the picker)
+        </label>
+        <input
+          id="skill-description"
+          className="text-input"
+          value={form.description}
+          onChange={(e) => set({ description: e.target.value })}
+        />
+        <label className="field-label" htmlFor="skill-goal">
+          Direction: what this skill is for and how every image should feel
+        </label>
+        <textarea
+          id="skill-goal"
+          className="prompt"
+          rows={6}
+          value={form.goal}
+          onChange={(e) => set({ goal: e.target.value })}
+          placeholder="Goal: write ONE prompt for ... Settings are ... Poses are ... Light is ... The garment stays exactly as supplied."
+        />
+        <label className="field-label" htmlFor="skill-library">
+          Library: numbered scene families (rotated per image), poses, light, camera, colour, avoid
+        </label>
+        <textarea
+          id="skill-library"
+          className="prompt prompt-tall"
+          rows={14}
+          value={form.library}
+          onChange={(e) => set({ library: e.target.value })}
+        />
+        <p className="prompt-tip">
+          The shared rules (outfit lock, face policy, framing lock, reference handling, safe wording)
+          are added automatically. Reference photos are managed from the panel after saving.
+        </p>
+        <div className="footer-actions">
+          {skill && (
+            <button className="secondary danger" onClick={() => void remove()} disabled={busy}>
+              <Trash2 size={16} />
+              {skill.builtIn ? "Hide" : "Delete"}
+            </button>
+          )}
+          {skill?.builtIn && skill.edited && (
+            <button className="secondary" onClick={() => void reset()} disabled={busy}>
+              <RotateCcw size={16} />
+              Reset to original
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="primary" onClick={() => void save()} disabled={busy || !canSave}>
+            {busy ? <LoaderCircle className="spinning" size={16} /> : <Save size={16} />}
+            Save
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

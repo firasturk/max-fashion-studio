@@ -4,7 +4,7 @@
  * ready-made entries in shared/skills.ts. Google Gemini is
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
-import { skillById } from "@shared/skills";
+import { skillById, type SkillDef } from "@shared/skills";
 import { zaidSkill } from "@shared/zaid";
 import { StudioError } from "./errors";
 import type { ImageBytes } from "./openai";
@@ -30,6 +30,8 @@ export interface EditorialRequest {
   run: number;
   /** Skill id from shared/skills.ts; unknown ids fall back to the editorial skill. */
   skill?: string;
+  /** The resolved skill (team edits applied); when absent the built-in list is used. */
+  skillDef?: SkillDef;
   /** Mode 7: extra direction text added by the team. */
   direction?: string;
   /** Scene pre-drawn by planRun(); when absent builderInstruction draws one itself. */
@@ -121,7 +123,7 @@ export function builderInstruction(req: EditorialRequest): string {
         .map((u, i) => `run ${i + 1}: scene "${u.scene}", pose "${u.pose}"`)
         .join("; ")}.`
     : "This is the first run for this outfit.";
-  const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
+  const skill = skillFor(req);
   const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
   const mood = req.reference
     ? "Reference image attached (image 2): take ONLY its background/setting, the model's pose and the lighting. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone. Make a sibling of it (same kind of place and light, different exact spot and details), adapted to the upload's framing."
@@ -166,8 +168,13 @@ export function builderInstruction(req: EditorialRequest): string {
  * Draws the scene and the reference photo for a run so the builder text and the attachments
  * agree. The reference is one of the skill's library photos not used for this outfit or recently.
  */
+function skillFor(req: EditorialRequest): SkillDef {
+  if (req.skill === "zaid") return zaidSkill(req.direction ?? "");
+  return req.skillDef ?? skillById(req.skill);
+}
+
 export function planRun(req: EditorialRequest): { scene: string | null; mood?: string } {
-  const skill = req.skill === "zaid" ? zaidSkill(req.direction ?? "") : skillById(req.skill);
+  const skill = skillFor(req);
   const scene = pickScene(req, libraryScenes(skill.library));
   const refs = req.references ?? [];
   if (!refs.length) return { scene };

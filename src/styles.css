@@ -417,6 +417,21 @@ h2 {
   display: flex;
   gap: 12px;
 }
+.field-row-actions .text-button svg,
+.field-row .text-button svg {
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+.skill-dialog .text-input {
+  width: 100%;
+}
+.skill-dialog .prompt {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.prompt-tall {
+  min-height: 240px;
+}
 .skills {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -81,6 +81,18 @@ export interface Task {
   updated: number;
 }
 
+/** A skill as the team sees and edits it. */
+export interface SkillInfo {
+  id: string;
+  title: string;
+  caption: string;
+  description: string;
+  goal: string;
+  library: string;
+  builtIn: boolean;
+  edited: boolean;
+}
+
 export interface StateResponse {
   user: User;
   batches: Batch[];

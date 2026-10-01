@@ -15,6 +15,8 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
+import { listSkills } from "./skills";
+import { SKILLS } from "@shared/skills";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
@@ -194,6 +196,80 @@ studioRoutes.post("/direction", async (c) => {
   const { text } = await body(c, z.object({ text: z.string().max(20000) }));
   await setSetting(c.env, ZAID_DIRECTION_SETTING, text.trim());
   return c.json({ ok: true, text: text.trim() });
+});
+
+/** Team-managed skills: list, create or edit, delete (a built-in is hidden rather than removed). */
+studioRoutes.get("/skills", async (c) => c.json({ skills: await listSkills(c.env) }));
+
+const skillBody = z.object({
+  id: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9-]{2,40}$/, "Use lowercase letters, digits and dashes for the id.")
+    .optional(),
+  title: z.string().trim().min(2).max(60),
+  caption: z.string().trim().max(80).default(""),
+  description: z.string().trim().max(400).default(""),
+  goal: z.string().trim().min(10).max(20000),
+  library: z.string().trim().max(20000).default(""),
+});
+
+studioRoutes.post("/skills", async (c) => {
+  const d = await body(c, skillBody);
+  if (d.id === "zaid") throw new StudioError("Zaid's direction is edited from its own workflow.");
+  const id =
+    d.id ||
+    d.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) ||
+    uuid().slice(0, 8);
+  await run(
+    c.env.DB,
+    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET title = excluded.title, caption = excluded.caption, description = excluded.description,
+       goal = excluded.goal, library = excluded.library, hidden = 0, updated = excluded.updated`,
+    id,
+    d.title,
+    d.caption,
+    d.description,
+    d.goal,
+    d.library,
+    now(),
+    now(),
+  );
+  return c.json({ ok: true, id, skills: await listSkills(c.env) });
+});
+
+/** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */
+studioRoutes.delete("/skills/:id", async (c) => {
+  const id = c.req.param("id");
+  if (id === "editorial") throw new StudioError("The Fashion editorial skill is the fallback and cannot be deleted.");
+  if (SKILLS.some((s) => s.id === id)) {
+    await run(
+      c.env.DB,
+      `INSERT INTO skills (id, title, caption, description, goal, library, hidden, created, updated)
+       VALUES (?, ?, '', '', '', '', 1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET hidden = 1, updated = excluded.updated`,
+      id,
+      id,
+      now(),
+      now(),
+    );
+  } else {
+    await run(c.env.DB, "DELETE FROM skills WHERE id = ?", id);
+  }
+  return c.json({ ok: true, skills: await listSkills(c.env) });
+});
+
+/** Restores a hidden built-in skill to its original text. */
+studioRoutes.post("/skills/:id/reset", async (c) => {
+  const id = c.req.param("id");
+  if (!SKILLS.some((s) => s.id === id)) throw new StudioError("Only built-in skills can be reset.");
+  await run(c.env.DB, "DELETE FROM skills WHERE id = ?", id);
+  return c.json({ ok: true, skills: await listSkills(c.env) });
 });
 
 /** Reference library: inspiration photos per skill (background, pose and light only). */

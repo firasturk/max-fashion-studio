@@ -86,3 +86,24 @@ describe("safe wording and framing", () => {
     expect(kids.library).toMatch(/Hats, caps, bags, sunglasses or props copied/);
   });
 });
+
+describe("team-managed skills", () => {
+  it("derives a custom skill with the shared rules and keeps its editable goal", async () => {
+    const { deriveSkill } = await import("../shared/skills");
+    const s = deriveSkill({
+      id: "ramadan-evening",
+      title: "Ramadan evening",
+      caption: "Lanterns",
+      description: "d",
+      goal: "Goal: festive courtyards at dusk.",
+      library: "# Library\n\n## Scene families\n1. Courtyard with lanterns.\n2. Majlis.",
+    });
+    expect(s.goal).toBe("Goal: festive courtyards at dusk.");
+    expect(s.instructions).toContain("# Ramadan evening Prompt Builder");
+    expect(s.instructions).toContain("SAFE WORDING");
+    const { libraryScenes } = await import("../server/editorial");
+    expect(libraryScenes(s.library)).toEqual(["Courtyard with lanterns.", "Majlis."]);
+    const text = builderInstruction({ ...req, skill: "ramadan-evening", skillDef: s });
+    expect(text).toContain("# Ramadan evening Prompt Builder");
+  });
+});

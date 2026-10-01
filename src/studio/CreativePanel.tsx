@@ -14,7 +14,8 @@ import { toast } from "sonner";
 import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
-import { SKILLS, skillById } from "@shared/skills";
+import SkillDialog from "./SkillDialog";
+import { Plus } from "lucide-react";
 import ReferenceLibrary from "./ReferenceLibrary";
 import {
   DEFAULT_PROMPT,
@@ -28,7 +29,7 @@ import {
   backdropColors,
   type Config,
 } from "@shared/config";
-import type { EngineModel, Preset } from "@shared/types";
+import type { EngineModel, Preset, SkillInfo } from "@shared/types";
 
 const COUNTS = Array.from({ length: MAX_COUNT }, (_, i) => String(i + 1));
 
@@ -49,6 +50,8 @@ export default function CreativePanel({
   onPresetsChanged,
   defaultDirection = "",
   onDirectionSaved,
+  skills = [],
+  onSkillsChanged,
 }: {
   config: Config;
   locked: boolean;
@@ -67,7 +70,15 @@ export default function CreativePanel({
   /** Mode 7: the shared default direction text. */
   defaultDirection?: string;
   onDirectionSaved?: (text: string) => void;
+  /** Skills as the server lists them (built-in plus team edits and additions). */
+  skills?: SkillInfo[];
+  onSkillsChanged?: (skills: SkillInfo[], selectId?: string) => void;
 }) {
+  const [skillEditor, setSkillEditor] = useState<{ open: boolean; skill: SkillInfo | null }>({
+    open: false,
+    skill: null,
+  });
+  const currentSkill = skills.find((s) => s.id === config.skill) ?? skills[0];
   const [presetName, setPresetName] = useState("");
   const [savingPreset, setSavingPreset] = useState(false);
   const [savingDirection, setSavingDirection] = useState(false);
@@ -293,9 +304,29 @@ export default function CreativePanel({
 
       {config.mode === "5" && (
         <>
-          <label className="field-label">Skill</label>
+          <div className="field-row">
+            <label className="field-label">Skill</label>
+            <span className="field-row-actions">
+              {currentSkill && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setSkillEditor({ open: true, skill: currentSkill })}
+                >
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setSkillEditor({ open: true, skill: null })}
+              >
+                <Plus size={13} /> New skill
+              </button>
+            </span>
+          </div>
           <div className="skills" role="radiogroup" aria-label="Skill">
-            {SKILLS.map((s) => (
+            {skills.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -310,11 +341,19 @@ export default function CreativePanel({
               </button>
             ))}
           </div>
-          <div className="prompt-tip">{skillById(config.skill).description}</div>
-          <ReferenceLibrary
-            key={config.skill}
-            skill={skillById(config.skill).id}
-            title={`${skillById(config.skill).title} reference library`}
+          {currentSkill && <div className="prompt-tip">{currentSkill.description}</div>}
+          {currentSkill && (
+            <ReferenceLibrary
+              key={currentSkill.id}
+              skill={currentSkill.id}
+              title={`${currentSkill.title} reference library`}
+            />
+          )}
+          <SkillDialog
+            open={skillEditor.open}
+            skill={skillEditor.skill}
+            onClose={() => setSkillEditor((e) => ({ ...e, open: false }))}
+            onSaved={(list, id) => onSkillsChanged?.(list, id)}
           />
 
           <label className="field-label">Generated face (when the reference face is hidden)</label>

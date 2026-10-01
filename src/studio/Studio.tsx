@@ -34,7 +34,7 @@ import {
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
-import type { Batch, EngineModel, Preset, StateResponse, Task, User } from "@shared/types";
+import type { Batch, EngineModel, Preset, SkillInfo, StateResponse, Task, User } from "@shared/types";
 import AdminView from "./AdminView";
 import type { PickedFile } from "@/lib/files";
 import BatchesView from "./BatchesView";
@@ -71,6 +71,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [connection, setConnection] = useState(false);
   const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [spendThreshold, setSpendThreshold] = useState(20);
   const [zaidDirection, setZaidDirection] = useState("");
   const [models, setModels] = useState<EngineModel[]>([]);
@@ -102,6 +103,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }, []);
 
+  const loadSkills = useCallback(async () => {
+    try {
+      setSkills((await get<{ skills: SkillInfo[] }>("/api/studio/skills")).skills);
+    } catch {
+      setSkills([]);
+    }
+  }, []);
+
   const loadPresets = useCallback(async () => {
     try {
       setPresets((await get<{ presets: Preset[] }>("/api/studio/presets")).presets);
@@ -111,8 +120,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }, []);
 
   useEffect(() => {
-    void loadState().then(loadModels).then(loadPresets);
-  }, [loadState, loadModels, loadPresets]);
+    void loadState().then(loadModels).then(loadPresets).then(loadSkills);
+  }, [loadState, loadModels, loadPresets, loadSkills]);
 
   // The batches page always shows fresh counts, including batches still generating in the background.
   useEffect(() => {
@@ -530,6 +539,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             <section className="batches-page">
               <BatchesView
                 batches={batches}
+                skills={skills}
                 busyId={openingId}
                 onOpen={(id) => void openBatch(id)}
                 onDelete={(b) => void deleteBatchById(b)}
@@ -593,6 +603,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 onPresetsChanged={loadPresets}
                 defaultDirection={zaidDirection}
                 onDirectionSaved={setZaidDirection}
+                skills={skills}
+                onSkillsChanged={(list, id) => {
+                  setSkills(list);
+                  if (id && !draft) setConfig((c) => ({ ...c, skill: id }));
+                  else if (!list.some((s) => s.id === viewConfig.skill) && !draft && list[0])
+                    setConfig((c) => ({ ...c, skill: list[0].id }));
+                }}
               />
 
               <section className="media-panel">
