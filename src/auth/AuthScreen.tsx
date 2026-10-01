@@ -37,9 +37,7 @@ export default function AuthScreen({
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <span className="max-logo">
-          max<span>FASHION</span>
-        </span>
+        <img className="max-logo" src="/logo.png" alt="Max" width={56} height={56} />
         <h1>{mode === "login" ? "Sign in to Image Studio" : "Create your studio account"}</h1>
         <p className="quality-note">Private workspace for the Max Fashion creative team.</p>
         {mode === "register" && (
