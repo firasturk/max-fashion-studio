@@ -76,12 +76,13 @@ export const SCENES = [
 export const FIDELITY = "colour, print, seams, silhouette and fit";
 
 export const DEFAULT_CONFIG: Config = {
-  mode: "4",
+  mode: "5",
   input: "model",
-  prompt: DEFAULT_PROMPT,
+  /** The skill workflow writes its own scene text, so the default prompt is empty there. */
+  prompt: "",
   ratio: "1:1",
   size: "2K",
-  count: 3,
+  count: 1,
   backdrop: "warm beige seamless paper backdrop",
   market: "auto",
   skill: "editorial",
