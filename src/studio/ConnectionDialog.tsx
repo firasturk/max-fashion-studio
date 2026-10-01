@@ -361,41 +361,44 @@ export default function ConnectionDialog({
           </div>
         )}
 
-        <label htmlFor="engine-model" className="field-label">
-          Image model slug
-        </label>
-        <div className="footer-actions">
-          <input
-            id="engine-model"
-            placeholder={engine.model}
-            value={model}
-            onChange={(e) => setModel(e.target.value.trim())}
-            list="engine-models"
-          />
-          <datalist id="engine-models">
-            <option value="nano-banana-pro" />
-            <option value="flux-2-pro" />
-            <option value="flux-2-max" />
-            <option value="qwen-image-edit" />
-            <option value="gemini-3-pro-image" />
-            <option value="gemini-3.1-flash-image" />
-            <option value="gpt-image-2.5-sunburst" />
-            <option value="gpt-image-2.5-flare" />
-            <option value="gpt-image-2" />
-          </datalist>
-          <button
-            className="secondary"
-            onClick={() => void saveModel()}
-            disabled={savingModel || !model || !engine.configured}
-          >
-            {savingModel ? <LoaderCircle className="spinning" size={17} /> : <Check size={17} />}
-            Use model
-          </button>
-        </div>
-        <p className="quality-note">
-          The slug is checked with Higgsfield before it is saved. Models that are disabled on your
-          account are rejected.
-        </p>
+        <details className="prompt-details">
+          <summary>Advanced: default model slug</summary>
+          <label htmlFor="engine-model" className="field-label">
+            Image model slug
+          </label>
+          <div className="footer-actions">
+            <input
+              id="engine-model"
+              placeholder={engine.model}
+              value={model}
+              onChange={(e) => setModel(e.target.value.trim())}
+              list="engine-models"
+            />
+            <datalist id="engine-models">
+              <option value="nano-banana-pro" />
+              <option value="flux-2-pro" />
+              <option value="flux-2-max" />
+              <option value="qwen-image-edit" />
+              <option value="gemini-3-pro-image" />
+              <option value="gemini-3.1-flash-image" />
+              <option value="gpt-image-2.5-sunburst" />
+              <option value="gpt-image-2.5-flare" />
+              <option value="gpt-image-2" />
+            </datalist>
+            <button
+              className="secondary"
+              onClick={() => void saveModel()}
+              disabled={savingModel || !model || !engine.configured}
+            >
+              {savingModel ? <LoaderCircle className="spinning" size={17} /> : <Check size={17} />}
+              Use model
+            </button>
+          </div>
+          <p className="quality-note">
+            The slug is checked with Higgsfield before it is saved. Models that are disabled on your
+            account are rejected.
+          </p>
+        </details>
 
         <div className="connection-details">
           <span>Image model</span>

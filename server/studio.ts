@@ -151,13 +151,13 @@ studioRoutes.delete("/engine/openai-key", async (c) => {
 
 /** Known image models on the Higgsfield API. Each is probed (no generation) and cached for an hour. */
 const MODEL_CANDIDATES: { slug: string; name: string }[] = [
-  { slug: "nano-banana-pro", name: "Nano Banana Pro (Google)" },
-  { slug: "flux-2-pro", name: "FLUX.2 Pro" },
-  { slug: "flux-2-max", name: "FLUX.2 Max" },
-  { slug: "flux-2-flex", name: "FLUX.2 Flex" },
-  { slug: "qwen-image-edit", name: "Qwen Image Edit" },
-  { slug: "seedream-4-5", name: "Seedream 4.5" },
-  { slug: "gpt-image-2", name: "GPT Image 2" },
+  { slug: "nano-banana-pro", name: "Nano Banana Pro (via Higgsfield)" },
+  { slug: "flux-2-pro", name: "FLUX.2 Pro (Higgsfield)" },
+  { slug: "flux-2-max", name: "FLUX.2 Max (Higgsfield)" },
+  { slug: "flux-2-flex", name: "FLUX.2 Flex (Higgsfield)" },
+  { slug: "qwen-image-edit", name: "Qwen Image Edit (Higgsfield)" },
+  { slug: "seedream-4-5", name: "Seedream 4.5 (Higgsfield)" },
+  { slug: "gpt-image-2", name: "GPT Image 2 (via Higgsfield)" },
 ];
 const MODELS_CACHE = "engine_models_cache";
 

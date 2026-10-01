@@ -287,7 +287,7 @@ export default function CreativePanel({
         </div>
       </div>
 
-      {config.mode !== "4" && config.mode !== "6" && (
+      {config.mode !== "4" && config.mode !== "6" && config.mode !== "5" && (
         <>
           <div className="centering">
             <ScanLine size={21} />

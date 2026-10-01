@@ -25,7 +25,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob } from "@/lib/zip";
-import { DEFAULT_CONFIG, cardsPerSource, exportsOriginals, type Config } from "@shared/config";
+import {
+  CATEGORY_PRESETS,
+  DEFAULT_CONFIG,
+  cardsPerSource,
+  exportsOriginals,
+  type Config,
+} from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
 import type { Batch, EngineModel, StateResponse, Task, User } from "@shared/types";
@@ -396,7 +402,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </nav>
         <div className="top-actions">
           <span className="engine-tag">
-            <Sparkles size={15} /> {engine.model || "…"}
+            <Sparkles size={15} />{" "}
+            {models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "…"}
           </span>
           <button
             className={`connection-button ${engine.configured || engine.openai !== "none" || engine.google !== "none" ? "connected" : ""}`}
@@ -468,6 +475,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   ...c,
                   mode,
                   input: mode === "1" || mode === "6" ? c.input : "model",
+                  // The editorial builder writes its own scene text; the category preset would only confuse it.
+                  prompt:
+                    mode === "5"
+                      ? ""
+                      : c.mode === "5" && !c.prompt
+                        ? CATEGORY_PRESETS[c.category].prompt
+                        : c.prompt,
                 }))
               }
             />
