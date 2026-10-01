@@ -150,6 +150,10 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
         await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
       continue;
     }
+    if (task.request_id.startsWith("google:")) {
+      await finalizeGoogleFlex(env, batch, config, task);
+      continue;
+    }
     if (task.request_id.startsWith("openai:") || task.request_id.startsWith("sync:")) {
       // Synchronous engine: the background job finalises the task itself; only guard against a lost isolate.
       if (age > OPENAI_TIMEOUT_MS)
@@ -430,7 +434,9 @@ async function submitNext(
     try {
       const requestId = client
         ? await submitTask(env, client, batch, config, task)
-        : await submitOpenAITask(env, batch, config, task, token, background);
+        : google && config.economy
+          ? await submitGoogleFlexTask(env, batch, config, task)
+          : await submitOpenAITask(env, batch, config, task, token, background);
       await run(
         env.DB,
         "UPDATE tasks SET request_id = ?, updated = ? WHERE id = ? AND lease = ?",
@@ -765,6 +771,136 @@ async function submitOpenAITask(
   if (background) background(job);
   else await job;
   return requestId;
+}
+
+/** Economy mode: submit to Google's Flex tier in the background; the finaliser polls for the image. */
+async function submitGoogleFlexTask(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<string> {
+  const { images, roles, source } = await collectReferenceBytes(env, batch, config, task);
+  const edit = task.edit?.trim() ?? "";
+  const prompt = await promptFor(env, batch, config, task, source, edit, roles);
+  const client = await makeGoogleClient(env);
+  const id = await client.submitFlex({
+    model: config.model!,
+    prompt,
+    images,
+    aspectRatio: config.ratio,
+    size: config.size,
+  });
+  return `google:${id}`;
+}
+
+const FLEX_TIMEOUT_MS = 26 * 60 * 60 * 1000; // Google's Flex tier may take up to a day
+
+async function finalizeGoogleFlex(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<void> {
+  const age = now() - (task.leased_at ?? now());
+  let client: GoogleImageClient;
+  try {
+    client = await makeGoogleClient(env);
+  } catch {
+    return;
+  }
+  let status: Awaited<ReturnType<GoogleImageClient["status"]>>;
+  try {
+    status = await client.status(task.request_id!.slice("google:".length));
+  } catch (e) {
+    if (isFatalEngineError(e)) await pauseBatch(env, batch.id, errorMessage(e));
+    return;
+  }
+  if (status.state === "pending") {
+    if (age > FLEX_TIMEOUT_MS)
+      await failTask(
+        env,
+        task,
+        "Google Flex did not finish within a day. Retry this image.",
+        task.output,
+      );
+    return;
+  }
+  if (status.state === "failed") {
+    if (status.retryable && task.attempts < MAX_AUTO_ATTEMPTS)
+      await requeue(env, task, status.message);
+    else await failTask(env, task, status.message, task.output);
+    return;
+  }
+  const claimed = await run(
+    env.DB,
+    "UPDATE tasks SET status = 'finalizing', updated = ? WHERE id = ? AND status = 'processing' AND request_id = ?",
+    now(),
+    task.id,
+    task.request_id,
+  );
+  if (!claimed) return;
+  try {
+    await storeResultBytes(env, batch, config, task, status.image, null);
+  } catch (e) {
+    await run(
+      env.DB,
+      "UPDATE tasks SET status = 'processing', error = ?, updated = ? WHERE id = ? AND status = 'finalizing'",
+      errorMessage(e, "Could not store the result."),
+      now(),
+      task.id,
+    );
+  }
+}
+
+/** Reference images as bytes (garment, card 1, card 2, latest result) for the synchronous engines. */
+async function collectReferenceBytes(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<{
+  images: ImageBytes[];
+  roles: { identity: boolean; firstCard: boolean; studio: boolean; revision: boolean };
+  source: SourceRow;
+}> {
+  const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
+  if (!source) throw new StudioError("Original unavailable.", 404);
+  const images: ImageBytes[] = [await sourceBytes(env, source)];
+  const roles = { identity: false, firstCard: false, studio: false, revision: false };
+  if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
+    const firstCard = await first<TaskRow>(
+      env.DB,
+      "SELECT id, output, output_engine_url FROM tasks WHERE batch = ? AND source = ? AND card = 1",
+      batch.id,
+      task.source,
+    );
+    if (!firstCard?.output)
+      throw new StudioError(
+        "Generate lifestyle card 1 first to establish the model identity.",
+        409,
+      );
+    images.push(await outputBytes(env, firstCard));
+    roles.firstCard = true;
+    if (task.card > 2) {
+      const studioCard = await first<TaskRow>(
+        env.DB,
+        "SELECT id, output FROM tasks WHERE batch = ? AND source = ? AND card = 2",
+        batch.id,
+        task.source,
+      );
+      if (studioCard?.output) {
+        images.push(await outputBytes(env, studioCard));
+        roles.studio = true;
+      }
+    }
+  }
+  const edit = task.edit?.trim() ?? "";
+  if ((edit || task.recenter) && task.output) {
+    images.push(await outputBytes(env, task));
+    roles.revision = true;
+  }
+  return { images, roles, source };
 }
 
 /** A running batch goes back to idle when nothing is in flight and nothing else can start (e.g. cards 2-5 whose card 1 failed). */

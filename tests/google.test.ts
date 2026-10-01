@@ -58,6 +58,39 @@ describe("Google image client", () => {
     expect(out.bytes.byteLength).toBe(3);
   });
 
+  it("economy mode submits a background Flex interaction and polls it", async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${String(url)}`);
+      if (init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.service_tier).toBe("flex");
+        expect(body.background).toBe(true);
+        expect(body.store).toBe(true);
+        return new Response(JSON.stringify({ id: "int_123", status: "queued" }), { status: 200 });
+      }
+      if (init?.method === "DELETE") return new Response("", { status: 200 });
+      if (calls.filter((c) => c.startsWith("GET")).length === 1)
+        return new Response(JSON.stringify({ status: "in_progress" }), { status: 200 });
+      return new Response(JSON.stringify({ status: "completed", output_image: btoa("jpg") }), {
+        status: 200,
+      });
+    });
+    const client = new GoogleImageClient(KEY, fetchMock as unknown as typeof fetch);
+    const id = await client.submitFlex({
+      model: "gemini-3-pro-image",
+      prompt: "p",
+      images: [],
+      aspectRatio: "1:1",
+      size: "2K",
+    });
+    expect(id).toBe("int_123");
+    expect(await client.status(id)).toEqual({ state: "pending", raw: "in_progress" });
+    const done = await client.status(id);
+    expect(done.state).toBe("done");
+    expect(calls[1]).toContain("/interactions/int_123");
+  });
+
   it("maps an invalid key to a fatal error", async () => {
     const client = new GoogleImageClient(
       KEY,

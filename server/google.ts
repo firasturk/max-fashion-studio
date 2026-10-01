@@ -132,25 +132,99 @@ export class GoogleImageClient {
     return r.ok;
   }
 
-  async edit(job: GoogleJob): Promise<ImageBytes> {
+  private body(job: GoogleJob, extra: Record<string, unknown> = {}): string {
     const input: unknown[] = [{ type: "text", text: job.prompt }];
     for (const img of job.images)
       input.push({ type: "image", mime_type: img.mime, data: toBase64(img.bytes) });
+    return JSON.stringify({
+      model: job.model,
+      store: false,
+      input,
+      // The Interactions API only returns JPEG for image responses.
+      response_format: {
+        type: "image",
+        mime_type: "image/jpeg",
+        aspect_ratio: job.aspectRatio,
+        image_size: job.size.toUpperCase(),
+      },
+      ...extra,
+    });
+  }
+
+  /**
+   * Economy mode: Flex service tier at half price, run in the background and stored so it can be
+   * fetched later. Returns the interaction id to poll with `status()`.
+   */
+  async submitFlex(job: GoogleJob): Promise<string> {
     const r = await this.fetchImpl(`${BASE}/interactions`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({
-        model: job.model,
-        store: false,
-        input,
-        // The Interactions API only returns JPEG for image responses.
-        response_format: {
-          type: "image",
-          mime_type: "image/jpeg",
-          aspect_ratio: job.aspectRatio,
-          image_size: job.size.toUpperCase(),
-        },
-      }),
+      body: this.body(job, { service_tier: "flex", background: true, store: true }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!r.ok) throw await googleError(r);
+    const d = (await r.json()) as { id?: string; name?: string; status?: string };
+    const id = d.id ?? d.name?.split("/").pop();
+    if (!id) throw new StudioError("Google did not return an interaction id.", 502);
+    return id;
+  }
+
+  /** Poll a background interaction. */
+  async status(
+    id: string,
+  ): Promise<
+    | { state: "pending"; raw: string }
+    | { state: "done"; image: ImageBytes }
+    | { state: "failed"; message: string; retryable: boolean }
+  > {
+    const r = await this.fetchImpl(`${BASE}/interactions/${encodeURIComponent(id)}`, {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (r.status === 404)
+      return {
+        state: "failed",
+        message: "Google no longer has this interaction.",
+        retryable: true,
+      };
+    if (!r.ok) throw await googleError(r);
+    const d = (await r.json()) as InteractionResponse;
+    const status = String(d.status ?? "").toLowerCase();
+    if (status === "completed" || status === "incomplete") {
+      const img = extractImage(d);
+      if (!img) return { state: "failed", message: "Google returned no image.", retryable: true };
+      void this.forget(id);
+      return { state: "done", image: { bytes: fromBase64(img.data), mime: img.mime } };
+    }
+    if (status === "failed")
+      return {
+        state: "failed",
+        message: `Google could not complete the request. ${d.error?.message ?? ""}`.trim(),
+        retryable: true,
+      };
+    if (status === "cancelled")
+      return { state: "failed", message: "Google cancelled the request.", retryable: true };
+    return { state: "pending", raw: status || "queued" };
+  }
+
+  /** Best-effort delete of a stored interaction once its image has been collected. */
+  private async forget(id: string): Promise<void> {
+    try {
+      await this.fetchImpl(`${BASE}/interactions/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: this.headers(),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async edit(job: GoogleJob): Promise<ImageBytes> {
+    const r = await this.fetchImpl(`${BASE}/interactions`, {
+      method: "POST",
+      headers: this.headers(),
+      body: this.body(job),
       signal: AbortSignal.timeout(5 * 60 * 1000),
     });
     if (!r.ok) throw await googleError(r);

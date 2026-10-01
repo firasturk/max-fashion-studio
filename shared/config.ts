@@ -18,6 +18,8 @@ export const configSchema = z.object({
   model: z.string().max(120).optional(),
   /** Images per original for modes 2-4. Mode 1 always produces six. */
   count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
+  economy: z.boolean().default(false),
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
   colors: z.string().max(400).default("pure white, warm beige, light grey"),
   /** Editorial mode: look of a generated face when the reference face is not visible. */
@@ -237,6 +239,7 @@ export const DEFAULT_CONFIG: Config = {
   count: 3,
   backdrop: "warm beige seamless paper backdrop",
   market: "auto",
+  economy: false,
   colors: "pure white, warm beige, light grey",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,

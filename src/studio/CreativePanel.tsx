@@ -1,4 +1,4 @@
-import { Check, FileImage, LoaderCircle, Pencil, ScanLine, X } from "lucide-react";
+import { Check, FileImage, LoaderCircle, Pencil, PiggyBank, ScanLine, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import {
@@ -105,6 +105,22 @@ export default function CreativePanel({
             .map((m) => m.name)
             .join(", ")}
           .
+        </div>
+      )}
+
+      {(config.model || defaultModel).startsWith("gemini") && (
+        <div className="centering">
+          <PiggyBank size={21} />
+          <div>
+            <strong>Economy mode</strong>
+            <span>Google Flex tier · half price · delivery can take minutes to hours</span>
+          </div>
+          <Switch
+            checked={config.economy}
+            disabled={locked}
+            onCheckedChange={(v) => onChange({ economy: v })}
+            aria-label="Economy mode"
+          />
         </div>
       )}
 
