@@ -1,9 +1,9 @@
 import type { Config } from "./config";
-import { CATEGORY_PRESETS, FABRIC_CARD, backdropColors } from "./config";
+import { FABRIC_CARD, FIDELITY, SCENES, backdropColors } from "./config";
 
 export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "1": "Fashion catalogue production from a mannequin or flat-lay reference. Replace the mannequin with a fully clothed photorealistic adult model wearing exactly this garment. Do not invent unseen product construction.",
-  "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the category. Never reuse the original person's face.",
+  "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the garment. Never reuse the original person's face.",
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
   "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
   "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
@@ -54,23 +54,17 @@ export interface PromptImages {
   revision?: boolean;
 }
 
-function preset(c: Config) {
-  return CATEGORY_PRESETS[c.category] ?? CATEGORY_PRESETS.Other;
-}
-
-/** Scene for a given card, cycling through the category's scene list. */
-export function sceneFor(c: Config, card: number): string {
-  const scenes = preset(c).scenes;
-  return scenes[(card - 1) % scenes.length];
+/** Scene for a given card, cycling through the scene list. */
+export function sceneFor(_c: Config, card: number): string {
+  return SCENES[(card - 1) % SCENES.length];
 }
 
 /** Build the full generation prompt for one card. Deterministic so it can be stored and audited. */
 export function buildPrompt(c: Config, card: number, edit = "", images: PromptImages = {}): string {
-  const p = preset(c);
-  const fidelity = `Product fidelity: preserve ${p.fidelity}. Preserve colour, seams, logo, buttons, silhouette, hem and fit exactly. No added text or watermarks. The original photo is the source of truth.`;
+  const fidelity = `Product fidelity: preserve ${FIDELITY}. Preserve colour, seams, logo, buttons, silhouette, hem and fit exactly. No added text or watermarks. The original photo is the source of truth.`;
   const parts: string[] = [
     MODE_PROMPTS[c.mode],
-    `Category: ${c.category}. Source type: ${c.input}.`,
+    `Source type: ${c.input}.`,
   ];
 
   if (c.mode === "1") {

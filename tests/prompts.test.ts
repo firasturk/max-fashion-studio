@@ -5,7 +5,6 @@ import {
   createsTasks,
   validateConfig,
   cardsPerSource,
-  CATEGORIES,
   type Config,
 } from "../shared/config";
 
@@ -13,16 +12,15 @@ const base: Config = {
   ...DEFAULT_CONFIG,
   mode: "1",
   input: "mannequin",
-  category: "Jeans & Jeggings",
 };
 
 describe("prompts", () => {
   it("mode 1: lifestyle first, studio cards 2-5 tied to card 1, fabric last", () => {
     const p1 = buildPrompt(base, 1);
     expect(p1).toContain("Replace the mannequin");
-    expect(p1).toContain("Category: Jeans & Jeggings");
+    expect(p1).toContain("Source type: mannequin");
     expect(p1).toContain("lifestyle location image");
-    expect(p1).toContain("denim wash, fading");
+    expect(p1).toContain("Product fidelity: preserve colour, print, seams");
     expect(p1).toContain("exactly ONE model");
     const p3 = buildPrompt(base, 3, "", { firstCard: true, studio: true });
     expect(p3).toContain("warm beige seamless paper backdrop");
@@ -52,7 +50,7 @@ describe("prompts", () => {
     expect(p4).toContain("New background for this image: Modern glass-and-concrete");
     expect(p4).not.toContain("exactly ONE model");
   });
-  it("cycles category scenes per card so every image gets a fresh background", () => {
+  it("cycles scenes per card so every image gets a fresh background", () => {
     const c: Config = { ...base, mode: "4", input: "model", count: 3 };
     expect(buildPrompt(c, 1)).not.toEqual(buildPrompt(c, 2));
     expect(buildPrompt(c, 1)).toEqual(buildPrompt(c, 7)); // six scenes, then it wraps
@@ -62,10 +60,6 @@ describe("prompts", () => {
     expect(revision).toContain("Revision of the existing result: brighter background");
     expect(revision).toContain("The LAST image is the existing result to revise");
     expect(RECENTER_SUFFIX).toMatch(/x=50%/);
-  });
-  it("builds a prompt for every category", () => {
-    for (const category of CATEGORIES)
-      expect(buildPrompt({ ...base, category }, 1)).toContain(category);
   });
 });
 

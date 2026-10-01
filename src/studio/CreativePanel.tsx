@@ -15,8 +15,8 @@ import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import {
-  CATEGORIES,
-  CATEGORY_PRESETS,
+  DEFAULT_PROMPT,
+  SCENES,
   INPUT_TYPES,
   MARKETS,
   MAX_COUNT,
@@ -222,15 +222,6 @@ export default function CreativePanel({
         </div>
       )}
 
-      <label className="field-label">Category (maxfashion.com)</label>
-      <Picker
-        value={config.category}
-        label="Category"
-        disabled={locked}
-        items={CATEGORIES}
-        onChange={(v) => onChange({ category: v, prompt: CATEGORY_PRESETS[v].prompt })}
-      />
-
       <label className="field-label">Original photography</label>
       <Picker
         value={config.input}
@@ -345,7 +336,7 @@ export default function CreativePanel({
         <button
           className="text-button"
           disabled={locked}
-          onClick={() => onChange({ prompt: CATEGORY_PRESETS[config.category].prompt })}
+          onClick={() => onChange({ prompt: DEFAULT_PROMPT })}
         >
           Reset
         </button>
@@ -358,8 +349,7 @@ export default function CreativePanel({
         onChange={(e) => onChange({ prompt: e.target.value })}
       />
       <div className="prompt-tip">
-        Each image also gets one of the category's scenes:{" "}
-        {CATEGORY_PRESETS[config.category].scenes.slice(0, 2).join(" ")} …
+        Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
       </div>
 
       <div className="two-fields">

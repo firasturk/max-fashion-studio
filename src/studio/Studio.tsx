@@ -26,7 +26,7 @@ import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
-  CATEGORY_PRESETS,
+  DEFAULT_PROMPT,
   DEFAULT_CONFIG,
   cardsPerSource,
   exportsOriginals,
@@ -238,7 +238,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         ? batch.id
         : (
             await post<{ id: string }>("/api/studio/batch", {
-              name: batchName || `${config.category} · ${new Date().toLocaleDateString("en-GB")}`,
+              name: batchName || `Batch · ${new Date().toLocaleDateString("en-GB")}`,
               config,
             })
           ).id;
@@ -547,12 +547,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   ...c,
                   mode,
                   input: mode === "1" || mode === "6" ? c.input : "model",
-                  // The editorial builder writes its own scene text; the category preset would only confuse it.
+                  // The editorial builder writes its own scene text; the default prompt would only confuse it.
                   prompt:
                     mode === "5"
                       ? ""
                       : c.mode === "5" && !c.prompt
-                        ? CATEGORY_PRESETS[c.category].prompt
+                        ? DEFAULT_PROMPT
                         : c.prompt,
                 }))
               }

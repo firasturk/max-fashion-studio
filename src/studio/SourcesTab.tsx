@@ -129,7 +129,7 @@ export default function SourcesTab({
               <label htmlFor="batch-name">Batch name</label>
               <input
                 id="batch-name"
-                placeholder={`${config.category} collection`}
+                placeholder="Spring collection"
                 value={batchName}
                 disabled={uploading}
                 onChange={(e) => onBatchName(e.target.value)}

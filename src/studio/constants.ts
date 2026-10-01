@@ -31,7 +31,7 @@ export const MODES: ModeInfo[] = [
     caption: "Real shoot, different face",
     icon: Layers,
     detail:
-      "From your real model photo: lifestyle images with a different face chosen for the category. The garment, styling and body stay the same. Choose how many images per original.",
+      "From your real model photo: lifestyle images with a different face. The garment, styling and body stay the same. Choose how many images per original.",
   },
   {
     id: "3",
@@ -47,7 +47,7 @@ export const MODES: ModeInfo[] = [
     caption: "Model, clothes and pose untouched",
     icon: Camera,
     detail:
-      "Keep the real model, garment and pose exactly as shot and swap in a fresh background per image, chosen from the category's scenes. Choose how many backgrounds per original.",
+      "Keep the real model, garment and pose exactly as shot and swap in a fresh background per image, chosen from the built-in scenes. Choose how many backgrounds per original.",
   },
 ];
 

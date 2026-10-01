@@ -38,7 +38,6 @@ export default function BatchesView({
       <div className="batches-head" role="row">
         <span>Batch</span>
         <span>Workflow</span>
-        <span>Category</span>
         <span>Progress</span>
         <span>Spent</span>
         <span>Status</span>
@@ -69,7 +68,6 @@ export default function BatchesView({
               <small>{new Date(b.created).toLocaleString("en-GB")}</small>
             </span>
             <span>{mode?.title ?? cfg.mode}</span>
-            <span>{cfg.category}</span>
             <span className="batches-progress">
               <span className="bar">
                 <span style={{ width: `${pct}%` }} />
