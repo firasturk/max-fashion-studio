@@ -127,6 +127,9 @@ export async function advanceBatch(
   );
   if (!batch) return;
   const config = JSON.parse(batch.config) as Config;
+  // A batch saved without a model means "the default at the time it runs"; routing (Google /
+  // OpenAI / Higgsfield) keys off the slug, so resolve it before anything looks at it.
+  if (!config.model) config.model = await resolveEngineModel(env);
 
   await finalizeInFlight(env, batch, config);
 

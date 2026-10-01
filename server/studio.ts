@@ -324,6 +324,7 @@ studioRoutes.post("/batch", async (c) => {
     throw new StudioError(`Invalid batch settings: ${field} ${issue?.message ?? "is invalid"}.`);
   }
   const config = parsed.data.config;
+  if (!config.model) config.model = await resolveEngineModel(c.env);
   if (config.model && !/^[\w./-]+$/.test(config.model))
     throw new StudioError("Invalid model slug.");
   const problem = validateConfig(config);
@@ -375,6 +376,7 @@ studioRoutes.post("/batch/config", async (c) => {
     throw new StudioError("Pause the batch before editing its settings.", 409);
   const previous = JSON.parse(b.config) as Config;
   const config = { ...parsed.data.config, mode: previous.mode };
+  if (!config.model) config.model = await resolveEngineModel(c.env);
   if (config.model && !/^[\w./-]+$/.test(config.model))
     throw new StudioError("Invalid model slug.");
   const problem = validateConfig(config);

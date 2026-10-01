@@ -239,7 +239,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         : (
             await post<{ id: string }>("/api/studio/batch", {
               name: batchName || `Batch · ${new Date().toLocaleDateString("en-GB")}`,
-              config,
+              config: effectiveConfig,
             })
           ).id;
       let uploaded = 0;
