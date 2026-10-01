@@ -5,6 +5,7 @@ export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
 export const SIZES = ["1K", "2K", "4K"] as const;
+export const OUTPUT_FORMATS = ["png", "jpg", "webp"] as const;
 export const MAX_COUNT = 6;
 
 export const configSchema = z.object({
@@ -18,6 +19,9 @@ export const configSchema = z.object({
   model: z.string().max(120).optional(),
   /** Images per original for modes 2-4. Mode 1 always produces six. */
   count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  /** Export format for the ZIP; PNG keeps the engine bytes, JPG/WebP are converted in the browser at export. */
+  output: z.enum(OUTPUT_FORMATS).default("png"),
+  outputQuality: z.number().int().min(50).max(100).default(90),
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
   economy: z.boolean().default(false),
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
@@ -240,6 +244,8 @@ export const DEFAULT_CONFIG: Config = {
   backdrop: "warm beige seamless paper backdrop",
   market: "auto",
   economy: false,
+  output: "png",
+  outputQuality: 90,
   colors: "pure white, warm beige, light grey",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,

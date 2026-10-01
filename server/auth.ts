@@ -5,6 +5,7 @@ import type { Env } from "./env";
 import { StudioError } from "./errors";
 import { first, run, now, uuid } from "./db";
 import type { User } from "@shared/types";
+import { getSetting, INVITE_CODE_SETTING } from "./settings";
 
 const SESSION_COOKIE = "studio_session";
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -89,17 +90,43 @@ async function readSessionId(env: Env, cookie: string | undefined): Promise<stri
 export async function currentUser(env: Env, cookie: string | undefined): Promise<User | null> {
   const id = await readSessionId(env, cookie);
   if (!id) return null;
-  const row = await first<{ id: string; email: string; name: string; expires: number }>(
+  const row = await first<{
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    disabled: number;
+    expires: number;
+  }>(
     env.DB,
-    "SELECT u.id, u.email, u.name, s.expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
+    "SELECT u.id, u.email, u.name, u.role, u.disabled, s.expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?",
     id,
   );
   if (!row) return null;
-  if (row.expires < now()) {
+  if (row.expires < now() || row.disabled) {
     await run(env.DB, "DELETE FROM sessions WHERE id = ?", id);
     return null;
   }
-  return { id: row.id, email: row.email, name: row.name };
+  // Cheap activity marker for the admin page (at most once a minute per session).
+  void run(
+    env.DB,
+    "UPDATE users SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
+    now(),
+    row.id,
+    now() - 60_000,
+  );
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role === "admin" ? "admin" : "member",
+  };
+}
+
+/** Invite code: the one saved from the admin page wins over the INVITE_CODE secret. */
+export async function currentInviteCode(env: Env): Promise<string | null> {
+  const stored = await getSetting(env, INVITE_CODE_SETTING);
+  return stored || env.INVITE_CODE || null;
 }
 
 /** A valid-looking hash that never matches; keeps login timing uniform for unknown emails. */
@@ -121,11 +148,12 @@ export const authRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 authRoutes.get("/me", async (c) => {
   const user = await currentUser(c.env, getCookie(c, SESSION_COOKIE));
-  return c.json({ user, registrationOpen: !!c.env.INVITE_CODE });
+  return c.json({ user, registrationOpen: !!(await currentInviteCode(c.env)) });
 });
 
 authRoutes.post("/register", async (c) => {
-  if (!c.env.INVITE_CODE) throw new StudioError("Registration is disabled on this server.", 403);
+  const inviteCode = await currentInviteCode(c.env);
+  if (!inviteCode) throw new StudioError("Registration is disabled on this server.", 403);
   const parsed = registration.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     throw new StudioError(
@@ -133,37 +161,54 @@ authRoutes.post("/register", async (c) => {
     );
   }
   const { email, password, name, invite } = parsed.data;
-  if (!timingSafeEqual(invite, c.env.INVITE_CODE))
-    throw new StudioError("Invite code is incorrect.", 403);
+  if (!timingSafeEqual(invite, inviteCode)) throw new StudioError("Invite code is incorrect.", 403);
   const existing = await first(c.env.DB, "SELECT id FROM users WHERE email = ?", email);
   if (existing) throw new StudioError("An account with this email already exists.", 409);
   const id = uuid();
+  const count = await first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM users");
+  const role = (count?.n ?? 0) === 0 ? "admin" : "member";
   await run(
     c.env.DB,
-    "INSERT INTO users (id, email, name, password_hash, created) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO users (id, email, name, password_hash, role, created) VALUES (?, ?, ?, ?, ?, ?)",
     id,
     email,
     name,
     await hashPassword(password),
+    role,
     now(),
   );
   await startSession(c, id);
-  return c.json({ user: { id, email, name } });
+  return c.json({ user: { id, email, name, role } });
 });
 
 authRoutes.post("/login", async (c) => {
   const parsed = credentials.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new StudioError("Enter your email and password.");
-  const row = await first<{ id: string; email: string; name: string; password_hash: string }>(
+  const row = await first<{
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    disabled: number;
+    password_hash: string;
+  }>(
     c.env.DB,
-    "SELECT id, email, name, password_hash FROM users WHERE email = ?",
+    "SELECT id, email, name, role, disabled, password_hash FROM users WHERE email = ?",
     parsed.data.email,
   );
   // Always run one hash so a missing account takes as long as a wrong password.
   const ok = await verifyPassword(parsed.data.password, row?.password_hash ?? DUMMY_HASH);
   if (!row || !ok) throw new StudioError("Email or password is incorrect.", 401);
+  if (row.disabled) throw new StudioError("This account is disabled. Ask your admin.", 403);
   await startSession(c, row.id);
-  return c.json({ user: { id: row.id, email: row.email, name: row.name } });
+  return c.json({
+    user: {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role === "admin" ? "admin" : "member",
+    },
+  });
 });
 
 authRoutes.post("/logout", async (c) => {

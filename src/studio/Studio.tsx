@@ -24,7 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
 import { makeReference } from "@/lib/image";
-import { buildZip, saveBlob } from "@/lib/zip";
+import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
   CATEGORY_PRESETS,
   DEFAULT_CONFIG,
@@ -34,7 +34,8 @@ import {
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
-import type { Batch, EngineModel, StateResponse, Task, User } from "@shared/types";
+import type { Batch, EngineModel, Preset, StateResponse, Task, User } from "@shared/types";
+import AdminView from "./AdminView";
 import type { PickedFile } from "@/lib/files";
 import BatchesView from "./BatchesView";
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
@@ -67,7 +68,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [batchName, setBatchName] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
-  const [page, setPage] = useState<"studio" | "batches">("studio");
+  const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [spendThreshold, setSpendThreshold] = useState(20);
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
@@ -80,6 +83,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const d = await get<StateResponse>("/api/studio/state");
       setBatches(d.batches);
       setEngine(d.engine);
+      setSpendThreshold(d.spendThreshold ?? 20);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -95,9 +99,17 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }, []);
 
+  const loadPresets = useCallback(async () => {
+    try {
+      setPresets((await get<{ presets: Preset[] }>("/api/studio/presets")).presets);
+    } catch {
+      setPresets([]);
+    }
+  }, []);
+
   useEffect(() => {
-    void loadState().then(loadModels);
-  }, [loadState, loadModels]);
+    void loadState().then(loadModels).then(loadPresets);
+  }, [loadState, loadModels, loadPresets]);
 
   // The batches page always shows fresh counts, including batches still generating in the background.
   useEffect(() => {
@@ -148,6 +160,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const pendingLeads = pending.filter((p) => p.role === "lead").length;
   const pendingCost = estimateCost(effectiveConfig, pendingLeads * cardsPerSource(effectiveConfig));
   const toRun = tasks.filter((t) => t.status === "queued" || t.status === "failed");
+  const spentSoFar = tasks.reduce((n, t) => n + (t.cost || 0), 0);
   const queueCost = estimateCost(
     effectiveConfig,
     toRun.length,
@@ -287,6 +300,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       setConnection(true);
       return;
     }
+    if (queueCost.known && spendThreshold > 0 && queueCost.total > spendThreshold) {
+      const ok = window.confirm(
+        `This run is estimated at ${formatUsd(queueCost.total)} for ${queueCost.images} images on ${effectiveConfig.model}. Continue?`,
+      );
+      if (!ok) return;
+    }
     setTab("results");
     await runAction("start");
   }
@@ -307,6 +326,28 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       toast.error((e as Error).message);
     }
   }
+
+  async function approveAll() {
+    if (!batch) return;
+    const n = tasks.filter((t) => t.status === "ready").length;
+    if (!window.confirm(`Approve all ${n} ready images for export?`)) return;
+    try {
+      const r = await post<{ approved: number }>("/api/studio/approve-all", { batch: batch.id });
+      await refresh();
+      toast.success(`${r.approved} images approved.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  // Review navigation across generated images, in grid order.
+  const reviewable = tasks.filter((t) => !!t.output);
+  const selectedIndex = selected ? reviewable.findIndex((t) => t.id === selected.id) : -1;
+  const goPrev = selectedIndex > 0 ? () => setSelected(reviewable[selectedIndex - 1]) : undefined;
+  const goNext =
+    selectedIndex >= 0 && selectedIndex < reviewable.length - 1
+      ? () => setSelected(reviewable[selectedIndex + 1])
+      : undefined;
 
   async function deleteBatch() {
     if (!batch || active) return;
@@ -338,10 +379,25 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     setExporting(true);
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
-      const entries = chosen.map((t) => ({
-        name: outputName(byId.get(t.source)!.name, t.card, mode, total, outputExt(t.output)),
-        url: outputUrl(t),
-      }));
+      const format = viewConfig.output || "png";
+      const entries: ZipEntry[] = chosen.map((t) => {
+        const srcExt = outputExt(t.output);
+        const convert =
+          format !== "png" && srcExt !== format
+            ? { format, quality: viewConfig.outputQuality || 90 }
+            : undefined;
+        return {
+          name: outputName(
+            byId.get(t.source)!.name,
+            t.card,
+            mode,
+            total,
+            convert ? format : srcExt,
+          ),
+          url: outputUrl(t),
+          convert,
+        };
+      });
       const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
         for (const s of sources)
@@ -399,6 +455,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
             Batches <span>{batches.length}</span>
           </button>
+          {user.role === "admin" && (
+            <button className={page === "admin" ? "active" : ""} onClick={() => setPage("admin")}>
+              Admin
+            </button>
+          )}
         </nav>
         <div className="top-actions">
           <span className="engine-tag">
@@ -421,7 +482,18 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       </header>
 
       <main>
-        {page === "batches" ? (
+        {page === "admin" ? (
+          <>
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">ADMINISTRATION</div>
+                <h1>Team, spend and workspace settings.</h1>
+                <p>Invite code, spend confirmation, retention, notifications and member access.</p>
+              </div>
+            </div>
+            <AdminView me={user.id} />
+          </>
+        ) : page === "batches" ? (
           <>
             <div className="page-heading">
               <div>
@@ -504,6 +576,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 onEdit={() => batch && setDraft(JSON.parse(batch.config) as Config)}
                 onSave={() => void saveDraft()}
                 onCancel={() => setDraft(null)}
+                presets={presets}
+                onPresetsChanged={loadPresets}
               />
 
               <section className="media-panel">
@@ -593,6 +667,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onClearSelection={() => setSelection(new Set())}
                       onOpen={setSelected}
                       onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
+                      onApproveAll={() => void approveAll()}
                     />
                   </TabsContent>
                 </Tabs>
@@ -610,7 +685,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   <div>
                     <strong>
                       {batch
-                        ? `${ready.length} ready to export${queueCost.images && queueCost.known ? ` · next run ≈ ${formatUsd(queueCost.total)}` : ""}`
+                        ? `${ready.length} ready to export${spentSoFar ? ` · spent ≈ ${formatUsd(spentSoFar)}` : ""}${queueCost.images && queueCost.known ? ` · next run ≈ ${formatUsd(queueCost.total)}` : ""}`
                         : `${pending.length} images selected${pendingCost.images && pendingCost.known ? ` · ${pendingCost.images} AI results ≈ ${formatUsd(pendingCost.total)}` : ""}`}
                     </strong>
                     <span>
@@ -725,9 +800,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         busy={acting}
         originalUrl={selected ? sourceUrl(selected.source, "original") : ""}
         resultUrl={selected ? outputUrl(selected) : ""}
+        position={
+          selectedIndex >= 0 ? { index: selectedIndex, total: reviewable.length } : undefined
+        }
         onClose={() => setSelected(null)}
         onRevise={revise}
         onApprove={approve}
+        onPrev={goPrev}
+        onNext={goNext}
       />
     </div>
   );

@@ -26,6 +26,7 @@ export default function ResultsTab({
   onClearSelection,
   onOpen,
   onRetryTask,
+  onApproveAll,
 }: {
   tasks: Task[];
   sources: Source[];
@@ -37,6 +38,7 @@ export default function ResultsTab({
   onClearSelection: () => void;
   onOpen: (t: Task) => void;
   onRetryTask: (t: Task) => void;
+  onApproveAll?: () => void;
 }) {
   const PAGE = 48;
   const [limit, setLimit] = useState(PAGE);
@@ -91,6 +93,12 @@ export default function ResultsTab({
         {selection.size > 0 && (
           <button className="text-button" onClick={onClearSelection}>
             Clear selection
+          </button>
+        )}
+        {onApproveAll && tasks.some((t) => t.status === "ready") && (
+          <button className="text-button" onClick={onApproveAll}>
+            <Check size={13} /> Approve all ready (
+            {tasks.filter((t) => t.status === "ready").length})
           </button>
         )}
       </div>

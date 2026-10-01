@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import { StudioError } from "./errors";
 import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
+import { adminRoutes, cleanupOldBatches } from "./admin";
 import { advanceBatch, activeBatchIds } from "./engine";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
@@ -37,6 +38,14 @@ app.post("/api/hooks/engine", async (c) => {
   return c.json({ ok: true });
 });
 
+app.use("/api/admin/*", async (c, next) => {
+  const user = await currentUser(c.env, getCookie(c, SESSION_COOKIE));
+  if (!user) throw new StudioError("Sign in to use the studio.", 401);
+  c.set("user", user);
+  await next();
+});
+app.route("/api/admin", adminRoutes);
+
 app.use("/api/studio/*", async (c, next) => {
   const user = await currentUser(c.env, getCookie(c, SESSION_COOKIE));
   if (!user) throw new StudioError("Sign in to use the studio.", 401);
@@ -61,6 +70,7 @@ app.onError((e, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
     const ids = await activeBatchIds(env);
     for (const id of ids)
       ctx.waitUntil(advanceBatch(env, id).catch((e) => console.error("[cron]", id, e)));

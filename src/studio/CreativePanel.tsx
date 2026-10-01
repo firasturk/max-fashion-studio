@@ -1,4 +1,17 @@
-import { Check, FileImage, LoaderCircle, Pencil, PiggyBank, ScanLine, X } from "lucide-react";
+import {
+  Bookmark,
+  Check,
+  FileImage,
+  LoaderCircle,
+  Pencil,
+  PiggyBank,
+  ScanLine,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import {
@@ -7,12 +20,13 @@ import {
   INPUT_TYPES,
   MARKETS,
   MAX_COUNT,
+  OUTPUT_FORMATS,
   RATIOS,
   SIZES,
   backdropColors,
   type Config,
 } from "@shared/config";
-import type { EngineModel } from "@shared/types";
+import type { EngineModel, Preset } from "@shared/types";
 
 const COUNTS = Array.from({ length: MAX_COUNT }, (_, i) => String(i + 1));
 
@@ -29,6 +43,8 @@ export default function CreativePanel({
   onEdit,
   onSave,
   onCancel,
+  presets = [],
+  onPresetsChanged,
 }: {
   config: Config;
   locked: boolean;
@@ -42,7 +58,35 @@ export default function CreativePanel({
   onEdit?: () => void;
   onSave?: () => void;
   onCancel?: () => void;
+  presets?: Preset[];
+  onPresetsChanged?: () => Promise<void>;
 }) {
+  const [presetName, setPresetName] = useState("");
+  const [savingPreset, setSavingPreset] = useState(false);
+
+  async function savePreset() {
+    if (!presetName.trim()) return;
+    setSavingPreset(true);
+    try {
+      await post("/api/studio/presets", { name: presetName.trim(), config });
+      setPresetName("");
+      await onPresetsChanged?.();
+      toast.success("Template saved.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingPreset(false);
+    }
+  }
+
+  async function removePreset(id: string) {
+    try {
+      await del(`/api/studio/presets?id=${encodeURIComponent(id)}`);
+      await onPresetsChanged?.();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
   const enabled = models.filter((m) => m.enabled);
   const modelItems = enabled.length ? enabled.map((m) => m.slug) : [config.model || defaultModel];
   const modelLabel = (slug: string) => models.find((m) => m.slug === slug)?.name ?? slug;
@@ -83,6 +127,60 @@ export default function CreativePanel({
             </button>
             <button className="secondary" onClick={onCancel} disabled={saving}>
               <X size={15} /> Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!locked && (
+        <div className="presets-box">
+          <label className="field-label">Templates</label>
+          {presets.length > 0 && (
+            <ul>
+              {presets.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      const c = JSON.parse(p.config) as Config;
+                      onChange({ ...c });
+                      toast.success(`Template "${p.name}" applied.`);
+                    }}
+                  >
+                    <Bookmark size={13} /> {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button small"
+                    aria-label={`Delete ${p.name}`}
+                    onClick={() => void removePreset(p.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="footer-actions">
+            <input
+              className="text-input"
+              placeholder="Save current settings as…"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+            />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void savePreset()}
+              disabled={savingPreset || !presetName.trim()}
+            >
+              {savingPreset ? (
+                <LoaderCircle className="spinning" size={15} />
+              ) : (
+                <Bookmark size={15} />
+              )}{" "}
+              Save
             </button>
           </div>
         </div>
@@ -309,11 +407,38 @@ export default function CreativePanel({
         </>
       )}
 
+      <div className="two-fields">
+        <div>
+          <label className="field-label">Export format</label>
+          <Picker
+            label="Export format"
+            value={config.output}
+            disabled={locked}
+            items={OUTPUT_FORMATS}
+            render={(v) => v.toUpperCase()}
+            onChange={(v) => onChange({ output: v as Config["output"] })}
+          />
+        </div>
+        <div>
+          <label className="field-label">Quality</label>
+          <Picker
+            label="Export quality"
+            value={String(config.outputQuality)}
+            disabled={locked || config.output === "png"}
+            items={["100", "95", "90", "85", "80", "75"]}
+            render={(v) => `${v}%`}
+            onChange={(v) => onChange({ outputQuality: Number(v) })}
+          />
+        </div>
+      </div>
+
       <div className="export-rule">
         <FileImage size={18} />
         <div>
           Original filename + <b>-AI</b>
-          <span>Example: MAX_001.jpg → MAX_001-AI.png (or -AI-01, -AI-02 for sets)</span>
+          <span>
+            Example: MAX_001.jpg → MAX_001-AI.{config.output} (or -AI-01, -AI-02 for sets)
+          </span>
         </div>
       </div>
     </aside>

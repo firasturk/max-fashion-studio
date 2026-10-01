@@ -35,7 +35,8 @@ import {
 } from "@shared/config";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
-import type { User, Batch, Source, Task } from "@shared/types";
+import type { User, Batch, Source, Task, Preset } from "@shared/types";
+import { readAdminSettings } from "./admin";
 
 type Variables = { user: User };
 export const studioRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -71,7 +72,7 @@ async function batchPayload(env: Env, b: BatchRow) {
     ),
     all<Task>(
       env.DB,
-      "SELECT t.id, t.source, t.card, t.status, t.output, t.qa, t.error, t.prompt, t.attempts, t.request_id, t.brief, t.updated FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? ORDER BY s.name, t.card",
+      "SELECT t.id, t.source, t.card, t.status, t.output, t.qa, t.error, t.prompt, t.attempts, t.request_id, t.brief, t.cost, t.updated FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? ORDER BY s.name, t.card",
       b.id,
     ),
   ]);
@@ -90,6 +91,7 @@ studioRoutes.get("/state", async (c) => {
     c.env.DB,
     `SELECT b.id, b.name, b.config, b.state, b.last_error, b.created, b.updated,
        COUNT(t.id) AS total,
+       COALESCE(SUM(t.cost), 0) AS spent,
        SUM(CASE WHEN t.output IS NOT NULL THEN 1 ELSE 0 END) AS completed,
        SUM(CASE WHEN t.status = 'review' THEN 1 ELSE 0 END) AS review,
        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS failed,
@@ -99,9 +101,11 @@ studioRoutes.get("/state", async (c) => {
     user.id,
   );
   const engineKey = await resolveEngineKey(c.env);
+  const adminSettings = await readAdminSettings(c.env);
   return c.json({
     user,
     batches,
+    spendThreshold: adminSettings.spendThreshold,
     engine: {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
@@ -671,6 +675,55 @@ studioRoutes.post("/approve", async (c) => {
     b.id,
   );
   if (!changed) throw new StudioError("Image is not ready for approval.", 409);
+  return c.json({ ok: true });
+});
+
+studioRoutes.post("/approve-all", async (c) => {
+  const { batch } = await body(c, batchRef);
+  const b = await ownedBatch(c.env, c.get("user"), batch);
+  const changed = await run(
+    c.env.DB,
+    "UPDATE tasks SET status = 'approved', updated = ? WHERE batch = ? AND status = 'ready' AND output IS NOT NULL",
+    now(),
+    b.id,
+  );
+  return c.json({ ok: true, approved: changed });
+});
+
+studioRoutes.get("/presets", async (c) => {
+  const presets = await all<Preset>(
+    c.env.DB,
+    "SELECT id, name, config, created FROM presets WHERE owner = ? ORDER BY created DESC LIMIT 100",
+    c.get("user").id,
+  );
+  return c.json({ presets });
+});
+
+studioRoutes.post("/presets", async (c) => {
+  const { name, config } = await body(
+    c,
+    z.object({ name: z.string().trim().min(1).max(80), config: configSchema }),
+  );
+  const id = uuid();
+  await run(
+    c.env.DB,
+    "INSERT INTO presets (id, owner, name, config, created) VALUES (?, ?, ?, ?, ?)",
+    id,
+    c.get("user").id,
+    name,
+    JSON.stringify(config),
+    now(),
+  );
+  return c.json({ id });
+});
+
+studioRoutes.delete("/presets", async (c) => {
+  await run(
+    c.env.DB,
+    "DELETE FROM presets WHERE id = ? AND owner = ?",
+    c.req.query("id") ?? "",
+    c.get("user").id,
+  );
   return c.json({ ok: true });
 });
 

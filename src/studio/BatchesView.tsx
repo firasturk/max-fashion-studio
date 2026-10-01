@@ -40,6 +40,7 @@ export default function BatchesView({
         <span>Workflow</span>
         <span>Category</span>
         <span>Progress</span>
+        <span>Spent</span>
         <span>Status</span>
         <span />
       </div>
@@ -77,6 +78,7 @@ export default function BatchesView({
                 {done}/{total}
               </small>
             </span>
+            <span>{b.spent ? `≈ $${b.spent.toFixed(2)}` : "–"}</span>
             <span className={`batches-status ${b.state}`}>{status}</span>
             <span className="footer-actions">
               <button className="secondary" onClick={() => onOpen(b.id)} disabled={busyId === b.id}>

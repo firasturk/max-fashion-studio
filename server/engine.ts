@@ -9,7 +9,9 @@ import type { Env } from "./env";
 import { concurrency } from "./env";
 import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
-import { inspectWithGemini, manualQA } from "./gemini";
+import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
+import { estimateCost } from "@shared/pricing";
+import { notify } from "./notify";
 import { StudioError, errorMessage, isFatalEngineError } from "./errors";
 import { buildPrompt, buildEditorialPrompt, RECENTER_SUFFIX } from "@shared/prompts";
 import { buildBriefWithGoogle, buildBriefWithOpenAI, type EditorialBrief } from "./editorial";
@@ -239,22 +241,31 @@ async function storeResultBytes(
   });
 
   let qa: QA;
-  const reviewKey = (await resolveGoogleKey(env)).key;
-  if (reviewKey) {
+  const googleKey = (await resolveGoogleKey(env)).key;
+  const openaiKey = googleKey ? null : (await resolveOpenAIKey(env)).key;
+  if (googleKey || openaiKey) {
     try {
       const source = await first<SourceRow>(
         env.DB,
         "SELECT * FROM sources WHERE id = ?",
         task.source,
       );
-      const ref = source ? await env.BUCKET.get(source.reference_key || source.key) : null;
-      if (!ref) throw new StudioError("Original unavailable for review.");
-      qa = await inspectWithGemini(
-        reviewKey,
-        { bytes: await ref.arrayBuffer(), mime: ref.httpMetadata?.contentType || "image/jpeg" },
-        result,
-        task.card === FABRIC_CARD,
-      );
+      if (!source) throw new StudioError("Original unavailable for review.");
+      const ref = await sourceBytes(env, source);
+      // Studio cards must show the same face as card 1.
+      let identity: ImageBytes | undefined;
+      if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
+        const firstCard = await first<{ output: string | null }>(
+          env.DB,
+          "SELECT output FROM tasks WHERE batch = ? AND source = ? AND card = 1",
+          batch.id,
+          task.source,
+        );
+        if (firstCard?.output) identity = await outputBytes(env, firstCard);
+      }
+      qa = googleKey
+        ? await reviewWithGoogle(googleKey, ref, result, task.card === FABRIC_CARD, identity)
+        : await reviewWithOpenAI(openaiKey!, ref, result, task.card === FABRIC_CARD, identity);
     } catch (e) {
       qa = manualQA(`Automatic review unavailable (${errorMessage(e)}). Check manually.`);
     }
@@ -279,7 +290,7 @@ async function storeResultBytes(
   }
 
   const status = qa.automated
-    ? qa.productConcern || (wantsCenter && !qa.centered)
+    ? qa.productConcern || qa.sameFace === false || (wantsCenter && !qa.centered)
       ? "review"
       : "ready"
     : "review";
@@ -324,13 +335,21 @@ async function requeue(env: Env, task: TaskRow, message: string): Promise<void> 
 }
 
 export async function pauseBatch(env: Env, batchId: string, reason: string | null): Promise<void> {
-  await run(
+  const changed = await run(
     env.DB,
-    "UPDATE batches SET state = 'paused', last_error = ?, updated = ? WHERE id = ?",
+    "UPDATE batches SET state = 'paused', last_error = ?, updated = ? WHERE id = ? AND state != 'paused'",
     reason ? reason.slice(0, 500) : null,
     now(),
     batchId,
   );
+  if (changed && reason) {
+    const row = await first<{ name: string }>(
+      env.DB,
+      "SELECT name FROM batches WHERE id = ?",
+      batchId,
+    );
+    await notify(env, `Batch paused: ${row?.name ?? batchId}`, reason);
+  }
 }
 
 /** Tasks that may start now: card 1 and the fabric card always; cards 2-5 once card 1 has a result. */
@@ -431,6 +450,11 @@ async function submitNext(
       task.id,
     );
     if (!claimed) continue;
+    const attemptCost =
+      estimateCost({ ...config, model: config.model || (await resolveEngineModel(env)) }, 1, [
+        task.card,
+      ]).total + (task.edit || task.recenter ? 0.008 : 0);
+    await run(env.DB, "UPDATE tasks SET cost = cost + ? WHERE id = ?", attemptCost, task.id);
     try {
       const requestId = client
         ? await submitTask(env, client, batch, config, task)
@@ -913,12 +937,31 @@ async function settleIdle(env: Env, batch: BatchRow, config: Config): Promise<vo
   if ((inflight?.n ?? 0) > 0) return;
   const startable = await eligibleQueued(env, batch, config, 1);
   if (startable.length) return;
-  await run(
+  const changed = await run(
     env.DB,
     "UPDATE batches SET state = 'idle', updated = ? WHERE id = ? AND state = 'running'",
     now(),
     batch.id,
   );
+  if (changed) {
+    const row = await first<{
+      name: string;
+      total: number;
+      review: number;
+      failed: number;
+      spent: number;
+    }>(
+      env.DB,
+      "SELECT b.name, COUNT(t.id) AS total, SUM(CASE WHEN t.status='review' THEN 1 ELSE 0 END) AS review, SUM(CASE WHEN t.status='failed' THEN 1 ELSE 0 END) AS failed, SUM(t.cost) AS spent FROM batches b LEFT JOIN tasks t ON t.batch = b.id WHERE b.id = ? GROUP BY b.id",
+      batch.id,
+    );
+    if (row)
+      await notify(
+        env,
+        `Batch finished: ${row.name}`,
+        `${row.total} images generated. ${row.review} need review, ${row.failed} failed. Estimated spend $${(row.spent ?? 0).toFixed(2)}.`,
+      );
+  }
 }
 
 /** Batches the cron trigger should look at. */

@@ -118,3 +118,10 @@ export async function resolveGoogleKey(
   const stored = await getSetting(env, GOOGLE_KEY_SETTING);
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
+
+export const INVITE_CODE_SETTING = "invite_code";
+export const SPEND_THRESHOLD_SETTING = "spend_threshold";
+export const RETENTION_DAYS_SETTING = "retention_days";
+export const NOTIFY_WEBHOOK_SETTING = "notify_webhook";
+export const NOTIFY_EMAIL_SETTING = "notify_email";
+export const RESEND_KEY_SETTING = "resend_api_key";

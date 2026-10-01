@@ -7,6 +7,14 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  role: "admin" | "member";
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  config: string;
+  created: number;
 }
 
 export interface Batch {
@@ -18,6 +26,7 @@ export interface Batch {
   created: number;
   updated: number;
   /** Present on the batches list only. */
+  spent?: number;
   total?: number;
   completed?: number;
   review?: number;
@@ -46,6 +55,8 @@ export interface QA {
   count: number;
   box: number[];
   productConcern: boolean;
+  /** false when the studio card does not show the same face as card 1 */
+  sameFace?: boolean;
   notes: string;
   offset?: number;
   centered?: boolean;
@@ -65,12 +76,15 @@ export interface Task {
   request_id: string | null;
   /** JSON EditorialBrief for editorial-mode tasks. */
   brief: string | null;
+  /** Estimated spend so far on this task (all attempts). */
+  cost: number;
   updated: number;
 }
 
 export interface StateResponse {
   user: User;
   batches: Batch[];
+  spendThreshold: number;
   engine: {
     model: string;
     configured: boolean;

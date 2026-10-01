@@ -3,6 +3,38 @@ import { Zip, ZipPassThrough } from "fflate";
 export interface ZipEntry {
   name: string;
   url: string;
+  /** Convert the fetched image to this format before adding it (originals are never converted). */
+  convert?: { format: "jpg" | "webp"; quality: number };
+}
+
+/** Re-encodes an image blob in the browser. */
+export async function convertImage(
+  blob: Blob,
+  format: "jpg" | "webp",
+  quality: number,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable.");
+    if (format === "jpg") {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Conversion failed."))),
+        format === "jpg" ? "image/jpeg" : "image/webp",
+        quality / 100,
+      ),
+    );
+  } finally {
+    bitmap.close();
+  }
 }
 
 const MAX_ARCHIVE = 512 * 1024 * 1024;
@@ -37,6 +69,15 @@ export async function buildZip(entries: ZipEntry[], manifest: unknown): Promise<
     if (!r.ok || !r.body) throw new Error(`Could not download ${entry.name}. Retry export.`);
     const item = new ZipPassThrough(entry.name);
     zip.add(item);
+    if (entry.convert) {
+      const converted = await convertImage(
+        await r.blob(),
+        entry.convert.format,
+        entry.convert.quality,
+      );
+      item.push(new Uint8Array(await converted.arrayBuffer()), true);
+      continue;
+    }
     const reader = r.body.getReader();
     for (;;) {
       const { done: end, value } = await reader.read();
