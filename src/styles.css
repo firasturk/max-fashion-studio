@@ -3262,3 +3262,103 @@ textarea:focus {
 .mode-card > .mode-number {
   right: 54px;
 }
+
+/* Originals grouped by folder with per-photo selection */
+.selection-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  border-radius: 10px;
+  background: var(--blue-soft);
+  color: var(--ink-700);
+  font-size: 13px;
+}
+.selection-bar strong {
+  color: var(--blue);
+}
+.selection-actions {
+  display: flex;
+  gap: 14px;
+}
+.folder-group {
+  margin-bottom: 22px;
+}
+.folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.folder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--ink-900);
+  font-size: 14px;
+  padding: 0;
+}
+.folder-toggle svg {
+  color: var(--blue);
+  transition: transform var(--dur) var(--ease-out);
+}
+.folder-toggle svg.closed {
+  transform: rotate(-90deg);
+}
+.folder-toggle strong {
+  font-weight: 700;
+}
+.folder-toggle span {
+  color: var(--ink-400);
+  font-size: 12px;
+}
+.select-box {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  cursor: pointer;
+}
+.select-box input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.select-box span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  background: rgb(10 10 18 / 0.35);
+  color: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+  transition:
+    background-color var(--dur-fast),
+    border-color var(--dur-fast);
+}
+.select-box input:checked + span {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+.select-box input:focus-visible + span {
+  box-shadow: var(--ring);
+}
+.image-card.skipped .photo-frame img {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+.image-card.skipped .image-info span {
+  color: var(--ink-400);
+}
+.image-card:not(.skipped) {
+  border-color: var(--blue-pale);
+}

@@ -817,6 +817,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onRole={(url, role) =>
                         setPending((a) => a.map((x) => (x.url === url ? { ...x, role } : x)))
                       }
+                      onRoles={(urls, role) => {
+                        const set = new Set(urls);
+                        setPending((a) => a.map((x) => (set.has(x.url) ? { ...x, role } : x)));
+                      }}
                       onBatchName={setBatchName}
                     />
                   </TabsContent>

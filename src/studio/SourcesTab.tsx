@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { FolderOpen, Upload, X } from "lucide-react";
-import Picker from "./Picker";
+import { Check, ChevronDown, FolderOpen, Upload, X } from "lucide-react";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
 import type { Source } from "@shared/types";
 import { cardsPerSource, type Config } from "@shared/config";
@@ -25,6 +24,7 @@ export default function SourcesTab({
   onFiles,
   onRemove,
   onRole,
+  onRoles,
   onBatchName,
 }: {
   batchOpen: boolean;
@@ -37,18 +37,38 @@ export default function SourcesTab({
   onFiles: (files: PickedFile[], root?: string | null) => void;
   onRemove: (url: string) => void;
   onRole: (url: string, role: "lead" | "supporting") => void;
+  onRoles: (urls: string[], role: "lead" | "supporting") => void;
   onBatchName: (name: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const PAGE = 48;
   const [limit, setLimit] = useState(PAGE);
-  const groups = new Map<string, number>();
-  for (const p of pending) {
-    const dir = p.name.split("/").slice(0, -1).join("/") || "(no folder)";
-    groups.set(dir, (groups.get(dir) ?? 0) + 1);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleFolder = (dir: string) =>
+    setCollapsed((c) => {
+      const n = new Set(c);
+      if (n.has(dir)) n.delete(dir);
+      else n.add(dir);
+      return n;
+    });
+  const NO_FOLDER = "Loose photos";
+  const dirOf = (name: string) => name.split("/").slice(0, -1).join("/") || NO_FOLDER;
+  /** Items grouped by folder, folders in name order, loose photos last, files in name order. */
+  function groupBy<T>(items: T[], name: (t: T) => string): [string, T[]][] {
+    const map = new Map<string, T[]>();
+    for (const it of items) {
+      const d = dirOf(name(it));
+      map.set(d, [...(map.get(d) ?? []), it]);
+    }
+    const compare = new Intl.Collator(undefined, { numeric: true }).compare;
+    return [...map.entries()]
+      .sort(([a], [b]) => (a === NO_FOLDER ? 1 : b === NO_FOLDER ? -1 : compare(a, b)))
+      .map(([d, list]) => [d, [...list].sort((x, y) => compare(name(x), name(y)))]);
   }
   const visiblePending = pending.slice(0, limit);
+  const pendingGroups = groupBy(visiblePending, (p) => p.name);
+  const sourceGroups = groupBy(sources.slice(0, limit), (s) => s.name);
   const visibleSources = sources.slice(0, limit);
   const hiddenCount = batchOpen
     ? sources.length - visibleSources.length
@@ -152,69 +172,160 @@ export default function SourcesTab({
                 {pending.length} originals
                 {folders.size
                   ? ` in ${folders.size} folder${folders.size > 1 ? "s" : ""}`
-                  : ""} · {expected} AI results
+                  : ""} · {leads} selected · {expected} AI results
               </span>
             </div>
           )}
         </>
       )}
-      {!batchOpen && groups.size > 1 && (
-        <div className="folder-summary">
-          <strong>{groups.size} folders</strong>
-          <ul>
-            {[...groups.entries()].slice(0, 200).map(([dir, n]) => (
-              <li key={dir}>
-                <span title={dir}>{dir}</span>
-                <small>{n}</small>
-              </li>
-            ))}
-          </ul>
+      {!batchOpen && pending.length > 0 && (
+        <div className="selection-bar">
+          <span>
+            <strong>{leads}</strong> of {pending.length} photos selected for generation
+          </span>
+          <div className="selection-actions">
+            <button
+              className="text-button"
+              disabled={uploading || leads === pending.length}
+              onClick={() =>
+                onRoles(
+                  pending.map((p) => p.url),
+                  "lead",
+                )
+              }
+            >
+              Select all
+            </button>
+            <button
+              className="text-button"
+              disabled={uploading || leads === 0}
+              onClick={() =>
+                onRoles(
+                  pending.map((p) => p.url),
+                  "supporting",
+                )
+              }
+            >
+              Clear
+            </button>
+          </div>
         </div>
       )}
-      <div className="image-grid">
-        {batchOpen
-          ? visibleSources.map((s) => (
-              <article className="image-card" key={s.id}>
-                <div className="photo-frame">
-                  <img src={sourceUrl(s.id)} alt={s.name} loading="lazy" />
-                  <span className="image-label">ORIGINAL</span>
-                </div>
-                <div className="image-info">
-                  <strong title={s.name}>{s.name}</strong>
-                  <span>
-                    {s.role === "supporting" ? "Supporting · kept original" : "Product source"}
-                  </span>
-                </div>
-              </article>
-            ))
-          : visiblePending.map((p) => (
-              <article className="image-card" key={p.url}>
-                <div className="photo-frame">
-                  <img src={p.url} alt={p.name} />
-                  <button
-                    className="remove-image"
-                    aria-label={`Remove ${p.name}`}
-                    disabled={uploading}
-                    onClick={() => onRemove(p.url)}
-                  >
-                    <X size={14} />
+      {batchOpen
+        ? sourceGroups.map(([dir, list]) => (
+            <section className="folder-group" key={dir}>
+              {sourceGroups.length > 1 || dir !== NO_FOLDER ? (
+                <header className="folder-head">
+                  <button type="button" className="folder-toggle" onClick={() => toggleFolder(dir)}>
+                    <ChevronDown size={15} className={collapsed.has(dir) ? "closed" : ""} />
+                    <FolderOpen size={15} />
+                    <strong title={dir}>{dir}</strong>
+                    <span>
+                      {list.length} photo{list.length === 1 ? "" : "s"} ·{" "}
+                      {list.filter((x) => x.role !== "supporting").length} generated
+                    </span>
                   </button>
-                  <span className="image-label">ORIGINAL</span>
+                </header>
+              ) : null}
+              {!collapsed.has(dir) && (
+                <div className="image-grid">
+                  {list.map((s) => (
+                    <article
+                      className={`image-card ${s.role === "supporting" ? "skipped" : ""}`}
+                      key={s.id}
+                    >
+                      <div className="photo-frame">
+                        <img src={sourceUrl(s.id)} alt={s.name} loading="lazy" />
+                        <span className="image-label">ORIGINAL</span>
+                      </div>
+                      <div className="image-info">
+                        <strong title={s.name}>{s.name.split("/").pop()}</strong>
+                        <span>{s.role === "supporting" ? "Kept original only" : "Generated"}</span>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-                <div className="image-info">
-                  <strong title={p.name}>{p.name}</strong>
-                  <Picker
-                    label={`Role for ${p.name}`}
-                    value={p.role}
-                    disabled={uploading}
-                    items={["lead", "supporting"]}
-                    render={(v) => (v === "lead" ? "Generate" : "Keep original only")}
-                    onChange={(v) => onRole(p.url, v as Pending["role"])}
-                  />
-                </div>
-              </article>
-            ))}
-      </div>
+              )}
+            </section>
+          ))
+        : pendingGroups.map(([dir, list]) => {
+            const urls = list.map((p) => p.url);
+            const picked = list.filter((p) => p.role === "lead").length;
+            const open = !collapsed.has(dir);
+            return (
+              <section className="folder-group" key={dir}>
+                <header className="folder-head">
+                  <button type="button" className="folder-toggle" onClick={() => toggleFolder(dir)}>
+                    <ChevronDown size={15} className={open ? "" : "closed"} />
+                    <FolderOpen size={15} />
+                    <strong title={dir}>{dir}</strong>
+                    <span>
+                      {picked} of {list.length} selected
+                    </span>
+                  </button>
+                  <div className="selection-actions">
+                    <button
+                      className="text-button"
+                      disabled={uploading || picked === list.length}
+                      onClick={() => onRoles(urls, "lead")}
+                    >
+                      All
+                    </button>
+                    <button
+                      className="text-button"
+                      disabled={uploading || picked === 0}
+                      onClick={() => onRoles(urls, "supporting")}
+                    >
+                      None
+                    </button>
+                  </div>
+                </header>
+                {open && (
+                  <div className="image-grid">
+                    {list.map((p) => {
+                      const on = p.role === "lead";
+                      return (
+                        <article className={`image-card ${on ? "" : "skipped"}`} key={p.url}>
+                          <div className="photo-frame">
+                            <img src={p.url} alt={p.name} />
+                            <label
+                              className="select-box"
+                              title={on ? "Selected for generation" : "Not generated"}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                disabled={uploading}
+                                onChange={(e) =>
+                                  onRole(p.url, e.target.checked ? "lead" : "supporting")
+                                }
+                              />
+                              <span>{on && <Check size={14} />}</span>
+                            </label>
+                            <button
+                              className="remove-image"
+                              aria-label={`Remove ${p.name}`}
+                              disabled={uploading}
+                              onClick={() => onRemove(p.url)}
+                            >
+                              <X size={14} />
+                            </button>
+                            <span className="image-label">{on ? "GENERATE" : "ORIGINAL ONLY"}</span>
+                          </div>
+                          <div className="image-info">
+                            <strong title={p.name}>{p.name.split("/").pop()}</strong>
+                            <span>
+                              {on ? "Selected for generation" : "Kept in export, not generated"}
+                            </span>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
       {hiddenCount > 0 && (
         <div className="show-more">
           <span>{hiddenCount} more not shown</span>
