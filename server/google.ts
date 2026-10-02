@@ -60,6 +60,12 @@ async function googleError(r: Response): Promise<StudioError> {
   if (r.status === 401 || r.status === 403)
     return new StudioError(`Google refused the request: ${detail}`, 502, true);
   if (r.status === 404) return new StudioError(`Google model not found: ${detail}`, 502, true);
+  if (r.status === 402 || /credits are depleted|prepayment/i.test(detail))
+    return new StudioError(
+      "Google credits are used up. Top up at https://ai.studio/projects (Billing) or switch the model to OpenAI or Higgsfield.",
+      502,
+      true,
+    );
   if (r.status === 429) return new StudioError(`Google rate limit or quota: ${detail}`, 429, true);
   if (/billing|quota|exceeded/i.test(detail))
     return new StudioError(`Google billing or quota problem: ${detail}`, 502, true);

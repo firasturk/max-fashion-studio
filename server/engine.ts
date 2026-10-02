@@ -348,7 +348,7 @@ async function storeResultBytes(
           : await reviewWithOpenAI(openaiKey!, ref, result, task.card === FABRIC_CARD, identity);
       } catch (e) {
         const oa = googleKey ? (await resolveOpenAIKey(env)).key : null;
-        if (oa && /location is not supported/i.test(errorMessage(e)))
+        if (oa && googleUnavailable(e))
           qa = await reviewWithOpenAI(oa, ref, result, task.card === FABRIC_CARD, identity);
         else throw e;
       }
@@ -757,9 +757,8 @@ async function ensureBrief(
     try {
       brief = await buildBriefWithGoogle(google!, req);
     } catch (e) {
-      // Gemini refuses some Cloudflare regions ("User location is not supported"); OpenAI does not.
-      if (openai && /location is not supported/i.test(errorMessage(e)))
-        brief = await buildBriefWithOpenAI(openai, req);
+      // Gemini refuses some Cloudflare regions, and a drained prepaid balance; OpenAI can take over.
+      if (openai && googleUnavailable(e)) brief = await buildBriefWithOpenAI(openai, req);
       else throw e;
     }
   }
@@ -767,6 +766,13 @@ async function ensureBrief(
   if (leader) brief.setOf = leader.id;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
+}
+
+/** Google failures another vendor can cover: region refusal or an exhausted prepaid balance. */
+function googleUnavailable(e: unknown): boolean {
+  return /location is not supported|credits are used up|credits are depleted/i.test(
+    errorMessage(e),
+  );
 }
 
 /** A reference-library photo from R2. */

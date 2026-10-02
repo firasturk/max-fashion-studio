@@ -50,7 +50,7 @@ export async function buildSkillFromReferences(
     try {
       text = await askVisionGoogle(google, instruction, images, SCHEMA);
     } catch (e) {
-      if (openai && /location is not supported|\(4\d\d\)/.test(errorMessage(e)))
+      if (openai && /location is not supported|credits are used up|\(4\d\d\)/.test(errorMessage(e)))
         text = await askVisionOpenAI(openai, instruction, images);
       else throw e;
     }
