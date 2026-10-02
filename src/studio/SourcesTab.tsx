@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 import { FolderOpen, Upload, X } from "lucide-react";
 import Picker from "./Picker";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
@@ -85,6 +86,18 @@ export default function SourcesTab({
               const { files, root } = filesFromInput(e.target.files);
               onFiles(files, root);
               e.target.value = "";
+              if (!files.length) return;
+              // The browser's folder dialog returns one folder at a time; chain picks in one click each.
+              const first = files[0].path.split("/")[0];
+              const folders = new Set(files.map((f) => f.path.split("/")[0])).size;
+              toast(folders > 1 ? `${folders} folders added.` : `Folder "${first}" added.`, {
+                description: "Add another folder to the same batch?",
+                duration: 8000,
+                action: {
+                  label: "Add another folder",
+                  onClick: () => folderInput.current?.click(),
+                },
+              });
             }}
           />
           <div
