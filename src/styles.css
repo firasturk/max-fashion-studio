@@ -3362,3 +3362,48 @@ textarea:focus {
 .image-card:not(.skipped) {
   border-color: var(--blue-pale);
 }
+
+/* Review: show the whole image, never crop it */
+.review-photo {
+  height: auto;
+  min-height: 320px;
+  max-height: 78vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.review-photo .zoomable {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-height: 78vh;
+}
+.review-photo .zoomable img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 78vh;
+  object-fit: contain;
+}
+.review-photo .compare {
+  max-height: 78vh;
+}
+.review-photo .compare > img,
+.review-photo .compare-before img {
+  max-height: 78vh;
+  object-fit: contain;
+}
+@media (max-width: 900px) {
+  .review-photo {
+    height: auto;
+    min-height: 240px;
+    max-height: 60vh;
+  }
+  .review-photo .zoomable,
+  .review-photo .zoomable img,
+  .review-photo .compare,
+  .review-photo .compare > img,
+  .review-photo .compare-before img {
+    max-height: 60vh;
+  }
+}
