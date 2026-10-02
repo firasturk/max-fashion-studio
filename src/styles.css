@@ -3224,10 +3224,10 @@ textarea:focus {
   }
 }
 
-/* Approach card tools: bottom-left, revealed on hover; the title lifts to make room */
+/* Approach card tools: bottom-right, revealed on hover (always for hidden cards) */
 .mode-card > .mode-tools {
   position: absolute;
-  left: 16px;
+  right: 14px;
   bottom: 12px;
   display: flex;
   gap: 4px;
@@ -3251,7 +3251,7 @@ textarea:focus {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: rgb(10 10 18 / 0.55);
+  background: rgb(10 10 18 / 0.6);
   color: #fff;
   opacity: 1;
   backdrop-filter: blur(4px);
@@ -3259,17 +3259,9 @@ textarea:focus {
 .mode-card > .mode-tools .mode-tool:hover {
   background: var(--blue);
 }
-.mode-card > strong,
+/* Keep the caption clear of the tools */
 .mode-card > span {
-  transition: transform var(--dur) var(--ease-out);
-}
-.mode-card.editable:hover > strong,
-.mode-card.editable:hover > span,
-.mode-card.editable:focus-within > strong,
-.mode-card.editable:focus-within > span,
-.mode-card.hidden-card > strong,
-.mode-card.hidden-card > span {
-  transform: translateY(-32px);
+  padding-right: 72px;
 }
 .mode-card > .mode-number {
   right: 54px;
