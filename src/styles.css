@@ -13,7 +13,7 @@
   --color-accent-foreground: var(--accent-deep);
   --color-popover: var(--surface);
   --color-popover-foreground: var(--ink-900);
-  --color-ring: var(--accent-border-hover);
+  --color-ring: var(--blue-pale);
   --color-card: var(--surface);
   --color-card-foreground: var(--ink-900);
   --radius-lg: 12px;
@@ -25,44 +25,58 @@
    Warm neutrals built around the tan of the Max logo (#cd9b63).
    Every colour in this file is one of these tokens.
    ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------
+   Max Fashion Studio colour scheme: "Vibe Blue + Max Gold"
+   Blue family (Vivid Blue, Deep Blue, Pale Blue, Paper White, Stone
+   Gray, Vivid Orange) carries surfaces and actions. The Max gold is used
+   only as text and outlines on transparent backgrounds, never as a fill
+   under white text.
+   ------------------------------------------------------------------ */
 :root {
   /* Surfaces, lightest to darkest */
   --surface: #ffffff;
-  --surface-2: #fbf9f5;
-  --surface-3: #f4f0e9;
-  --canvas: #f6f3ed;
+  --surface-2: #f7f6fc;
+  --surface-3: #eeedf8;
+  --canvas: #f4f3fa;
   /* Lines */
-  --line: #e7e1d8;
-  --line-strong: #d8d0c4;
-  /* Ink (text) */
-  --ink-900: #1f1b16;
-  --ink-700: #3f3830;
-  --ink-500: #6f665c;
-  --ink-400: #8d847a;
-  --ink-300: #b5aca1;
-  /* Brand tan */
+  --line: #e4e2f0;
+  --line-strong: #d1cdff;
+  /* Ink (text): Deep Blue and Stone Gray */
+  --ink-900: #101018;
+  --ink-700: #202030;
+  --ink-500: #5e5e6a;
+  --ink-400: #8a8a99;
+  --ink-300: #b9b8c8;
+  /* Blue family */
+  --blue: #4737ff;
+  --blue-hover: #3529bf;
+  --blue-deep: #202030;
+  --blue-soft: #ecebff;
+  --blue-pale: #d1cdff;
+  --gradient: linear-gradient(135deg, #101018 0%, #3529bf 38%, #4737ff 68%, #aca5ff 100%);
+  /* Max gold: text and outlines only */
   --accent: #a9743f;
   --accent-hover: #93633a;
   --accent-deep: #6f4a26;
   --accent-glow: #cd9b63;
-  --accent-soft: #f7efe4;
+  --accent-soft: #faf5ee;
   --accent-border: #e6d2b8;
   --accent-border-hover: #cfae86;
   /* Status */
   --success: #2e8b57;
   --success-soft: #e7f4ec;
-  --warning: #d08a1d;
-  --warning-text: #8a5a12;
-  --warning-soft: #fdf1dc;
-  --danger: #c6392b;
-  --danger-soft: #fdecea;
-  --info: var(--accent);
-  --info-soft: var(--accent-soft);
-  /* Shadows (warm tinted) */
-  --shadow-sm: 0 1px 2px rgb(60 45 25 / 0.06);
-  --shadow-md: 0 6px 18px -6px rgb(60 45 25 / 0.18);
-  --shadow-lg: 0 20px 40px -12px rgb(60 45 25 / 0.28);
-  --ring: 0 0 0 3px rgb(169 116 63 / 0.25);
+  --warning: #f75c03;
+  --warning-text: #b84300;
+  --warning-soft: #fff0e6;
+  --danger: #d12b2b;
+  --danger-soft: #fdecec;
+  --info: var(--blue);
+  --info-soft: var(--blue-soft);
+  /* Shadows (blue tinted) */
+  --shadow-sm: 0 1px 2px rgb(32 32 48 / 0.08);
+  --shadow-md: 0 6px 18px -6px rgb(32 32 48 / 0.22);
+  --shadow-lg: 0 20px 40px -12px rgb(32 32 48 / 0.32);
+  --ring: 0 0 0 3px rgb(71 55 255 / 0.25);
   /* Motion */
   --dur-fast: 140ms;
   --dur: 220ms;
@@ -72,7 +86,7 @@
   /* Aliases used by components */
   --background: var(--surface);
   --foreground: var(--ink-900);
-  --primary: var(--accent);
+  --primary: var(--blue);
   --border: var(--line);
 }
 * {
@@ -156,11 +170,10 @@ textarea:disabled {
   text-decoration: none;
 }
 .max-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: auto;
+  height: 32px;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 .brand-divider {
   height: 34px;
@@ -1348,8 +1361,7 @@ input[type="checkbox"] {
     padding: 0 18px;
   }
   .max-logo {
-    width: 40px;
-    height: 40px;
+    height: 26px;
   }
   .brand {
     gap: 12px;
@@ -1558,9 +1570,8 @@ input[type="checkbox"] {
 }
 .auth-card .max-logo {
   align-self: flex-start;
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: auto;
+  height: 36px;
 }
 .connection-dialog input[type="password"] {
   width: 100%;
@@ -2090,7 +2101,7 @@ input[type="checkbox"] {
   display: none;
 }
 .result-card.in-set {
-  box-shadow: inset 3px 0 0 var(--accent-border);
+  box-shadow: inset 3px 0 0 var(--blue-pale);
 }
 .set-caption {
   position: absolute;
@@ -2757,4 +2768,170 @@ textarea {
 }
 .card-actions {
   bottom: 70px;
+}
+
+/* ------------------------------------------------------------------
+   Palette application: blue carries fills, gold carries type.
+   ------------------------------------------------------------------ */
+/* Header on Deep Blue */
+.topbar {
+  background: var(--blue-deep);
+  border-bottom-color: rgb(255 255 255 / 0.08);
+  color: var(--surface);
+}
+.topbar .studio-title {
+  color: var(--surface);
+}
+.topbar .studio-title span,
+.topbar .engine-tag {
+  color: var(--blue-pale);
+}
+.topbar .brand-divider {
+  background: rgb(255 255 255 / 0.14);
+}
+.topbar .nav-tabs {
+  background: rgb(255 255 255 / 0.08);
+}
+.topbar .nav-tabs button {
+  color: var(--blue-pale);
+}
+.topbar .nav-tabs button.active {
+  background: var(--surface);
+  color: var(--blue);
+}
+.topbar .nav-tabs button span {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  background: rgb(255 255 255 / 0.14);
+  color: inherit;
+}
+.topbar .nav-tabs button.active span {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.topbar .connection-button {
+  background: transparent;
+  border: 1px solid var(--accent-glow);
+  color: var(--accent-glow);
+}
+.topbar .connection-button.connected {
+  border-color: rgb(255 255 255 / 0.18);
+  color: #9be0b6;
+  background: rgb(46 139 87 / 0.18);
+}
+.topbar .user-button {
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.18);
+  color: var(--surface);
+}
+.topbar .user-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* Login on the branding gradient */
+.auth-screen {
+  background: var(--gradient);
+}
+.auth-card {
+  box-shadow: var(--shadow-lg);
+  border: 0;
+}
+
+/* Hero title */
+.page-heading h1 {
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
+}
+
+/* Gold is type and outlines only */
+.eyebrow,
+.panel-section-head,
+.workflow-label h2 {
+  color: var(--accent);
+}
+.step {
+  background: transparent;
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+}
+.secondary,
+.connection-button {
+  background: transparent;
+  border: 1px solid var(--accent-border-hover);
+  color: var(--accent);
+}
+.secondary:hover:enabled,
+.connection-button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+.text-button {
+  color: var(--accent);
+}
+.tabs-list button[data-state="active"] {
+  color: var(--accent);
+}
+.tabs-list button[data-state="active"]:after {
+  background: var(--accent);
+}
+.chip.active {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Blue carries fills, selection and work in progress */
+.primary {
+  background-color: var(--blue);
+  color: var(--surface);
+}
+.primary:hover:enabled {
+  background-color: var(--blue-hover);
+  box-shadow: 0 8px 20px -8px rgb(71 55 255 / 0.6);
+}
+.settings-fab {
+  background: var(--blue);
+}
+.mode-card.active,
+.skill-card.active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  box-shadow: 0 0 0 2px var(--blue-pale);
+}
+.mode-card.active .mode-number {
+  color: var(--blue);
+}
+.status-bar.processing,
+.status-bar.queued,
+.status-bar.finalizing,
+.batches-status.running .status-dot {
+  background-color: var(--blue);
+}
+.status-pill.processing {
+  background: var(--blue-soft);
+  color: var(--blue-hover);
+}
+.set-caption {
+  background: var(--blue);
+}
+input:focus,
+textarea:focus {
+  border-color: var(--blue);
+}
+.batch-progress [data-slot="progress"] {
+  background: var(--blue-soft);
+}
+.skill-thumb.placeholder {
+  background-image: linear-gradient(160deg, var(--blue-soft), var(--blue-pale));
+  color: var(--blue-hover);
 }

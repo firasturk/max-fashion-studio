@@ -491,7 +491,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     <div className={`studio ${settingsOpen ? "settings-open" : ""}`}>
       <header className="topbar">
         <a href="/" className="brand" aria-label="Max Fashion Studio">
-          <img className="max-logo" src="/logo.png" alt="Max" width={48} height={48} />
+          <img className="max-logo" src="/logo-mark.png" alt="Max" width={96} height={32} />
           <span className="brand-divider" />
           <span className="studio-title">
             IMAGE STUDIO<span>CREATIVE OPERATIONS</span>
