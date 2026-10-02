@@ -180,7 +180,8 @@ export function buildEditorialPrompt(
       `Image ${idx++} is an already generated image of the same product: reproduce its background, lighting, colour grade and camera distance exactly so both images read as one shoot; only the pose and the crop follow image 1.`,
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
-  if (roles.length > 1) parts.push(roles.join(" "));
+  // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.
+  if (roles.length > 1 || newModel) parts.push(roles.join(" "));
   if (negative) parts.push(`AVOID: ${negative}`);
   return parts.join("\n\n");
 }
