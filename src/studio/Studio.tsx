@@ -10,6 +10,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
@@ -80,6 +81,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
   const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [spendThreshold, setSpendThreshold] = useState(20);
@@ -355,6 +357,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     toast.info("Revision queued. The previous result stays until the new one arrives.");
   }
 
+  async function approveTask(t: Task) {
+    if (!batch) return;
+    try {
+      await post("/api/studio/approve", { batch: batch.id, id: t.id });
+      await refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   async function approve() {
     if (!selected || !batch) return;
     try {
@@ -476,7 +488,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       : `Generate ${queued.length || ""}`.trim()) + costTag;
 
   return (
-    <div className="studio">
+    <div className={`studio ${settingsOpen ? "settings-open" : ""}`}>
       <header className="topbar">
         <a href="/" className="brand" aria-label="Max Fashion Studio">
           <img className="max-logo" src="/logo.png" alt="Max" width={48} height={48} />
@@ -585,6 +597,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               value={viewConfig.mode}
               disabled={locked}
               overrides={modeOverrides}
+              canEdit={user.role === "admin"}
               onOverridesChanged={(ov) => {
                 setModeOverrides(ov);
                 setConfig((c) => {
@@ -612,6 +625,18 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             />
 
             <div className="workbench">
+              <button
+                type="button"
+                className="settings-fab"
+                onClick={() => setSettingsOpen((v) => !v)}
+                aria-expanded={settingsOpen}
+              >
+                <SlidersHorizontal size={16} />
+                {settingsOpen ? "Close settings" : "Settings"}
+              </button>
+              {settingsOpen && (
+                <div className="sheet-backdrop" onClick={() => setSettingsOpen(false)} />
+              )}
               <CreativePanel
                 config={viewConfig}
                 locked={locked}
@@ -729,6 +754,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onClearSelection={() => setSelection(new Set())}
                       onOpen={setSelected}
                       onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
+                      onApproveTask={(t) => void approveTask(t)}
                       onApproveAll={() => void approveAll()}
                     />
                   </TabsContent>

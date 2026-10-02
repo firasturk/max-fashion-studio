@@ -110,6 +110,17 @@ studioRoutes.get("/state", async (c) => {
      WHERE b.owner = ? GROUP BY b.id ORDER BY b.created DESC LIMIT 200`,
     user.id,
   );
+  const thumbRows = await all<{ batch: string; id: string }>(
+    c.env.DB,
+    `SELECT batch, id FROM (
+       SELECT t.batch, t.id, ROW_NUMBER() OVER (PARTITION BY t.batch ORDER BY t.updated DESC) AS rn
+       FROM tasks t JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.output IS NOT NULL
+     ) WHERE rn <= 3`,
+    user.id,
+  );
+  const thumbsByBatch = new Map<string, string[]>();
+  for (const r of thumbRows) thumbsByBatch.set(r.batch, [...(thumbsByBatch.get(r.batch) ?? []), r.id]);
+  for (const b of batches) b.thumbs = thumbsByBatch.get(b.id) ?? [];
   const engineKey = await resolveEngineKey(c.env);
   const adminSettings = await readAdminSettings(c.env);
   return c.json({

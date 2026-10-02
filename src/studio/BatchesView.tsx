@@ -10,6 +10,15 @@ const STATE_LABEL: Record<string, string> = {
   paused: "Paused",
 };
 
+function ago(ts: number): string {
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return new Date(ts).toLocaleDateString("en-GB");
+}
+
 export default function BatchesView({
   batches,
   busyId,
@@ -54,6 +63,16 @@ export default function BatchesView({
         const total = b.total ?? 0;
         const done = b.completed ?? 0;
         const pct = total ? Math.round((done / total) * 100) : 0;
+        const tone =
+          b.state === "running"
+            ? "running"
+            : b.state === "paused" || b.failed
+              ? "warn"
+              : b.review
+                ? "review"
+                : total && done === total
+                  ? "done"
+                  : "idle";
         const status =
           b.state === "running"
             ? "Generating"
@@ -67,10 +86,25 @@ export default function BatchesView({
                     ? "Complete"
                     : STATE_LABEL[b.state];
         return (
-          <div className="batches-row" role="row" key={b.id}>
+          <div className="batches-row" role="row" key={b.id} onDoubleClick={() => onOpen(b.id)}>
             <span className="batches-name">
-              <strong>{b.name}</strong>
-              <small>{new Date(b.created).toLocaleString("en-GB")}</small>
+              <span className="batch-thumbs" aria-hidden="true">
+                {(b.thumbs ?? []).map((t) => (
+                  <img
+                    key={t}
+                    src={`/api/studio/file?batch=${b.id}&id=${t}&kind=result`}
+                    alt=""
+                    loading="lazy"
+                  />
+                ))}
+                {!(b.thumbs ?? []).length && <span className="batch-thumb-empty" />}
+              </span>
+              <span>
+                <strong>{b.name}</strong>
+                <small>
+                  {new Date(b.created).toLocaleDateString("en-GB")} · updated {ago(b.updated)}
+                </small>
+              </span>
             </span>
             <span>
               {cfg.mode === "5"
@@ -86,8 +120,11 @@ export default function BatchesView({
               </small>
             </span>
             <span>{b.spent ? `≈ $${b.spent.toFixed(2)}` : "–"}</span>
-            <span className={`batches-status ${b.state}`}>{status}</span>
-            <span className="footer-actions">
+            <span className={`batches-status ${tone}`}>
+              <i className="status-dot" />
+              {status}
+            </span>
+            <span className="footer-actions row-actions">
               <button className="secondary" onClick={() => onOpen(b.id)} disabled={busyId === b.id}>
                 {busyId === b.id ? (
                   <LoaderCircle className="spinning" size={15} />

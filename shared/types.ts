@@ -32,6 +32,8 @@ export interface Batch {
   review?: number;
   failed?: number;
   queued?: number;
+  /** Up to three latest result task ids, for previews on the batches page. */
+  thumbs?: string[];
 }
 
 export interface EngineModel {

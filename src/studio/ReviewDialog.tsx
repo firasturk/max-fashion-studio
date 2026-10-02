@@ -190,41 +190,33 @@ export default function ReviewDialog({
               <strong>Image review</strong>
             </div>
             {qa && (
-              <>
-                <div className={`qa-item ${qa.centered ? "pass" : "warn"}`}>
-                  <span>Model alignment</span>
-                  <strong>
-                    {fabric
-                      ? "Not applicable"
-                      : !qa.automated
-                        ? "Manual check"
-                        : qa.found
-                          ? `${Number(qa.offset).toFixed(1)}% off centre`
-                          : "Needs manual review"}
-                  </strong>
-                </div>
-                <div className={`qa-item ${qa.productConcern ? "warn" : "pass"}`}>
-                  <span>Product fidelity</span>
-                  <strong>
-                    {!qa.automated
-                      ? "Manual check"
-                      : qa.productConcern
-                        ? "Check differences"
-                        : "No obvious differences"}
-                  </strong>
-                </div>
+              <div className="qa-strip">
+                <span className={`qa-chip ${fabric ? "" : qa.centered ? "pass" : "warn"}`}>
+                  Alignment:{" "}
+                  {fabric
+                    ? "n/a"
+                    : !qa.automated
+                      ? "manual"
+                      : qa.found
+                        ? `${Number(qa.offset).toFixed(1)}% off`
+                        : "check"}
+                </span>
+                <span className={`qa-chip ${qa.productConcern ? "warn" : "pass"}`}>
+                  Fidelity:{" "}
+                  {!qa.automated ? "manual" : qa.productConcern ? "check differences" : "ok"}
+                </span>
                 {qa.automated &&
                   qa.sameFace !== undefined &&
                   task &&
                   task.card > 1 &&
                   task.card < 6 && (
-                    <div className={`qa-item ${qa.sameFace ? "pass" : "warn"}`}>
-                      <span>Same face as card 1</span>
-                      <strong>{qa.sameFace ? "Yes" : "Different face"}</strong>
-                    </div>
+                    <span className={`qa-chip ${qa.sameFace ? "pass" : "warn"}`}>
+                      Face: {qa.sameFace ? "same" : "different"}
+                    </span>
                   )}
-                <p className="qa-notes">{qa.notes}</p>
-              </>
+                {task && task.cost > 0 && <span className="qa-chip">≈ ${task.cost.toFixed(2)}</span>}
+                {qa.notes && <span className="qa-notes-inline">{qa.notes}</span>}
+              </div>
             )}
             {brief && (
               <div className="brief-box">
@@ -244,9 +236,6 @@ export default function ReviewDialog({
               </details>
             )}
             {task?.error && <p className="image-error">{task.error}</p>}
-            {task && task.cost > 0 && (
-              <p className="quality-note">Spent on this image so far ≈ ${task.cost.toFixed(2)}.</p>
-            )}
 
             {inFlight && (
               <p className="revision-progress">

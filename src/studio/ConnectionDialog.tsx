@@ -39,6 +39,7 @@ export default function ConnectionDialog({
   const [googleKey, setGoogleKey] = useState("");
   const [savingGoogle, setSavingGoogle] = useState(false);
   const [falKey, setFalKey] = useState("");
+  const [vendor, setVendor] = useState<"higgsfield" | "google" | "openai" | "fal">("higgsfield");
   const [savingFal, setSavingFal] = useState(false);
   const [savingOpenai, setSavingOpenai] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
@@ -199,11 +200,35 @@ export default function ConnectionDialog({
         <DialogHeader>
           <DialogTitle>Image engine connection</DialogTitle>
           <DialogDescription>
-            Generation runs through the Higgsfield Cloud API. The key is stored encrypted on the
-            server, never in the browser.
+            One key per vendor; each is verified and stored encrypted on the server, never in the
+            browser. Add the vendors whose models you want in the picker.
           </DialogDescription>
         </DialogHeader>
 
+        <div className="vendor-tabs" role="tablist">
+          {(
+            [
+              ["higgsfield", "Higgsfield", engine.configured],
+              ["google", "Google", engine.google !== "none"],
+              ["openai", "OpenAI", engine.openai !== "none"],
+              ["fal", "fal.ai", engine.fal !== "none"],
+            ] as const
+          ).map(([k, label, on]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={vendor === k}
+              className={vendor === k ? "on" : ""}
+              onClick={() => setVendor(k)}
+            >
+              <i className={`status-dot ${on ? "done" : "idle"}`} />
+              {label}
+            </button>
+          ))}
+        </div>
+        {vendor === "higgsfield" && (
+          <>
         {engine.configured ? (
           <div className="success-note">
             <Check size={19} />
@@ -271,6 +296,10 @@ export default function ConnectionDialog({
         </button>
         {result && <p className={result.ok ? "success-note" : "image-error"}>{result.message}</p>}
 
+          </>
+        )}
+        {vendor === "google" && (
+          <>
         <div className="qa-heading" style={{ marginTop: 12 }}>
           <KeyRound size={18} />
           <strong>Google (Nano Banana Pro)</strong>
@@ -332,6 +361,10 @@ export default function ConnectionDialog({
           </div>
         )}
 
+          </>
+        )}
+        {vendor === "fal" && (
+          <>
         <div className="qa-heading" style={{ marginTop: 12 }}>
           <KeyRound size={18} />
           <strong>fal.ai (Seedream 5)</strong>
@@ -388,6 +421,10 @@ export default function ConnectionDialog({
           </div>
         )}
 
+          </>
+        )}
+        {vendor === "openai" && (
+          <>
         <div className="qa-heading" style={{ marginTop: 12 }}>
           <KeyRound size={18} />
           <strong>OpenAI (GPT Image 2.5 Sunburst / Flare)</strong>
@@ -448,6 +485,8 @@ export default function ConnectionDialog({
           </div>
         )}
 
+          </>
+        )}
         <details className="prompt-details">
           <summary>Advanced: default model slug</summary>
           <label htmlFor="engine-model" className="field-label">
