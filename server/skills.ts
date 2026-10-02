@@ -71,6 +71,11 @@ export async function setFavourite(env: Env, userId: string, id: string, on: boo
 /** Skills as the team sees them: favourites of `userId` first, then the saved order. */
 export async function listSkills(env: Env, userId?: string): Promise<SkillInfo[]> {
   const list = await listSkillsRaw(env);
+  const thumbs = await all<{ skill: string; id: string }>(
+    env.DB,
+    "SELECT r.skill, r.id FROM refs r JOIN (SELECT skill, MIN(created) AS c FROM refs GROUP BY skill) m ON m.skill = r.skill AND m.c = r.created",
+  );
+  const thumbOf = new Map(thumbs.map((t) => [t.skill, t.id]));
   const order = await readIds(env, ORDER_SETTING);
   const favs = new Set(userId ? await readIds(env, favSetting(userId)) : []);
   const rank = (id: string) => {
@@ -78,7 +83,7 @@ export async function listSkills(env: Env, userId?: string): Promise<SkillInfo[]
     return i === -1 ? order.length + list.findIndex((s) => s.id === id) : i;
   };
   return list
-    .map((s) => ({ ...s, favourite: favs.has(s.id) }))
+    .map((s) => ({ ...s, favourite: favs.has(s.id), thumb: thumbOf.get(s.id) }))
     .sort((a, b) => Number(b.favourite) - Number(a.favourite) || rank(a.id) - rank(b.id));
 }
 

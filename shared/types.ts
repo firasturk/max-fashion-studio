@@ -95,6 +95,8 @@ export interface SkillInfo {
   auto: boolean;
   /** Starred by the current user. */
   favourite: boolean;
+  /** Reference-library photo shown on the card, if the skill has any. */
+  thumb?: string;
 }
 
 /** Team overrides for a production approach card. */

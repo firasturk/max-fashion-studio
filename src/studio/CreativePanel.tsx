@@ -15,7 +15,7 @@ import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 import SkillDialog from "./SkillDialog";
-import { Plus, Star } from "lucide-react";
+import { ChevronDown, Plus, Star } from "lucide-react";
 import ReferenceLibrary from "./ReferenceLibrary";
 import {
   DEFAULT_PROMPT,
@@ -284,6 +284,7 @@ export default function CreativePanel({
         </div>
       )}
 
+      <Section title="Model">
       <label className="field-label">AI model</label>
       <Picker
         value={config.model || defaultModel}
@@ -294,14 +295,16 @@ export default function CreativePanel({
         onChange={(v) => onChange({ model: v })}
       />
       {models.some((m) => !m.enabled) && (
-        <div className="prompt-tip">
-          Not available on your Higgsfield account:{" "}
-          {models
-            .filter((m) => !m.enabled)
-            .map((m) => m.name)
-            .join(", ")}
-          .
-        </div>
+        <details className="prompt-details compact">
+          <summary>{models.filter((m) => !m.enabled).length} models not available</summary>
+          <div className="prompt-tip">
+            {models
+              .filter((m) => !m.enabled)
+              .map((m) => `${m.name}${m.reason ? ` (${m.reason})` : ""}`)
+              .join(", ")}
+            . Add the vendor's key in Connection to enable them.
+          </div>
+        </details>
       )}
 
       {(config.model || defaultModel).startsWith("gemini") && (
@@ -319,6 +322,7 @@ export default function CreativePanel({
           />
         </div>
       )}
+      </Section>
 
       <label className="field-label">Original photography</label>
       <Picker
@@ -420,6 +424,18 @@ export default function CreativePanel({
                   disabled={locked}
                   onClick={() => onChange({ skill: s.id })}
                 >
+                  {s.thumb ? (
+                    <img
+                      className="skill-thumb"
+                      src={`/api/studio/references/${s.thumb}/file`}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="skill-thumb placeholder" aria-hidden="true">
+                      {s.title.slice(0, 1)}
+                    </span>
+                  )}
                   <strong>{s.title}</strong>
                   <span>{s.caption}</span>
                 </button>
@@ -435,7 +451,6 @@ export default function CreativePanel({
               </div>
             ))}
           </div>
-          <div className="prompt-tip">Drag cards to reorder (shared with the team). Starred skills stay first for you.</div>
           {currentSkill && (
             <div className="prompt-tip">
               {currentSkill.description || "Add reference photos: the skill writes itself from them."}
@@ -611,6 +626,11 @@ export default function CreativePanel({
         </div>
       </div>
 
+      <Section
+        title="Export & checks"
+        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · filename + -AI`}
+        defaultOpen={false}
+      >
       {config.mode !== "4" && config.mode !== "6" && config.mode !== "5" && config.mode !== "7" && (
         <>
           <div className="centering">
@@ -667,6 +687,40 @@ export default function CreativePanel({
           </span>
         </div>
       </div>
+      </Section>
     </aside>
+  );
+}
+
+
+/** Collapsible group of settings; rarely changed groups start closed. */
+function Section({
+  title,
+  hint,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={`panel-section ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="panel-section-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span>
+          {title}
+          {hint && !open && <small>{hint}</small>}
+        </span>
+        <ChevronDown size={15} />
+      </button>
+      {open && <div className="panel-section-body">{children}</div>}
+    </section>
   );
 }
