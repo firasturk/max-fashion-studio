@@ -129,6 +129,15 @@ export default function ModeCards({
               </div>
               <strong>{m.title}</strong>
               <span>{m.caption}</span>
+              <img
+                className="mode-thumb"
+                src={`/modes/${m.id}.jpg`}
+                alt=""
+                loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
               <div className="mode-number">0{m.id}</div>
             </label>
           );
