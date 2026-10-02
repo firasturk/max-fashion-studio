@@ -3223,3 +3223,54 @@ textarea:focus {
     min-height: 150px;
   }
 }
+
+/* Approach card tools: bottom-left, revealed on hover; the title lifts to make room */
+.mode-card > .mode-tools {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+  pointer-events: none;
+}
+.mode-card.editable:hover > .mode-tools,
+.mode-card.editable:focus-within > .mode-tools,
+.mode-card.hidden-card > .mode-tools {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.mode-card > .mode-tools .mode-tool {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgb(10 10 18 / 0.55);
+  color: #fff;
+  opacity: 1;
+  backdrop-filter: blur(4px);
+}
+.mode-card > .mode-tools .mode-tool:hover {
+  background: var(--blue);
+}
+.mode-card > strong,
+.mode-card > span {
+  transition: transform var(--dur) var(--ease-out);
+}
+.mode-card.editable:hover > strong,
+.mode-card.editable:hover > span,
+.mode-card.editable:focus-within > strong,
+.mode-card.editable:focus-within > span,
+.mode-card.hidden-card > strong,
+.mode-card.hidden-card > span {
+  transform: translateY(-32px);
+}
+.mode-card > .mode-number {
+  right: 54px;
+}

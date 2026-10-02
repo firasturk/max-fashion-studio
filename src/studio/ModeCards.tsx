@@ -86,48 +86,11 @@ export default function ModeCards({
           return (
             <label
               key={m.id}
-              className={`mode-card ${value === m.id ? "active" : ""} ${hidden ? "hidden-card" : ""}`}
+              className={`mode-card ${value === m.id ? "active" : ""} ${hidden ? "hidden-card" : ""} ${canEdit ? "editable" : ""}`}
             >
               <div className="mode-top">
                 <m.icon size={23} />
-                <span className="mode-tools">
-                  {/* Spans, not buttons: a button inside a label would become the label's control. */}
-                  {canEdit && (
-                    <>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="mode-tool"
-                        aria-label="Rename approach"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          rename(m);
-                        }}
-                        onKeyDown={(e) => e.key === "Enter" && rename(m)}
-                      >
-                        <Pencil size={13} />
-                      </span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="mode-tool"
-                        aria-label={hidden ? "Show approach" : "Hide approach"}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          void save({ id: m.id, hidden: !hidden });
-                        }}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && void save({ id: m.id, hidden: !hidden })
-                        }
-                      >
-                        {hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-                      </span>
-                    </>
-                  )}
-                  <RadioGroupItem value={m.id} aria-label={m.title} disabled={disabled || hidden} />
-                </span>
+                <RadioGroupItem value={m.id} aria-label={m.title} disabled={disabled || hidden} />
               </div>
               <strong>{m.title}</strong>
               <span>{m.caption}</span>
@@ -140,6 +103,43 @@ export default function ModeCards({
                   e.currentTarget.style.display = "none";
                 }}
               />
+              <span className="mode-tools">
+                {/* Spans, not buttons: a button inside a label would become the label's control. */}
+                {canEdit && (
+                  <>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="mode-tool"
+                      aria-label="Rename approach"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        rename(m);
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && rename(m)}
+                    >
+                      <Pencil size={13} />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="mode-tool"
+                      aria-label={hidden ? "Show approach" : "Hide approach"}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void save({ id: m.id, hidden: !hidden });
+                      }}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && void save({ id: m.id, hidden: !hidden })
+                      }
+                    >
+                      {hidden ? <Eye size={13} /> : <EyeOff size={13} />}
+                    </span>
+                  </>
+                )}
+              </span>
               <div className="mode-number">0{m.id}</div>
             </label>
           );
