@@ -3,6 +3,7 @@ import { get } from "./api";
 import type { User } from "@shared/types";
 import AuthScreen from "./auth/AuthScreen";
 import Studio from "./studio/Studio";
+import BootScreen from "./studio/BootScreen";
 
 type Session = { user: User | null; registrationOpen: boolean };
 
@@ -15,7 +16,7 @@ export default function App() {
       .catch(() => setSession({ user: null, registrationOpen: false }));
   }, []);
 
-  if (session === "loading") return <div className="boot">Loading…</div>;
+  if (session === "loading") return <BootScreen />;
   if (!session?.user) {
     return (
       <AuthScreen

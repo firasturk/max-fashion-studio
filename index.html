@@ -9,9 +9,50 @@
       name="description"
       content="Batch fashion photography with Higgsfield image generation."
     />
+    <link rel="preload" as="image" href="/logo-mark.png" />
+    <style>
+      /* Shown until the app script takes over; mirrors .boot-screen in styles.css. */
+      html {
+        background: #121219;
+      }
+      .boot-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 22px;
+        background: #121219;
+        color: #a8a7ba;
+        font:
+          14px Arial,
+          Helvetica,
+          sans-serif;
+      }
+      .boot-ring {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.12);
+        border-top-color: #6f62ff;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body class="antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-screen">
+        <img src="/logo-mark.png" alt="Max" width="120" height="40" />
+        <div class="boot-ring"></div>
+        <span>Loading your studio…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

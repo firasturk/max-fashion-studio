@@ -54,6 +54,7 @@ const BatchesView = lazy(() => import("./BatchesView"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
+import BootScreen from "./BootScreen";
 import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
@@ -93,6 +94,27 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [zaidDirection, setZaidDirection] = useState("");
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
   const [hero, setHero] = useState("");
+  // Boot screen: wait for the first state load, the approach pictures and the hero video (or a timeout).
+  const [stateReady, setStateReady] = useState(false);
+  const [imagesReady, setImagesReady] = useState(false);
+  const [heroReady, setHeroReady] = useState(false);
+  const [bootTimedOut, setBootTimedOut] = useState(false);
+  const booted = bootTimedOut || (stateReady && imagesReady && (heroReady || !hero));
+  useEffect(() => {
+    let left = MODES.length;
+    const settle = () => {
+      left -= 1;
+      if (left <= 0) setImagesReady(true);
+    };
+    for (const id of MODES) {
+      const img = new Image();
+      img.onload = settle;
+      img.onerror = settle;
+      img.src = `/modes/${id}.jpg`;
+    }
+    const t = setTimeout(() => setBootTimedOut(true), 7000);
+    return () => clearTimeout(t);
+  }, []);
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
@@ -153,7 +175,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }, []);
 
   useEffect(() => {
-    void loadState().then(loadModels).then(loadPresets).then(loadSkills);
+    void loadState()
+      .finally(() => setStateReady(true))
+      .then(loadModels)
+      .then(loadPresets)
+      .then(loadSkills);
   }, [loadState, loadModels, loadPresets, loadSkills]);
 
   // The batches page always shows fresh counts, including batches still generating in the background.
@@ -498,6 +524,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   return (
     <div className={`studio ${settingsOpen ? "settings-open" : ""}`}>
+      <BootScreen done={booted} />
       <header className="topbar">
         <a href="/" className="brand" aria-label="Max Fashion Studio">
           <img className="max-logo" src="/logo-mark.png" alt="Max" width={96} height={32} />
@@ -610,8 +637,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   muted
                   loop
                   playsInline
-                  preload="metadata"
-                  onError={() => setHero("")}
+                  preload="auto"
+                  onCanPlay={() => setHeroReady(true)}
+                  onError={() => {
+                    setHero("");
+                    setHeroReady(true);
+                  }}
                 >
                   <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
                   <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />

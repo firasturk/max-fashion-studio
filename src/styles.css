@@ -1420,12 +1420,35 @@ input[type="checkbox"] {
 }
 
 /* --- Added for the standalone Cloudflare build: sign-in screen, user menu, delete button --- */
-.boot {
+/* Boot screen: covers the page until the first screen's data and media are ready */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: grid;
-  place-items: center;
-  min-height: 100vh;
+  place-content: center;
+  justify-items: center;
+  gap: 22px;
+  background: var(--canvas);
   color: var(--ink-500);
   font-size: 14px;
+  transition: opacity 0.4s var(--ease-out);
+}
+.boot-screen img {
+  width: 120px;
+  height: auto;
+}
+.boot-screen.done {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--line-strong);
+  border-top-color: var(--blue);
+  animation: spin 0.9s linear infinite;
 }
 .auth-screen {
   min-height: 100vh;
