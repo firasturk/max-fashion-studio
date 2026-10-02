@@ -12,5 +12,21 @@ export default defineConfig({
       "@shared": fileURLToPath(new URL("./shared", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        /** Framework code changes rarely; keeping it in its own chunk lets browsers cache it across deploys. */
+        manualChunks(id) {
+          if (
+            /node_modules\/(react|react-dom|scheduler|radix-ui|@radix-ui|@floating-ui|sonner|lucide-react)\//.test(
+              id,
+            )
+          )
+            return "vendor";
+          return undefined;
+        },
+      },
+    },
+  },
   test: { include: ["tests/**/*.test.ts"] },
 });

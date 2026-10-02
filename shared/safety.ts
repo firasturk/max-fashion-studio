@@ -11,7 +11,10 @@ export const SAFE_WORDING_RULE = `SAFE WORDING (mandatory, every prompt):
 
 /** Words to swap before a prompt reaches an engine; the replacement keeps the sentence readable. */
 const SWAPS: [RegExp, string][] = [
-  [/\b(sexy|seductive|seductively|sultry|alluring|provocative|erotic|sensual|sensually)\b/gi, "elegant"],
+  [
+    /\b(sexy|seductive|seductively|sultry|alluring|provocative|erotic|sensual|sensually)\b/gi,
+    "elegant",
+  ],
   [/\b(lustful|flirty|flirtatious|teasing)\b/gi, "playful"],
   [/\b(nude|naked|topless|undressed|unclothed)\b/gi, "dressed"],
   [/\b(bare|exposed) (skin|chest|back|legs|shoulders|midriff|stomach)\b/gi, "the $2"],

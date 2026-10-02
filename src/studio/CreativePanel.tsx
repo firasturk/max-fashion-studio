@@ -9,14 +9,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { toast } from "sonner";
 import { del, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
-import SkillDialog from "./SkillDialog";
+const SkillDialog = lazy(() => import("./SkillDialog"));
 import { ChevronDown, Plus, Star } from "lucide-react";
-import ReferenceLibrary from "./ReferenceLibrary";
+const ReferenceLibrary = lazy(() => import("./ReferenceLibrary"));
 import {
   DEFAULT_PROMPT,
   SCENES,
@@ -285,43 +285,43 @@ export default function CreativePanel({
       )}
 
       <Section title="Model">
-      <label className="field-label">AI model</label>
-      <Picker
-        value={config.model || defaultModel}
-        label="AI model"
-        disabled={locked}
-        items={modelItems}
-        render={modelLabel}
-        onChange={(v) => onChange({ model: v })}
-      />
-      {models.some((m) => !m.enabled) && (
-        <details className="prompt-details compact">
-          <summary>{models.filter((m) => !m.enabled).length} models not available</summary>
-          <div className="prompt-tip">
-            {models
-              .filter((m) => !m.enabled)
-              .map((m) => `${m.name}${m.reason ? ` (${m.reason})` : ""}`)
-              .join(", ")}
-            . Add the vendor's key in Connection to enable them.
-          </div>
-        </details>
-      )}
+        <label className="field-label">AI model</label>
+        <Picker
+          value={config.model || defaultModel}
+          label="AI model"
+          disabled={locked}
+          items={modelItems}
+          render={modelLabel}
+          onChange={(v) => onChange({ model: v })}
+        />
+        {models.some((m) => !m.enabled) && (
+          <details className="prompt-details compact">
+            <summary>{models.filter((m) => !m.enabled).length} models not available</summary>
+            <div className="prompt-tip">
+              {models
+                .filter((m) => !m.enabled)
+                .map((m) => `${m.name}${m.reason ? ` (${m.reason})` : ""}`)
+                .join(", ")}
+              . Add the vendor's key in Connection to enable them.
+            </div>
+          </details>
+        )}
 
-      {(config.model || defaultModel).startsWith("gemini") && (
-        <div className="centering">
-          <PiggyBank size={21} />
-          <div>
-            <strong>Economy mode</strong>
-            <span>Google Flex tier · half price · delivery can take minutes to hours</span>
+        {(config.model || defaultModel).startsWith("gemini") && (
+          <div className="centering">
+            <PiggyBank size={21} />
+            <div>
+              <strong>Economy mode</strong>
+              <span>Google Flex tier · half price · delivery can take minutes to hours</span>
+            </div>
+            <Switch
+              checked={config.economy}
+              disabled={locked}
+              onCheckedChange={(v) => onChange({ economy: v })}
+              aria-label="Economy mode"
+            />
           </div>
-          <Switch
-            checked={config.economy}
-            disabled={locked}
-            onCheckedChange={(v) => onChange({ economy: v })}
-            aria-label="Economy mode"
-          />
-        </div>
-      )}
+        )}
       </Section>
 
       <label className="field-label">Original photography</label>
@@ -453,24 +453,29 @@ export default function CreativePanel({
           </div>
           {currentSkill && (
             <div className="prompt-tip">
-              {currentSkill.description || "Add reference photos: the skill writes itself from them."}
+              {currentSkill.description ||
+                "Add reference photos: the skill writes itself from them."}
               {rebuilding && " Updating the skill text from its photos…"}
             </div>
           )}
           {currentSkill && (
-            <ReferenceLibrary
-              key={currentSkill.id}
-              skill={currentSkill.id}
-              title={`${currentSkill.title} reference library`}
-              onChanged={libraryChanged}
-            />
+            <Suspense fallback={null}>
+              <ReferenceLibrary
+                key={currentSkill.id}
+                skill={currentSkill.id}
+                title={`${currentSkill.title} reference library`}
+                onChanged={libraryChanged}
+              />
+            </Suspense>
           )}
-          <SkillDialog
-            open={skillEditor.open}
-            skill={skillEditor.skill}
-            onClose={() => setSkillEditor((e) => ({ ...e, open: false }))}
-            onSaved={(list, id) => onSkillsChanged?.(list, id)}
-          />
+          <Suspense fallback={null}>
+            <SkillDialog
+              open={skillEditor.open}
+              skill={skillEditor.skill}
+              onClose={() => setSkillEditor((e) => ({ ...e, open: false }))}
+              onSaved={(list, id) => onSkillsChanged?.(list, id)}
+            />
+          </Suspense>
 
           <label className="field-label">Generated face (when the reference face is hidden)</label>
           <Picker
@@ -494,7 +499,9 @@ export default function CreativePanel({
 
       {config.mode === "7" && (
         <>
-          <ReferenceLibrary skill="zaid" title="Zaid's mood board" />
+          <Suspense fallback={null}>
+            <ReferenceLibrary skill="zaid" title="Zaid's mood board" />
+          </Suspense>
           <div className="prompt-tip">
             Each image gets a new scene in this world, written in Zaid's prompt structure. Add notes
             below only when a batch needs something specific (a city, a colour story, a pose).
@@ -631,67 +638,69 @@ export default function CreativePanel({
         hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · filename + -AI`}
         defaultOpen={false}
       >
-      {config.mode !== "4" && config.mode !== "6" && config.mode !== "5" && config.mode !== "7" && (
-        <>
-          <div className="centering">
-            <ScanLine size={21} />
-            <div>
-              <strong>Centre model</strong>
-              <span>Check alignment · retry once if needed</span>
-            </div>
-            <Switch
-              checked={config.center}
+        {config.mode !== "4" &&
+          config.mode !== "6" &&
+          config.mode !== "5" &&
+          config.mode !== "7" && (
+            <>
+              <div className="centering">
+                <ScanLine size={21} />
+                <div>
+                  <strong>Centre model</strong>
+                  <span>Check alignment · retry once if needed</span>
+                </div>
+                <Switch
+                  checked={config.center}
+                  disabled={locked}
+                  onCheckedChange={(v) => onChange({ center: v })}
+                  aria-label="Check model centering"
+                />
+              </div>
+              <p className="quality-note">
+                Alignment is checked only when automatic review is configured. Uncertain results are
+                held for review. Extra attempts use additional credits.
+              </p>
+            </>
+          )}
+
+        <div className="two-fields">
+          <div>
+            <label className="field-label">Export format</label>
+            <Picker
+              label="Export format"
+              value={config.output}
               disabled={locked}
-              onCheckedChange={(v) => onChange({ center: v })}
-              aria-label="Check model centering"
+              items={OUTPUT_FORMATS}
+              render={(v) => v.toUpperCase()}
+              onChange={(v) => onChange({ output: v as Config["output"] })}
             />
           </div>
-          <p className="quality-note">
-            Alignment is checked only when automatic review is configured. Uncertain results are
-            held for review. Extra attempts use additional credits.
-          </p>
-        </>
-      )}
+          <div>
+            <label className="field-label">Quality</label>
+            <Picker
+              label="Export quality"
+              value={String(config.outputQuality)}
+              disabled={locked || config.output === "png"}
+              items={["100", "95", "90", "85", "80", "75"]}
+              render={(v) => `${v}%`}
+              onChange={(v) => onChange({ outputQuality: Number(v) })}
+            />
+          </div>
+        </div>
 
-      <div className="two-fields">
-        <div>
-          <label className="field-label">Export format</label>
-          <Picker
-            label="Export format"
-            value={config.output}
-            disabled={locked}
-            items={OUTPUT_FORMATS}
-            render={(v) => v.toUpperCase()}
-            onChange={(v) => onChange({ output: v as Config["output"] })}
-          />
+        <div className="export-rule">
+          <FileImage size={18} />
+          <div>
+            Original filename + <b>-AI</b>
+            <span>
+              Example: MAX_001.jpg → MAX_001-AI.{config.output} (or -AI-01, -AI-02 for sets)
+            </span>
+          </div>
         </div>
-        <div>
-          <label className="field-label">Quality</label>
-          <Picker
-            label="Export quality"
-            value={String(config.outputQuality)}
-            disabled={locked || config.output === "png"}
-            items={["100", "95", "90", "85", "80", "75"]}
-            render={(v) => `${v}%`}
-            onChange={(v) => onChange({ outputQuality: Number(v) })}
-          />
-        </div>
-      </div>
-
-      <div className="export-rule">
-        <FileImage size={18} />
-        <div>
-          Original filename + <b>-AI</b>
-          <span>
-            Example: MAX_001.jpg → MAX_001-AI.{config.output} (or -AI-01, -AI-02 for sets)
-          </span>
-        </div>
-      </div>
       </Section>
     </aside>
   );
 }
-
 
 /** Collapsible group of settings; rarely changed groups start closed. */
 function Section({

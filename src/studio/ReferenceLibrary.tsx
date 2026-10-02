@@ -50,7 +50,8 @@ export default function ReferenceLibrary({
       form.append("skill", skill);
       for (const f of Array.from(files)) form.append("file", f, f.name);
       const r = await fetch("/api/studio/references", { method: "POST", body: form });
-      if (!r.ok) throw new Error(((await r.json()) as { error?: string }).error || "Upload failed.");
+      if (!r.ok)
+        throw new Error(((await r.json()) as { error?: string }).error || "Upload failed.");
       await load();
       toast.success(`${files.length} reference${files.length > 1 ? "s" : ""} added.`);
       await onChanged?.(items.length + files.length);

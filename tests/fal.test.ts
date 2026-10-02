@@ -47,7 +47,9 @@ describe("fal.ai client", () => {
       if (u.endsWith("/req1"))
         return new Response(JSON.stringify({ images: [{ url: "https://cdn.fal/x.png" }] }));
       if (u === "https://cdn.fal/x.png")
-        return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+        return new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "image/png" },
+        });
       throw new Error("unexpected " + u);
     });
     const client = new FalClient(KEY, fetchMock as unknown as typeof fetch);
@@ -75,7 +77,12 @@ describe("fal.ai client", () => {
     expect((await client.status(h)).state).toBe("pending");
   });
   it("prices Seedream 5 Pro with the first reference free", () => {
-    const c = { ...DEFAULT_CONFIG, mode: "5" as const, model: "fal/bytedance/seedream/v5/pro/edit", size: "2K" as const };
+    const c = {
+      ...DEFAULT_CONFIG,
+      mode: "5" as const,
+      model: "fal/bytedance/seedream/v5/pro/edit",
+      size: "2K" as const,
+    };
     const e = estimateCost(c, 1);
     expect(e.known).toBe(true);
     expect(e.perImage).toBeCloseTo(0.135 + 0.01, 3);
@@ -88,13 +95,18 @@ describe("fal.ai key verification", () => {
       KEY,
       vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
         expect(init?.method).toBe("POST");
-        return new Response(JSON.stringify({ detail: [{ msg: "field required" }] }), { status: 422 });
+        return new Response(JSON.stringify({ detail: [{ msg: "field required" }] }), {
+          status: 422,
+        });
       }) as unknown as typeof fetch,
     );
     expect((await good.verify()).ok).toBe(true);
     const bad = new FalClient(
       KEY,
-      vi.fn(async () => new Response(JSON.stringify({ detail: "Authentication is required" }), { status: 401 })) as unknown as typeof fetch,
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: "Authentication is required" }), { status: 401 }),
+      ) as unknown as typeof fetch,
     );
     expect((await bad.verify()).ok).toBe(false);
   });

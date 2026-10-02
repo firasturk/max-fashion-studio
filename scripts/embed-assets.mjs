@@ -33,7 +33,10 @@ function walk(dir, out = []) {
 const files = {};
 for (const file of walk(dist)) {
   const path = "/" + relative(dist, file).split("\\").join("/");
-  files[path] = { type: types[extname(file)] ?? "application/octet-stream", data: readFileSync(file).toString("base64") };
+  files[path] = {
+    type: types[extname(file)] ?? "application/octet-stream",
+    data: readFileSync(file).toString("base64"),
+  };
 }
 const size = Object.values(files).reduce((n, f) => n + f.data.length, 0);
 writeFileSync(
@@ -48,4 +51,6 @@ const cfg = JSON.parse(jsonc);
 delete cfg.assets;
 delete cfg.$schema;
 writeFileSync(join(root, "wrangler.deploy.json"), JSON.stringify(cfg, null, 2) + "\n");
-console.log(`[embed] ${Object.keys(files).length} files, ${(size / 1024).toFixed(0)} KB base64 -> server/generated/assets.ts`);
+console.log(
+  `[embed] ${Object.keys(files).length} files, ${(size / 1024).toFixed(0)} KB base64 -> server/generated/assets.ts`,
+);

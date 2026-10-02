@@ -20,10 +20,15 @@ export function serveStatic(pathname: string): Response | null {
     cache.set(hit, body);
   }
   const immutable = hit.startsWith("/assets/");
+  const media = /\.(png|jpe?g|webp|svg|ico|woff2)$/.test(hit);
   return new Response(body, {
     headers: {
       "Content-Type": ASSETS[hit].type,
-      "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+      "Cache-Control": immutable
+        ? "public, max-age=31536000, immutable"
+        : media
+          ? "public, max-age=86400"
+          : "no-cache",
       "X-Content-Type-Options": "nosniff",
     },
   });

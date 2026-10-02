@@ -46,7 +46,13 @@ export default function AuthScreen({
         {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
       </button>
       <form className="auth-card" onSubmit={submit}>
-        <img className="max-logo" src={theme === "dark" ? "/logo-mark.png" : "/logo-mark-dark.png"} alt="Max" width={108} height={36} />
+        <img
+          className="max-logo"
+          src={theme === "dark" ? "/logo-mark.png" : "/logo-mark-dark.png"}
+          alt="Max"
+          width={108}
+          height={36}
+        />
         <h1>{mode === "login" ? "Sign in to Image Studio" : "Create your studio account"}</h1>
         <p className="quality-note">Private workspace for the Max Fashion creative team.</p>
         {mode === "register" && (

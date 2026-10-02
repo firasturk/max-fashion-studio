@@ -46,7 +46,7 @@ export function falSize(aspectRatio: string, size: string): { width: number; hei
   if (!w || !h || w === h) return { width: long, height: long };
   const ratio = w / h;
   const width = ratio < 1 ? Math.round((long * ratio) / 16) * 16 : long;
-  const height = ratio < 1 ? long : Math.round((long / ratio) / 16) * 16;
+  const height = ratio < 1 ? long : Math.round(long / ratio / 16) * 16;
   return { width, height };
 }
 

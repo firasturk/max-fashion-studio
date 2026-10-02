@@ -23,7 +23,10 @@ export function isTransientEngineError(e: unknown): boolean {
   if (isFatalEngineError(e)) return false;
   if (e instanceof StudioError) return /\(5\d\d\)/.test(e.message);
   if (e instanceof Error)
-    return /TimeoutError|AbortError/.test(e.name) || /fetch failed|network|socket|ECONNRESET/i.test(e.message);
+    return (
+      /TimeoutError|AbortError/.test(e.name) ||
+      /fetch failed|network|socket|ECONNRESET/i.test(e.message)
+    );
   return false;
 }
 

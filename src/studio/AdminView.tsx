@@ -190,14 +190,7 @@ export default function AdminView({ me }: { me: string }) {
         </div>
         <div className="hero-admin">
           {hero ? (
-            <video
-              key={hero}
-              className="hero-preview"
-                            autoPlay
-              muted
-              loop
-              playsInline
-            >
+            <video key={hero} className="hero-preview" autoPlay muted loop playsInline>
               <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
               <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />
             </video>
@@ -209,7 +202,11 @@ export default function AdminView({ me }: { me: string }) {
           )}
           <div className="footer-actions">
             <label className="secondary">
-              {heroBusy ? <LoaderCircle className="spinning" size={16} /> : <Clapperboard size={16} />}
+              {heroBusy ? (
+                <LoaderCircle className="spinning" size={16} />
+              ) : (
+                <Clapperboard size={16} />
+              )}
               {hero ? "Replace video" : "Upload video"}
               <input
                 type="file"
@@ -223,7 +220,11 @@ export default function AdminView({ me }: { me: string }) {
               />
             </label>
             {hero && (
-              <button className="text-button danger-text" onClick={() => void removeHero()} disabled={heroBusy}>
+              <button
+                className="text-button danger-text"
+                onClick={() => void removeHero()}
+                disabled={heroBusy}
+              >
                 <Trash2 size={14} /> Remove
               </button>
             )}

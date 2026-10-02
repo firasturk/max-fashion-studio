@@ -12,6 +12,7 @@
   "observability": { "enabled": true },
   "alias": {
     "@shared/config": "./shared/config.ts",
+    "@shared/config-schema": "./shared/config-schema.ts",
     "@shared/prompts": "./shared/prompts.ts",
     "@shared/naming": "./shared/naming.ts",
     "@shared/types": "./shared/types.ts",
@@ -19,7 +20,7 @@
     "@shared/pricing": "./shared/pricing.ts",
     "@shared/skills": "./shared/skills.ts",
     "@shared/zaid": "./shared/zaid.ts",
-    "@shared/safety": "./shared/safety.ts"
+    "@shared/safety": "./shared/safety.ts",
   },
   "triggers": { "crons": ["* * * * *"] },
   // Run near the US-hosted engines; Gemini refuses requests from some regions.

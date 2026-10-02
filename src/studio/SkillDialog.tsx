@@ -67,8 +67,7 @@ export default function SkillDialog({
   const [builtFromPhotos, setBuiltFromPhotos] = useState(false);
   const creating = !skill;
   // Editing the direction or library by hand switches the skill to manual text.
-  const textTouched =
-    !!skill && (form.goal !== skill.goal || form.library !== skill.library);
+  const textTouched = !!skill && (form.goal !== skill.goal || form.library !== skill.library);
 
   async function save() {
     setBusy(true);
@@ -137,7 +136,12 @@ export default function SkillDialog({
         `/api/studio/skills/${skill.id}/analyze`,
         { title: form.title || skill.title },
       );
-      set({ goal: r.goal, library: r.library, description: r.description || form.description, auto: true });
+      set({
+        goal: r.goal,
+        library: r.library,
+        description: r.description || form.description,
+        auto: true,
+      });
       setBuiltFromPhotos(true);
       toast.success("Direction and library written from the reference photos. Review, then Save.");
     } catch (e) {
@@ -212,14 +216,10 @@ export default function SkillDialog({
             <p className="prompt-tip">
               {form.auto && !textTouched
                 ? "Text is automatic: written from the reference photos and refreshed when they change. Editing the text below switches this skill to manual."
-                : "Text is manual: it stays as written here. Use \"Build from reference photos\" to rewrite it from the library and go back to automatic."}
+                : 'Text is manual: it stays as written here. Use "Build from reference photos" to rewrite it from the library and go back to automatic.'}
             </p>
             <div className="field-row">
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setShowText((v) => !v)}
-              >
+              <button type="button" className="text-button" onClick={() => setShowText((v) => !v)}>
                 {showText ? "Hide text" : "Show text"}
               </button>
               <button

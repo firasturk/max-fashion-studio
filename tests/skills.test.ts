@@ -72,9 +72,9 @@ describe("safe wording and framing", () => {
   });
   it("sanitises risky words before a prompt leaves the server", async () => {
     const { sanitizePrompt } = await import("../shared/safety");
-    expect(sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress")).toBe(
-      "A elegant pose with a calm expression and the shoulders in a fitted dress",
-    );
+    expect(
+      sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress"),
+    ).toBe("A elegant pose with a calm expression and the shoulders in a fitted dress");
     expect(sanitizePrompt("Child model, age 6, happy, natural child proportions")).toBe(
       "Child model, age 6, happy, natural child proportions",
     );

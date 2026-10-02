@@ -123,11 +123,23 @@ describe("unsupported parameters", () => {
 describe("transient engine errors", () => {
   it("classifies 5xx and network failures as transient, bad requests as not", async () => {
     const { isTransientEngineError, StudioError } = await import("../server/errors");
-    expect(isTransientEngineError(new StudioError("OpenAI request failed (520): error code: 520", 502))).toBe(true);
-    expect(isTransientEngineError(new StudioError("Google request failed (503): overloaded", 502))).toBe(true);
-    expect(isTransientEngineError(Object.assign(new Error("The operation timed out"), { name: "TimeoutError" }))).toBe(true);
+    expect(
+      isTransientEngineError(new StudioError("OpenAI request failed (520): error code: 520", 502)),
+    ).toBe(true);
+    expect(
+      isTransientEngineError(new StudioError("Google request failed (503): overloaded", 502)),
+    ).toBe(true);
+    expect(
+      isTransientEngineError(
+        Object.assign(new Error("The operation timed out"), { name: "TimeoutError" }),
+      ),
+    ).toBe(true);
     expect(isTransientEngineError(new TypeError("fetch failed"))).toBe(true);
-    expect(isTransientEngineError(new StudioError("OpenAI request failed (400): bad param", 502))).toBe(false);
-    expect(isTransientEngineError(new StudioError("OpenAI rate limit: slow down", 429, true))).toBe(false);
+    expect(
+      isTransientEngineError(new StudioError("OpenAI request failed (400): bad param", 502)),
+    ).toBe(false);
+    expect(isTransientEngineError(new StudioError("OpenAI rate limit: slow down", 429, true))).toBe(
+      false,
+    );
   });
 });

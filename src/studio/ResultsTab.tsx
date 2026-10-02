@@ -46,9 +46,9 @@ export default function ResultsTab({
 }) {
   const PAGE = 60;
   const [limit, setLimit] = useState(PAGE);
-  const [filter, setFilter] = useState<"all" | "review" | "ready" | "approved" | "failed" | "active">(
-    "all",
-  );
+  const [filter, setFilter] = useState<
+    "all" | "review" | "ready" | "approved" | "failed" | "active"
+  >("all");
   const byId = new Map(sources.map((s) => [s.id, s]));
   // Product sets (<id>_01, _02 ...) sit next to each other; a set of two or more gets a caption.
   const ordered = useMemo(() => {

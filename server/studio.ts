@@ -37,14 +37,8 @@ import {
   HERO_KEYS,
   heroStamp,
 } from "./settings";
-import {
-  MODES,
-  cardsPerSource,
-  configSchema,
-  createsTasks,
-  type Config,
-  validateConfig,
-} from "@shared/config";
+import { MODES, cardsPerSource, createsTasks, type Config, validateConfig } from "@shared/config";
+import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
 import type { Batch, ModeOverride, Preset, Source, Task, User } from "@shared/types";
@@ -121,7 +115,8 @@ studioRoutes.get("/state", async (c) => {
     user.id,
   );
   const thumbsByBatch = new Map<string, string[]>();
-  for (const r of thumbRows) thumbsByBatch.set(r.batch, [...(thumbsByBatch.get(r.batch) ?? []), r.id]);
+  for (const r of thumbRows)
+    thumbsByBatch.set(r.batch, [...(thumbsByBatch.get(r.batch) ?? []), r.id]);
   for (const b of batches) b.thumbs = thumbsByBatch.get(b.id) ?? [];
   const engineKey = await resolveEngineKey(c.env);
   const adminSettings = await readAdminSettings(c.env);
@@ -253,7 +248,9 @@ studioRoutes.post("/direction", async (c) => {
 });
 
 /** Team-managed skills: list, create or edit, delete (a built-in is hidden rather than removed). */
-studioRoutes.get("/skills", async (c) => c.json({ skills: await listSkills(c.env, c.get("user").id) }));
+studioRoutes.get("/skills", async (c) =>
+  c.json({ skills: await listSkills(c.env, c.get("user").id) }),
+);
 
 studioRoutes.post("/skills/order", async (c) => {
   const { ids } = await body(c, z.object({ ids: z.array(z.string().max(60)).max(200) }));
@@ -482,7 +479,9 @@ studioRoutes.get("/hero", async (c) => {
   if (start >= size || start > end) {
     return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
   }
-  const obj = await c.env.BUCKET.get(HERO_KEY, { range: { offset: start, length: end - start + 1 } });
+  const obj = await c.env.BUCKET.get(HERO_KEY, {
+    range: { offset: start, length: end - start + 1 },
+  });
   if (!obj) throw new StudioError("No hero video.", 404);
   return new Response(obj.body, {
     status: 206,
@@ -957,7 +956,10 @@ studioRoutes.post("/start", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
+  await advanceBatch(c.env, b.id, {
+    background: (p) => c.executionCtx.waitUntil(p),
+    deferSync: true,
+  });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -1000,7 +1002,10 @@ studioRoutes.post("/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
+  await advanceBatch(c.env, b.id, {
+    background: (p) => c.executionCtx.waitUntil(p),
+    deferSync: true,
+  });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -1025,7 +1030,10 @@ studioRoutes.post("/revise", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
+  await advanceBatch(c.env, b.id, {
+    background: (p) => c.executionCtx.waitUntil(p),
+    deferSync: true,
+  });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
@@ -1109,6 +1117,9 @@ studioRoutes.post("/task/retry", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true });
+  await advanceBatch(c.env, b.id, {
+    background: (p) => c.executionCtx.waitUntil(p),
+    deferSync: true,
+  });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });

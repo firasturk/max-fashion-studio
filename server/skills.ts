@@ -61,7 +61,12 @@ export async function saveSkillsOrder(env: Env, ids: string[]): Promise<void> {
   await setSetting(env, ORDER_SETTING, JSON.stringify(ids.slice(0, 200)));
 }
 
-export async function setFavourite(env: Env, userId: string, id: string, on: boolean): Promise<void> {
+export async function setFavourite(
+  env: Env,
+  userId: string,
+  id: string,
+  on: boolean,
+): Promise<void> {
   const favs = new Set(await readIds(env, favSetting(userId)));
   if (on) favs.add(id);
   else favs.delete(id);
@@ -99,7 +104,8 @@ async function listSkillsRaw(env: Env): Promise<SkillInfo[]> {
     if (row?.hidden) continue;
     out.push(row ? rowToInfo(row, true) : builtInInfo(s));
   }
-  for (const r of rows) if (!r.hidden && !SKILLS.some((s) => s.id === r.id)) out.push(rowToInfo(r, false));
+  for (const r of rows)
+    if (!r.hidden && !SKILLS.some((s) => s.id === r.id)) out.push(rowToInfo(r, false));
   return out;
 }
 

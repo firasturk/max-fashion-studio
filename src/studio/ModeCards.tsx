@@ -118,7 +118,9 @@ export default function ModeCards({
                           e.stopPropagation();
                           void save({ id: m.id, hidden: !hidden });
                         }}
-                        onKeyDown={(e) => e.key === "Enter" && void save({ id: m.id, hidden: !hidden })}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && void save({ id: m.id, hidden: !hidden })
+                        }
                       >
                         {hidden ? <Eye size={13} /> : <EyeOff size={13} />}
                       </span>

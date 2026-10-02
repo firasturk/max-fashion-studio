@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 export const MODES = ["1", "2", "3", "4", "5", "6", "7"] as const;
 export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
@@ -7,37 +5,43 @@ export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
 export const SIZES = ["1K", "2K", "4K"] as const;
 export const OUTPUT_FORMATS = ["png", "jpg", "webp"] as const;
 export const MAX_COUNT = 6;
+export type Mode = (typeof MODES)[number];
+export type Market = (typeof MARKETS)[number];
+export type InputType = (typeof INPUT_TYPES)[number];
+export type Ratio = (typeof RATIOS)[number];
+export type Size = (typeof SIZES)[number];
+export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
-export const configSchema = z.object({
-  mode: z.enum(MODES),
+/** Batch configuration. Validated on the server by configSchema in config-schema.ts; kept zod-free here so the client bundle stays small. */
+export interface Config {
+  mode: Mode;
   /** Kept optional so batches saved before the category picker was removed still load. */
-  category: z.string().max(80).optional(),
-  input: z.enum(INPUT_TYPES),
-  prompt: z.string().max(20000),
-  ratio: z.enum(RATIOS),
-  size: z.enum(SIZES),
+  category?: string;
+  input: InputType;
+  prompt: string;
+  ratio: Ratio;
+  size: Size;
   /** Engine model slug chosen for this batch; empty means the server default. */
-  model: z.string().max(120).optional(),
+  model?: string;
   /** Images per original for modes 2-4. Mode 1 always produces six. */
-  count: z.number().int().min(1).max(MAX_COUNT).default(1),
+  count: number;
   /** Export format for the ZIP; PNG keeps the engine bytes, JPG/WebP are converted in the browser at export. */
-  output: z.enum(OUTPUT_FORMATS).default("png"),
-  outputQuality: z.number().int().min(50).max(100).default(90),
+  output: OutputFormat;
+  outputQuality: number;
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
-  economy: z.boolean().default(false),
+  economy: boolean;
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
-  colors: z.string().max(400).default("pure white, warm beige, light grey"),
+  colors: string;
   /** Skill workflow: which ready-made prompt-builder skill writes the per-image prompt. */
-  skill: z.string().max(60).default("editorial"),
+  skill: string;
   /** Skill workflow: look of a generated face when the reference face is not visible. */
-  market: z.enum(MARKETS).default("auto"),
+  market: Market;
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
-  backdrop: z.string().max(1000).default("warm beige seamless paper backdrop"),
-  identity: z.string().max(160).optional(),
-  modelDescription: z.string().max(4000),
-  center: z.boolean(),
-});
-export type Config = z.infer<typeof configSchema>;
+  backdrop: string;
+  identity?: string;
+  modelDescription: string;
+  center: boolean;
+}
 
 export const FABRIC_CARD = 6;
 export const MODE1_CARDS = 6;

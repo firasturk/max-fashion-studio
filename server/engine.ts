@@ -196,7 +196,12 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
       // still hold the image, so the task goes back to processing and is fetched again.
       if (now() - task.updated < FINALIZE_TIMEOUT_MS) continue;
       if (!task.request_id || task.request_id.startsWith("sync:"))
-        await failTask(env, task, "Saving the result was interrupted. Retry this image.", task.output);
+        await failTask(
+          env,
+          task,
+          "Saving the result was interrupted. Retry this image.",
+          task.output,
+        );
       else
         await run(
           env.DB,
@@ -512,7 +517,11 @@ async function submitNext(
   if (sync && deferSync) return;
   if (fal) {
     if (!(await resolveFalKey(env)).key) {
-      await pauseBatch(env, batch.id, "fal.ai is not connected. Add the API key in Connection and resume.");
+      await pauseBatch(
+        env,
+        batch.id,
+        "fal.ai is not connected. Add the API key in Connection and resume.",
+      );
       return;
     }
   } else if (openai) {
@@ -1194,7 +1203,13 @@ async function setAwareQueue(
   queued: (TaskRow & { source_name: string })[],
   limit: number,
 ): Promise<TaskRow[]> {
-  const rows = await all<{ id: string; status: string; output: string | null; card: number; name: string }>(
+  const rows = await all<{
+    id: string;
+    status: string;
+    output: string | null;
+    card: number;
+    name: string;
+  }>(
     env.DB,
     "SELECT t.id, t.status, t.output, t.card, s.name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? ORDER BY s.name, t.card",
     batch.id,
@@ -1210,7 +1225,9 @@ async function setAwareQueue(
     const k = `${productKey(t.source_name)}#${t.card}`;
     const g = groups.get(k) ?? [];
     if (g.length > 1) {
-      const leaderDone = g.some((r) => !!r.output && !["processing", "finalizing", "queued"].includes(r.status));
+      const leaderDone = g.some(
+        (r) => !!r.output && !["processing", "finalizing", "queued"].includes(r.status),
+      );
       const inFlight = g.some((r) => ["processing", "finalizing"].includes(r.status));
       const isFirst = g[0]?.id === t.id;
       // One at a time per set until the leader exists; then the rest may run in parallel.

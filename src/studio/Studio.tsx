@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Download,
@@ -48,9 +48,9 @@ import type {
   Task,
   User,
 } from "@shared/types";
-import AdminView from "./AdminView";
+const AdminView = lazy(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
-import BatchesView from "./BatchesView";
+const BatchesView = lazy(() => import("./BatchesView"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
@@ -58,8 +58,9 @@ import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
-import ReviewDialog from "./ReviewDialog";
-import ConnectionDialog, { type EngineInfo } from "./ConnectionDialog";
+const ReviewDialog = lazy(() => import("./ReviewDialog"));
+import type { EngineInfo } from "./ConnectionDialog";
+const ConnectionDialog = lazy(() => import("./ConnectionDialog"));
 
 export default function Studio({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
@@ -135,7 +136,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const list = (await get<{ skills: SkillInfo[] }>("/api/studio/skills")).skills;
       setSkills(list);
       // A hidden or deleted skill must not stay selected for new batches.
-      setConfig((c) => (list.length && !list.some((s) => s.id === c.skill) ? { ...c, skill: list[0].id } : c));
+      setConfig((c) =>
+        list.length && !list.some((s) => s.id === c.skill) ? { ...c, skill: list[0].id } : c,
+      );
     } catch {
       setSkills([]);
     }
@@ -557,7 +560,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 <p>Invite code, spend confirmation, retention, notifications and member access.</p>
               </div>
             </div>
-            <AdminView me={user.id} />
+            <Suspense fallback={null}>
+              <AdminView me={user.id} />
+            </Suspense>
           </>
         ) : page === "batches" ? (
           <>
@@ -583,14 +588,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               </button>
             </div>
             <section className="batches-page">
-              <BatchesView
-                batches={batches}
-                skills={skills}
-                modes={applyModeOverrides(modeOverrides)}
-                busyId={openingId}
-                onOpen={(id) => void openBatch(id)}
-                onDelete={(b) => void deleteBatchById(b)}
-              />
+              <Suspense fallback={null}>
+                <BatchesView
+                  batches={batches}
+                  skills={skills}
+                  modes={applyModeOverrides(modeOverrides)}
+                  busyId={openingId}
+                  onOpen={(id) => void openBatch(id)}
+                  onDelete={(b) => void deleteBatchById(b)}
+                />
+              </Suspense>
             </section>
           </>
         ) : (
@@ -915,30 +922,32 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </footer>
       </main>
 
-      <ConnectionDialog
-        open={connection}
-        engine={engine}
-        onClose={() => setConnection(false)}
-        onChanged={async () => {
-          await loadState();
-          await loadModels();
-        }}
-      />
-      <ReviewDialog
-        task={selected}
-        source={selectedSource}
-        busy={acting}
-        originalUrl={selected ? sourceUrl(selected.source, "original") : ""}
-        resultUrl={selected ? outputUrl(selected) : ""}
-        position={
-          selectedIndex >= 0 ? { index: selectedIndex, total: reviewable.length } : undefined
-        }
-        onClose={() => setSelected(null)}
-        onRevise={revise}
-        onApprove={approve}
-        onPrev={goPrev}
-        onNext={goNext}
-      />
+      <Suspense fallback={null}>
+        <ConnectionDialog
+          open={connection}
+          engine={engine}
+          onClose={() => setConnection(false)}
+          onChanged={async () => {
+            await loadState();
+            await loadModels();
+          }}
+        />
+        <ReviewDialog
+          task={selected}
+          source={selectedSource}
+          busy={acting}
+          originalUrl={selected ? sourceUrl(selected.source, "original") : ""}
+          resultUrl={selected ? outputUrl(selected) : ""}
+          position={
+            selectedIndex >= 0 ? { index: selectedIndex, total: reviewable.length } : undefined
+          }
+          onClose={() => setSelected(null)}
+          onRevise={revise}
+          onApprove={approve}
+          onPrev={goPrev}
+          onNext={goNext}
+        />
+      </Suspense>
     </div>
   );
 }

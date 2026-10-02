@@ -214,7 +214,9 @@ export default function ReviewDialog({
                       Face: {qa.sameFace ? "same" : "different"}
                     </span>
                   )}
-                {task && task.cost > 0 && <span className="qa-chip">≈ ${task.cost.toFixed(2)}</span>}
+                {task && task.cost > 0 && (
+                  <span className="qa-chip">≈ ${task.cost.toFixed(2)}</span>
+                )}
                 {qa.notes && <span className="qa-notes-inline">{qa.notes}</span>}
               </div>
             )}

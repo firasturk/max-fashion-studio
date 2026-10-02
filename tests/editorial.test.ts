@@ -156,7 +156,12 @@ describe("product sets", () => {
       skill: "kids",
       scene: "Overcast meadow with a timber fence.",
       reference: "r1",
-      set: { scene: "Overcast meadow with a timber fence.", light: "soft overcast", pose: "sitting on the fence", hasImage: true },
+      set: {
+        scene: "Overcast meadow with a timber fence.",
+        light: "soft overcast",
+        pose: "sitting on the fence",
+        hasImage: true,
+      },
     });
     expect(text).toContain("SAME PRODUCT SET");
     expect(text).toContain('Scene to reuse: "Overcast meadow with a timber fence."');

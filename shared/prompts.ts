@@ -70,17 +70,19 @@ export function sceneFor(_c: Config, card: number): string {
  */
 export function centeringApplies(c: Config, card: number): boolean {
   return (
-    c.center && card !== FABRIC_CARD && c.mode !== "4" && c.mode !== "5" && c.mode !== "6" && c.mode !== "7"
+    c.center &&
+    card !== FABRIC_CARD &&
+    c.mode !== "4" &&
+    c.mode !== "5" &&
+    c.mode !== "6" &&
+    c.mode !== "7"
   );
 }
 
 /** Build the full generation prompt for one card. Deterministic so it can be stored and audited. */
 export function buildPrompt(c: Config, card: number, edit = "", images: PromptImages = {}): string {
   const fidelity = `Product fidelity: preserve ${FIDELITY}. Preserve colour, seams, logo, buttons, silhouette, hem and fit exactly. No added text or watermarks. The original photo is the source of truth.`;
-  const parts: string[] = [
-    MODE_PROMPTS[c.mode],
-    `Source type: ${c.input}.`,
-  ];
+  const parts: string[] = [MODE_PROMPTS[c.mode], `Source type: ${c.input}.`];
 
   if (c.mode === "1") {
     if (card !== FABRIC_CARD) parts.push(`Model direction: ${c.modelDescription}.`);

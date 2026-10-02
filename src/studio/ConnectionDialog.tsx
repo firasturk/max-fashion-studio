@@ -105,7 +105,9 @@ export default function ConnectionDialog({
   }
 
   async function removeFal() {
-    if (!window.confirm("Remove the saved fal.ai key? Seedream models stop until a new key is added."))
+    if (
+      !window.confirm("Remove the saved fal.ai key? Seedream models stop until a new key is added.")
+    )
       return;
     try {
       await del("/api/studio/engine/fal-key");
@@ -229,262 +231,269 @@ export default function ConnectionDialog({
         </div>
         {vendor === "higgsfield" && (
           <>
-        {engine.configured ? (
-          <div className="success-note">
-            <Check size={19} />
-            {engine.source === "secret"
-              ? "A Higgsfield key is configured as a server secret."
-              : "A Higgsfield key is saved on the server."}
-          </div>
-        ) : (
-          <div className="error-banner">
-            <TriangleAlert size={18} />
-            No Higgsfield API key yet. Paste one below.
-          </div>
-        )}
+            {engine.configured ? (
+              <div className="success-note">
+                <Check size={19} />
+                {engine.source === "secret"
+                  ? "A Higgsfield key is configured as a server secret."
+                  : "A Higgsfield key is saved on the server."}
+              </div>
+            ) : (
+              <div className="error-banner">
+                <TriangleAlert size={18} />
+                No Higgsfield API key yet. Paste one below.
+              </div>
+            )}
 
-        {engine.source !== "secret" && (
-          <>
-            <label htmlFor="engine-key" className="field-label">
-              Higgsfield API key
-            </label>
-            <input
-              id="engine-key"
-              type="password"
-              autoComplete="off"
-              placeholder="KEY_ID:KEY_SECRET"
-              value={key}
-              onChange={(e) => setKey(e.target.value.trim())}
-            />
-            <p className="quality-note">
-              Create it at{" "}
-              <a
-                href="https://cloud.higgsfield.ai"
-                target="_blank"
-                rel="noreferrer"
-                className="text-link"
-              >
-                cloud.higgsfield.ai
-              </a>{" "}
-              and paste it as the ID, a colon, then the secret. It is verified before it is saved.
-            </p>
-            <div className="footer-actions">
-              <button className="primary" onClick={() => void save()} disabled={saving || !key}>
-                {saving ? <LoaderCircle className="spinning" size={17} /> : <KeyRound size={17} />}
-                {engine.configured ? "Replace key" : "Save key"}
-              </button>
-              {engine.source === "stored" && (
-                <button
-                  className="secondary danger"
-                  onClick={() => void remove()}
-                  aria-label="Remove key"
-                >
-                  <Trash2 size={17} />
-                </button>
-              )}
-            </div>
-          </>
-        )}
+            {engine.source !== "secret" && (
+              <>
+                <label htmlFor="engine-key" className="field-label">
+                  Higgsfield API key
+                </label>
+                <input
+                  id="engine-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="KEY_ID:KEY_SECRET"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value.trim())}
+                />
+                <p className="quality-note">
+                  Create it at{" "}
+                  <a
+                    href="https://cloud.higgsfield.ai"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-link"
+                  >
+                    cloud.higgsfield.ai
+                  </a>{" "}
+                  and paste it as the ID, a colon, then the secret. It is verified before it is
+                  saved.
+                </p>
+                <div className="footer-actions">
+                  <button className="primary" onClick={() => void save()} disabled={saving || !key}>
+                    {saving ? (
+                      <LoaderCircle className="spinning" size={17} />
+                    ) : (
+                      <KeyRound size={17} />
+                    )}
+                    {engine.configured ? "Replace key" : "Save key"}
+                  </button>
+                  {engine.source === "stored" && (
+                    <button
+                      className="secondary danger"
+                      onClick={() => void remove()}
+                      aria-label="Remove key"
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
-        <button
-          className="secondary"
-          onClick={() => void verify()}
-          disabled={checking || !engine.configured}
-        >
-          {checking ? <LoaderCircle className="spinning" size={17} /> : <Check size={17} />}
-          Test connection
-        </button>
-        {result && <p className={result.ok ? "success-note" : "image-error"}>{result.message}</p>}
-
+            <button
+              className="secondary"
+              onClick={() => void verify()}
+              disabled={checking || !engine.configured}
+            >
+              {checking ? <LoaderCircle className="spinning" size={17} /> : <Check size={17} />}
+              Test connection
+            </button>
+            {result && (
+              <p className={result.ok ? "success-note" : "image-error"}>{result.message}</p>
+            )}
           </>
         )}
         {vendor === "google" && (
           <>
-        <div className="qa-heading" style={{ marginTop: 12 }}>
-          <KeyRound size={18} />
-          <strong>Google (Nano Banana Pro)</strong>
-        </div>
-        {engine.google !== "none" ? (
-          <div className="success-note">
-            <Check size={19} />
-            {engine.google === "secret"
-              ? "A Google key is configured as a server secret."
-              : "A Google key is saved on the server."}{" "}
-            It also powers the automatic review.
-          </div>
-        ) : (
-          <p className="quality-note">
-            Add a Google AI Studio key to use Nano Banana Pro directly. Create it at{" "}
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-link"
-            >
-              aistudio.google.com/apikey
-            </a>{" "}
-            on a project with billing enabled.
-          </p>
-        )}
-        {engine.google !== "secret" && (
-          <div className="footer-actions">
-            <input
-              id="google-key"
-              type="password"
-              autoComplete="off"
-              placeholder="AIza..."
-              aria-label="Google API key"
-              value={googleKey}
-              onChange={(e) => setGoogleKey(e.target.value.trim())}
-            />
-            <button
-              className="primary"
-              onClick={() => void saveGoogle()}
-              disabled={savingGoogle || !googleKey}
-            >
-              {savingGoogle ? (
-                <LoaderCircle className="spinning" size={17} />
-              ) : (
-                <KeyRound size={17} />
-              )}
-              {engine.google === "stored" ? "Replace" : "Save"}
-            </button>
-            {engine.google === "stored" && (
-              <button
-                className="secondary danger"
-                onClick={() => void removeGoogle()}
-                aria-label="Remove Google key"
-              >
-                <Trash2 size={17} />
-              </button>
+            <div className="qa-heading" style={{ marginTop: 12 }}>
+              <KeyRound size={18} />
+              <strong>Google (Nano Banana Pro)</strong>
+            </div>
+            {engine.google !== "none" ? (
+              <div className="success-note">
+                <Check size={19} />
+                {engine.google === "secret"
+                  ? "A Google key is configured as a server secret."
+                  : "A Google key is saved on the server."}{" "}
+                It also powers the automatic review.
+              </div>
+            ) : (
+              <p className="quality-note">
+                Add a Google AI Studio key to use Nano Banana Pro directly. Create it at{" "}
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link"
+                >
+                  aistudio.google.com/apikey
+                </a>{" "}
+                on a project with billing enabled.
+              </p>
             )}
-          </div>
-        )}
-
+            {engine.google !== "secret" && (
+              <div className="footer-actions">
+                <input
+                  id="google-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="AIza..."
+                  aria-label="Google API key"
+                  value={googleKey}
+                  onChange={(e) => setGoogleKey(e.target.value.trim())}
+                />
+                <button
+                  className="primary"
+                  onClick={() => void saveGoogle()}
+                  disabled={savingGoogle || !googleKey}
+                >
+                  {savingGoogle ? (
+                    <LoaderCircle className="spinning" size={17} />
+                  ) : (
+                    <KeyRound size={17} />
+                  )}
+                  {engine.google === "stored" ? "Replace" : "Save"}
+                </button>
+                {engine.google === "stored" && (
+                  <button
+                    className="secondary danger"
+                    onClick={() => void removeGoogle()}
+                    aria-label="Remove Google key"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
         {vendor === "fal" && (
           <>
-        <div className="qa-heading" style={{ marginTop: 12 }}>
-          <KeyRound size={18} />
-          <strong>fal.ai (Seedream 5)</strong>
-        </div>
-        {engine.fal !== "none" ? (
-          <div className="success-note">
-            <Check size={19} />
-            {engine.fal === "secret"
-              ? "A fal.ai key is configured as a server secret."
-              : "A fal.ai key is saved on the server."}
-          </div>
-        ) : (
-          <p className="quality-note">
-            Add a fal.ai key to use Seedream 5.0 Pro and Lite. Create it at{" "}
-            <a
-              href="https://fal.ai/dashboard/keys"
-              target="_blank"
-              rel="noreferrer"
-              className="text-link"
-            >
-              fal.ai/dashboard/keys
-            </a>{" "}
-            and add credit under Billing.
-          </p>
-        )}
-        {engine.fal !== "secret" && (
-          <div className="footer-actions">
-            <input
-              id="fal-key"
-              type="password"
-              autoComplete="off"
-              placeholder="key_id:key_secret"
-              aria-label="fal.ai API key"
-              value={falKey}
-              onChange={(e) => setFalKey(e.target.value.trim())}
-            />
-            <button
-              className="primary"
-              onClick={() => void saveFal()}
-              disabled={savingFal || !falKey}
-            >
-              {savingFal ? <LoaderCircle className="spinning" size={17} /> : <KeyRound size={17} />}
-              {engine.fal === "stored" ? "Replace" : "Save"}
-            </button>
-            {engine.fal === "stored" && (
-              <button
-                className="secondary danger"
-                onClick={() => void removeFal()}
-                aria-label="Remove fal.ai key"
-              >
-                <Trash2 size={17} />
-              </button>
+            <div className="qa-heading" style={{ marginTop: 12 }}>
+              <KeyRound size={18} />
+              <strong>fal.ai (Seedream 5)</strong>
+            </div>
+            {engine.fal !== "none" ? (
+              <div className="success-note">
+                <Check size={19} />
+                {engine.fal === "secret"
+                  ? "A fal.ai key is configured as a server secret."
+                  : "A fal.ai key is saved on the server."}
+              </div>
+            ) : (
+              <p className="quality-note">
+                Add a fal.ai key to use Seedream 5.0 Pro and Lite. Create it at{" "}
+                <a
+                  href="https://fal.ai/dashboard/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link"
+                >
+                  fal.ai/dashboard/keys
+                </a>{" "}
+                and add credit under Billing.
+              </p>
             )}
-          </div>
-        )}
-
+            {engine.fal !== "secret" && (
+              <div className="footer-actions">
+                <input
+                  id="fal-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="key_id:key_secret"
+                  aria-label="fal.ai API key"
+                  value={falKey}
+                  onChange={(e) => setFalKey(e.target.value.trim())}
+                />
+                <button
+                  className="primary"
+                  onClick={() => void saveFal()}
+                  disabled={savingFal || !falKey}
+                >
+                  {savingFal ? (
+                    <LoaderCircle className="spinning" size={17} />
+                  ) : (
+                    <KeyRound size={17} />
+                  )}
+                  {engine.fal === "stored" ? "Replace" : "Save"}
+                </button>
+                {engine.fal === "stored" && (
+                  <button
+                    className="secondary danger"
+                    onClick={() => void removeFal()}
+                    aria-label="Remove fal.ai key"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
         {vendor === "openai" && (
           <>
-        <div className="qa-heading" style={{ marginTop: 12 }}>
-          <KeyRound size={18} />
-          <strong>OpenAI (GPT Image 2.5 Sunburst / Flare)</strong>
-        </div>
-        {engine.openai !== "none" ? (
-          <div className="success-note">
-            <Check size={19} />
-            {engine.openai === "secret"
-              ? "An OpenAI key is configured as a server secret."
-              : "An OpenAI key is saved on the server."}
-          </div>
-        ) : (
-          <p className="quality-note">
-            Add an OpenAI API key to use GPT Image 2.5 Sunburst. Create it at{" "}
-            <a
-              href="https://platform.openai.com/api-keys"
-              target="_blank"
-              rel="noreferrer"
-              className="text-link"
-            >
-              platform.openai.com/api-keys
-            </a>{" "}
-            with billing enabled.
-          </p>
-        )}
-        {engine.openai !== "secret" && (
-          <div className="footer-actions">
-            <input
-              id="openai-key"
-              type="password"
-              autoComplete="off"
-              placeholder="sk-..."
-              aria-label="OpenAI API key"
-              value={openaiKey}
-              onChange={(e) => setOpenaiKey(e.target.value.trim())}
-            />
-            <button
-              className="primary"
-              onClick={() => void saveOpenai()}
-              disabled={savingOpenai || !openaiKey}
-            >
-              {savingOpenai ? (
-                <LoaderCircle className="spinning" size={17} />
-              ) : (
-                <KeyRound size={17} />
-              )}
-              {engine.openai === "stored" ? "Replace" : "Save"}
-            </button>
-            {engine.openai === "stored" && (
-              <button
-                className="secondary danger"
-                onClick={() => void removeOpenai()}
-                aria-label="Remove OpenAI key"
-              >
-                <Trash2 size={17} />
-              </button>
+            <div className="qa-heading" style={{ marginTop: 12 }}>
+              <KeyRound size={18} />
+              <strong>OpenAI (GPT Image 2.5 Sunburst / Flare)</strong>
+            </div>
+            {engine.openai !== "none" ? (
+              <div className="success-note">
+                <Check size={19} />
+                {engine.openai === "secret"
+                  ? "An OpenAI key is configured as a server secret."
+                  : "An OpenAI key is saved on the server."}
+              </div>
+            ) : (
+              <p className="quality-note">
+                Add an OpenAI API key to use GPT Image 2.5 Sunburst. Create it at{" "}
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link"
+                >
+                  platform.openai.com/api-keys
+                </a>{" "}
+                with billing enabled.
+              </p>
             )}
-          </div>
-        )}
-
+            {engine.openai !== "secret" && (
+              <div className="footer-actions">
+                <input
+                  id="openai-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="sk-..."
+                  aria-label="OpenAI API key"
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value.trim())}
+                />
+                <button
+                  className="primary"
+                  onClick={() => void saveOpenai()}
+                  disabled={savingOpenai || !openaiKey}
+                >
+                  {savingOpenai ? (
+                    <LoaderCircle className="spinning" size={17} />
+                  ) : (
+                    <KeyRound size={17} />
+                  )}
+                  {engine.openai === "stored" ? "Replace" : "Save"}
+                </button>
+                {engine.openai === "stored" && (
+                  <button
+                    className="secondary danger"
+                    onClick={() => void removeOpenai()}
+                    aria-label="Remove OpenAI key"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
         <details className="prompt-details">

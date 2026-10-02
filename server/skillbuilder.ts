@@ -40,7 +40,10 @@ export async function buildSkillFromReferences(
   const google = (await resolveGoogleKey(env)).key;
   const openai = (await resolveOpenAIKey(env)).key;
   if (!google && !openai)
-    throw new StudioError("Building from references needs a Google or OpenAI key in Connection.", 428);
+    throw new StudioError(
+      "Building from references needs a Google or OpenAI key in Connection.",
+      428,
+    );
   const instruction = skillBuilderInstruction(title, images.length);
   let text: string;
   if (google) {
