@@ -7,11 +7,13 @@ import {
   KeyRound,
   LoaderCircle,
   LogOut,
+  Moon,
   Pause,
   Play,
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -24,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
+import { useTheme } from "@/theme";
 import { makeReference } from "@/lib/image";
 import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
@@ -80,6 +83,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [batchName, setBatchName] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
+  const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -526,6 +530,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             engine.fal !== "none"
               ? "Connected"
               : "Not connected"}
+          </button>
+          <button
+            className="theme-button"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <button className="user-button" onClick={() => void signOut()} title={user.email}>
             <LogOut size={15} /> {user.name}

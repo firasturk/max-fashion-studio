@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { KeyRound, LoaderCircle } from "lucide-react";
+import { KeyRound, LoaderCircle, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/theme";
 import { post } from "@/api";
 import type { User } from "@shared/types";
 
@@ -11,6 +12,7 @@ export default function AuthScreen({
   registrationOpen: boolean;
   onSignedIn: (user: User) => void;
 }) {
+  const [theme, toggleTheme] = useTheme();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", name: "", invite: "" });
@@ -36,8 +38,15 @@ export default function AuthScreen({
 
   return (
     <div className="auth-screen">
+      <button
+        className="theme-button auth-theme"
+        onClick={toggleTheme}
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
       <form className="auth-card" onSubmit={submit}>
-        <img className="max-logo" src="/logo-mark-dark.png" alt="Max" width={108} height={36} />
+        <img className="max-logo" src={theme === "dark" ? "/logo-mark.png" : "/logo-mark-dark.png"} alt="Max" width={108} height={36} />
         <h1>{mode === "login" ? "Sign in to Image Studio" : "Create your studio account"}</h1>
         <p className="quality-note">Private workspace for the Max Fashion creative team.</p>
         {mode === "register" && (
