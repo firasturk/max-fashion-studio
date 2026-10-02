@@ -15,6 +15,7 @@ export interface Env {
 }
 
 export function concurrency(env: Env): number {
-  const n = Number(env.MAX_CONCURRENT_GENERATIONS ?? 2);
-  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 8) : 2;
+  // Workers hold at most six outgoing connections open at once; more would just queue inside the isolate.
+  const n = Number(env.MAX_CONCURRENT_GENERATIONS ?? 6);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 6) : 6;
 }

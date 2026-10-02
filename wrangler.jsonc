@@ -38,6 +38,6 @@
   "vars": {
     "HIGGSFIELD_MODEL": "nano-banana-pro",
     "HIGGSFIELD_BASE_URL": "https://api.higgsfield.ai",
-    "MAX_CONCURRENT_GENERATIONS": "2",
+    "MAX_CONCURRENT_GENERATIONS": "6",
   },
 }

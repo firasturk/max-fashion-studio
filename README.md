@@ -45,7 +45,7 @@ Create the first account from the sign-in screen with the invite code from `.dev
 | `HIGGSFIELD_API_KEY`         | secret           | `KEY_ID:KEY_SECRET` from https://cloud.higgsfield.ai (Cloud API credits)                                          |
 | `HIGGSFIELD_MODEL`           | var              | Model slug on `api.higgsfield.ai` used for generation (default `nano-banana-pro`; verify on the model's API page) |
 | `HIGGSFIELD_BASE_URL`        | var              | `https://api.higgsfield.ai`                                                                                       |
-| `MAX_CONCURRENT_GENERATIONS` | var              | Parallel engine requests per batch (default 2)                                                                    |
+| `MAX_CONCURRENT_GENERATIONS` | var              | Parallel engine requests per batch (default 6, the Worker connection limit)                                                                    |
 | `SESSION_SECRET`             | secret           | Long random string that signs session cookies                                                                     |
 | `INVITE_CODE`                | secret           | Required to create an account; unset to close registration                                                        |
 | `GEMINI_API_KEY`             | secret, optional | Enables automated centering / product review                                                                      |
