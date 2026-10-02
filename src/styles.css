@@ -3259,10 +3259,6 @@ textarea:focus {
 .mode-card > .mode-tools .mode-tool:hover {
   background: var(--blue);
 }
-/* Keep the caption clear of the tools */
-.mode-card > span {
-  padding-right: 72px;
-}
 .mode-card > .mode-number {
   right: 54px;
 }
