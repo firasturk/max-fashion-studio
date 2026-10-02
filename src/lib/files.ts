@@ -1,3 +1,5 @@
+import { collapseContainer } from "@shared/paths";
+
 /** Collects image files from a drop event, walking dropped folders recursively. Returns files with relative paths. */
 export interface PickedFile {
   file: File;
@@ -56,10 +58,15 @@ export async function filesFromDrop(dt: DataTransfer): Promise<PickedFile[]> {
 }
 
 /** Files from an <input type=file>, keeping folder paths when the input had webkitdirectory. */
-export function filesFromInput(list: FileList | null): PickedFile[] {
-  if (!list) return [];
-  return Array.from(list).map((file) => ({
-    file,
-    path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
-  }));
+export function filesFromInput(list: FileList | null): {
+  files: PickedFile[];
+  root: string | null;
+} {
+  if (!list) return { files: [], root: null };
+  const files = Array.from(list);
+  const raw = files.map(
+    (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+  );
+  const { paths, root } = collapseContainer(raw);
+  return { files: files.map((file, i) => ({ file, path: paths[i] })), root };
 }

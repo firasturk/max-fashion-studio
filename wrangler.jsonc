@@ -21,6 +21,7 @@
     "@shared/skills": "./shared/skills.ts",
     "@shared/zaid": "./shared/zaid.ts",
     "@shared/safety": "./shared/safety.ts",
+    "@shared/paths": "./shared/paths.ts",
   },
   "triggers": { "crons": ["* * * * *"] },
   // Run near the US-hosted engines; Gemini refuses requests from some regions.

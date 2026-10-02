@@ -33,7 +33,7 @@ export default function SourcesTab({
   uploading: boolean;
   batchName: string;
   sourceUrl: (id: string) => string;
-  onFiles: (files: PickedFile[]) => void;
+  onFiles: (files: PickedFile[], root?: string | null) => void;
   onRemove: (url: string) => void;
   onRole: (url: string, role: "lead" | "supporting") => void;
   onBatchName: (name: string) => void;
@@ -69,7 +69,7 @@ export default function SourcesTab({
             multiple
             hidden
             onChange={(e) => {
-              onFiles(filesFromInput(e.target.files));
+              onFiles(filesFromInput(e.target.files).files);
               e.target.value = "";
             }}
           />
@@ -82,7 +82,8 @@ export default function SourcesTab({
             directory=""
             multiple
             onChange={(e) => {
-              onFiles(filesFromInput(e.target.files));
+              const { files, root } = filesFromInput(e.target.files);
+              onFiles(files, root);
               e.target.value = "";
             }}
           />
@@ -104,8 +105,8 @@ export default function SourcesTab({
                 : "Drop your collection or a whole folder here"}
             </h3>
             <p>
-              Folders are read recursively and their names are kept in the export. Up to 12 MB per
-              image.
+              Folder names are kept in the export. To add many product folders at once, pick the
+              folder that contains them, or drag them all in together. Up to 12 MB per image.
             </p>
             <div className="footer-actions">
               <button
@@ -120,7 +121,7 @@ export default function SourcesTab({
                 disabled={uploading}
                 onClick={() => folderInput.current?.click()}
               >
-                <FolderOpen size={16} /> Upload folder
+                <FolderOpen size={16} /> Upload folders
               </button>
             </div>
           </div>

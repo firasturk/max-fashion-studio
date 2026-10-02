@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
 import { useTheme } from "@/theme";
 import { makeReference } from "@/lib/image";
+import { folderCount } from "@shared/paths";
 import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
   DEFAULT_PROMPT,
@@ -241,7 +242,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const queued = tasks.filter((t) => t.status === "queued");
   const completed = tasks.filter((t) => !!t.output).length;
 
-  function addFiles(picked: PickedFile[]) {
+  function addFiles(picked: PickedFile[], root?: string | null) {
     const names = new Set(pending.map((p) => stemKey(p.name)));
     const additions: Pending[] = [];
     let rejected = 0;
@@ -256,6 +257,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       additions.push({ file, name, url: URL.createObjectURL(file), role: "lead" });
     }
     setPending((p) => [...p, ...additions]);
+    const folders = folderCount(additions.map((a) => a.name));
+    if (folders >= 2) {
+      toast.success(`${folders} folders · ${additions.length} images added.`);
+      if (root) setBatchName((n) => n || root);
+    }
     if (rejected)
       toast.warning(
         `${rejected} files skipped: unsupported, over 12 MB, or duplicate output name.`,
