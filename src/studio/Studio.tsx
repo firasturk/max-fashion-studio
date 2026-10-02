@@ -532,7 +532,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   const selectedSource = selected ? (sources.find((s) => s.id === selected.source) ?? null) : null;
   const running = batch?.state === "running";
-  const inflight = tasks.filter((t) => t.status === "processing" || t.status === "finalizing");
+  const inflight = tasks.filter((t) => t.status === "processing");
   const settled = tasks.filter(
     (t) => t.status === "ready" || t.status === "approved" || t.status === "failed",
   );
