@@ -532,11 +532,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   const selectedSource = selected ? (sources.find((s) => s.id === selected.source) ?? null) : null;
   const running = batch?.state === "running";
+  const inflight = tasks.filter((t) => t.status === "processing" || t.status === "finalizing");
+  const settled = tasks.filter(
+    (t) => t.status === "ready" || t.status === "approved" || t.status === "failed",
+  );
   const costTag = queueCost.images && queueCost.known ? ` · ≈ ${formatUsd(queueCost.total)}` : "";
+  // A batch that already ran and stopped (paused on an error, or idle with work left) resumes rather than starts.
+  const resumes = !!batch && batch.state === "paused" && queued.length > 0;
   const startLabel =
     (failed.length && !queued.length
       ? `Retry ${failed.length}`
-      : `Generate ${queued.length || ""}`.trim()) + costTag;
+      : resumes
+        ? `Resume ${queued.length}`
+        : `Generate ${queued.length || ""}`.trim()) + costTag;
 
   return (
     <div className={`studio ${settingsOpen ? "settings-open" : ""}`}>
@@ -878,13 +886,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                     <span>
                       {running
                         ? "Generation continues on the server even if you close this tab."
-                        : batch
-                          ? queueCost.images && queueCost.known
-                            ? `Estimate at ${formatUsd(queueCost.perImage)} per image on ${effectiveConfig.model}${queueCost.economy ? " (economy)" : ""}. Retries and revisions cost extra.`
-                            : "Originals and results are saved."
-                          : pendingCost.images && pendingCost.known
-                            ? `Estimate at ${formatUsd(pendingCost.perImage)} per image on ${effectiveConfig.model}${pendingCost.economy ? " (economy)" : ""}. Originals will be saved before generation.`
-                            : "Originals will be saved before generation."}
+                        : batch?.state === "paused" && batch.last_error
+                          ? `Paused after an error: ${batch.last_error}`
+                          : batch
+                            ? queueCost.images && queueCost.known
+                              ? `Estimate at ${formatUsd(queueCost.perImage)} per image on ${effectiveConfig.model}${queueCost.economy ? " (economy)" : ""}. Retries and revisions cost extra.`
+                              : "Originals and results are saved."
+                            : pendingCost.images && pendingCost.known
+                              ? `Estimate at ${formatUsd(pendingCost.perImage)} per image on ${effectiveConfig.model}${pendingCost.economy ? " (economy)" : ""}. Originals will be saved before generation.`
+                              : "Originals will be saved before generation."}
                     </span>
                   </div>
                   <div className="footer-actions">
@@ -904,14 +914,21 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                     ) : (
                       <>
                         {running ? (
-                          <button
-                            className="secondary"
-                            onClick={() => void runAction("pause")}
-                            disabled={acting}
-                          >
-                            <Pause size={17} />
-                            Pause
-                          </button>
+                          <>
+                            <button className="primary" disabled aria-live="polite">
+                              <LoaderCircle className="spinning" size={17} />
+                              {`Generating · ${settled.length} of ${tasks.length}`}
+                              {inflight.length ? ` · ${inflight.length} in progress` : ""}
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => void runAction("pause")}
+                              disabled={acting}
+                            >
+                              <Pause size={17} />
+                              Pause
+                            </button>
+                          </>
                         ) : (
                           <button
                             className="primary"
