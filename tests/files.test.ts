@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseContainer, folderCount } from "../shared/paths";
+import { collapseContainer, folderCount, isCampaignShot } from "../shared/paths";
 
 describe("collapseContainer", () => {
   it("drops a container folder that only holds product folders", () => {
@@ -26,5 +26,30 @@ describe("collapseContainer", () => {
   it("keeps a product folder that has only one nested subfolder", () => {
     const r = collapseContainer(["169178472/front/1.jpg", "169178472/front/2.jpg"]);
     expect(r.root).toBeNull();
+  });
+});
+
+describe("isCampaignShot", () => {
+  it("keeps the first two shots in every numbering style", () => {
+    for (const n of [
+      "a/169178472_01.jpg",
+      "169178472_02.JPG",
+      "x_1.png",
+      "x_2.webp",
+      "x_001.jpg",
+      "x_002.jpeg",
+    ])
+      expect(isCampaignShot(n)).toBe(true);
+  });
+  it("drops later shots and unnumbered files", () => {
+    for (const n of [
+      "a/169178472_03.jpg",
+      "x_10.jpg",
+      "x_012.jpg",
+      "x_21.jpg",
+      "label.jpg",
+      "x-01.jpg",
+    ])
+      expect(isCampaignShot(n)).toBe(false);
   });
 });

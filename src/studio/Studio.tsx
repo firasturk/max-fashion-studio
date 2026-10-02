@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
 import { useTheme } from "@/theme";
 import { makeReference } from "@/lib/image";
-import { folderCount } from "@shared/paths";
+import { folderCount, isCampaignShot } from "@shared/paths";
 import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
   DEFAULT_PROMPT,
@@ -243,6 +243,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const completed = tasks.filter((t) => !!t.output).length;
 
   function addFiles(picked: PickedFile[], root?: string | null) {
+    // Skill campaign: a folder upload keeps only the _01/_02 shots of each product.
+    const fromFolders = picked.some((f) => f.path.includes("/"));
+    let trimmed = 0;
+    if (viewConfig.mode === "5" && fromFolders) {
+      const kept = picked.filter((f) => !f.path.includes("/") || isCampaignShot(f.path));
+      trimmed = picked.length - kept.length;
+      picked = kept;
+    }
     const names = new Set(pending.map((p) => stemKey(p.name)));
     const additions: Pending[] = [];
     let rejected = 0;
@@ -262,6 +270,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       toast.success(`${folders} folders · ${additions.length} images added.`);
       if (root) setBatchName((n) => n || root);
     }
+    if (trimmed)
+      toast.info(`Skill campaign: ${trimmed} photos left out. Only _01 and _02 shots are used.`);
     if (rejected)
       toast.warning(
         `${rejected} files skipped: unsupported, over 12 MB, or duplicate output name.`,

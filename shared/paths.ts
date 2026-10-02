@@ -18,3 +18,12 @@ export function collapseContainer(paths: string[]): { paths: string[]; root: str
 export function folderCount(paths: string[]): number {
   return new Set(paths.filter((p) => p.includes("/")).map((p) => p.split("/")[0])).size;
 }
+
+/**
+ * Skill campaign keeps only the first two shots of each product: files whose name
+ * (before the extension) ends in _1, _2, _01, _02, _001 or _002.
+ */
+export function isCampaignShot(name: string): boolean {
+  const base = name.split("/").pop() ?? name;
+  return /_0{0,2}[12]\.[a-z0-9]+$/i.test(base);
+}
