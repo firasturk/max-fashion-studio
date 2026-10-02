@@ -12,14 +12,11 @@ function stored(): Theme | null {
   }
 }
 
-function system(): Theme {
-  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
+/** Dark is the studio default; the header toggle overrides it per browser. */
+const DEFAULT_THEME: Theme = "dark";
 
 export function currentTheme(): Theme {
-  return stored() ?? system();
+  return stored() ?? DEFAULT_THEME;
 }
 
 export function applyTheme(theme: Theme, persist = true) {
@@ -33,13 +30,9 @@ export function applyTheme(theme: Theme, persist = true) {
   }
 }
 
-/** Apply the saved or system theme before first paint and follow system changes while unset. */
+/** Apply the saved theme (or the dark default) before first paint. */
 export function initTheme() {
   applyTheme(currentTheme(), false);
-  if (typeof matchMedia !== "function") return;
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    if (!stored()) applyTheme(system(), false);
-  });
 }
 
 export function useTheme(): [Theme, () => void] {
