@@ -1,4 +1,4 @@
-import { type Config, cardsPerSource, FABRIC_CARD } from "./config";
+import { type Config, cardsPerSource, FABRIC_CARD, usesBuilder } from "./config";
 
 /**
  * Approximate list prices per generated image in USD (October 2026). Google and Higgsfield publish
@@ -79,7 +79,7 @@ export function estimateCost(c: Config, images: number, cards?: number[]): CostE
     if (rate.perReference)
       cost +=
         rate.perReference * Math.max(0, referencesFor(c, card) - (rate.firstReferenceFree ? 1 : 0));
-    if (c.mode === "5" || c.mode === "7") cost += PROMPT_BUILDER_COST;
+    if (usesBuilder(c.mode)) cost += PROMPT_BUILDER_COST;
     total += cost;
   }
   return {

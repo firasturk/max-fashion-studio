@@ -719,6 +719,7 @@ async function ensureBrief(
     preference: config.mode === "7" ? "" : config.prompt,
     aspectRatio: config.ratio,
     used,
+    newModel: config.mode === "8",
   };
   // Draw the scene here so the mood photo attached to the builder is the one the text names.
   const leader = await setLeader(env, batch, task, source);
@@ -794,7 +795,7 @@ async function referenceEngineUrl(env: Env, client: HiggsfieldClient, id: string
   return url;
 }
 
-const SKILL_MODES = new Set(["5", "7"]);
+const SKILL_MODES = new Set(["5", "7", "8"]);
 
 /** Prompt for a card: the editorial brief in mode 5, the deterministic builder otherwise. */
 async function promptFor(
@@ -807,9 +808,9 @@ async function promptFor(
   roles: PromptImages,
 ): Promise<string> {
   let prompt: string;
-  if (config.mode === "5" || config.mode === "7") {
+  if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
-    prompt = buildEditorialPrompt(brief.prompt, brief.negative, edit, roles);
+    prompt = buildEditorialPrompt(brief.prompt, brief.negative, edit, roles, config.mode === "8");
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);
   }

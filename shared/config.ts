@@ -1,4 +1,4 @@
-export const MODES = ["1", "2", "3", "4", "5", "6", "7"] as const;
+export const MODES = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
 export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
@@ -6,6 +6,18 @@ export const SIZES = ["1K", "2K", "4K"] as const;
 export const OUTPUT_FORMATS = ["png", "jpg", "webp"] as const;
 export const MAX_COUNT = 6;
 export type Mode = (typeof MODES)[number];
+/** Skill campaign approaches: 5 keeps the real model's face, 8 generates a new model. They share skills, references and notes. */
+export function isSkillCampaign(mode: string): boolean {
+  return mode === "5" || mode === "8";
+}
+/** Approaches whose prompt is written per image by the prompt builder. */
+export function usesBuilder(mode: string): boolean {
+  return mode === "5" || mode === "7" || mode === "8";
+}
+/** The person in the upload is replaced by an AI-generated model; only what is worn is kept. */
+export function newModelMode(mode: string): boolean {
+  return mode === "8";
+}
 export type Market = (typeof MARKETS)[number];
 export type InputType = (typeof INPUT_TYPES)[number];
 export type Ratio = (typeof RATIOS)[number];
@@ -104,6 +116,8 @@ export function validateConfig(c: Config): string | null {
   if (c.mode === "3" && c.input !== "model") return "New poses need a real model photo.";
   if (c.mode === "2" && c.input !== "model") return "New face lifestyle needs a real model photo.";
   if (c.mode === "5" && c.input !== "model") return "Skill campaign needs a real model photo.";
+  if (c.mode === "8" && c.input !== "model")
+    return "Skill campaign (new model) needs a real model photo.";
   if (c.mode === "7" && c.input !== "model")
     return "Zaid creative direction needs a real model photo.";
   return null;

@@ -1,6 +1,6 @@
 import { FolderOpen, LoaderCircle, Trash2 } from "lucide-react";
 import type { Batch, SkillInfo } from "@shared/types";
-import type { Config } from "@shared/config";
+import { isSkillCampaign, type Config } from "@shared/config";
 
 import { MODES, type ModeInfo } from "./constants";
 
@@ -107,8 +107,8 @@ export default function BatchesView({
               </span>
             </span>
             <span>
-              {cfg.mode === "5"
-                ? `Skill · ${skills.find((s) => s.id === cfg.skill)?.title ?? cfg.skill}`
+              {isSkillCampaign(cfg.mode)
+                ? `Skill · ${skills.find((s) => s.id === cfg.skill)?.title ?? cfg.skill}${cfg.mode === "8" ? " · new model" : ""}`
                 : (mode?.title ?? cfg.mode)}
             </span>
             <span className="batches-progress">

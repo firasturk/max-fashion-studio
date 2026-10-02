@@ -5,12 +5,13 @@ import {
   PenLine,
   Sparkles,
   UserRound,
+  UserRoundPen,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
 
 export interface ModeInfo {
-  id: "1" | "2" | "3" | "4" | "5" | "6" | "7";
+  id: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8";
   title: string;
   caption: string;
   icon: LucideIcon;
@@ -81,6 +82,16 @@ export const ZAID_MODE: ModeInfo = {
     "From your real model photo: the prompt builder studies Zaid's mood board and example prompts, then writes a new prompt in the same world, light and structure for every image, with a different scene each time. The matching mood photo is attached to the engine as a visual reference.",
 };
 MODES.push(ZAID_MODE);
+
+export const NEW_MODEL_MODE: ModeInfo = {
+  id: "8",
+  title: "Skill campaign · new model",
+  caption: "Same skills · AI-generated model",
+  icon: UserRoundPen,
+  detail:
+    "Identical to Skill campaign (same skills, reference libraries and extra requests), except the person is replaced: only the outfit, footwear, accessories and bags come from your photo. The face, hair and body are an entirely new AI-generated model.",
+};
+MODES.push(NEW_MODEL_MODE);
 
 export const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",

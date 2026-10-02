@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt, RECENTER_SUFFIX } from "../shared/prompts";
+import {
+  buildPrompt,
+  buildEditorialPrompt as buildEditorial,
+  NEW_MODEL_RULE,
+  RECENTER_SUFFIX,
+} from "../shared/prompts";
 import {
   DEFAULT_CONFIG,
   createsTasks,
@@ -104,5 +109,14 @@ describe("centering", () => {
     expect(centeringApplies({ ...base, mode: "5", input: "model" }, 1)).toBe(false);
     expect(centeringApplies({ ...base, mode: "4", input: "model" }, 1)).toBe(false);
     expect(centeringApplies({ ...base, mode: "2", input: "model", center: false }, 1)).toBe(false);
+  });
+});
+
+describe("new-model skill campaign", () => {
+  it("tells the engine to replace the person and keep only what is worn", () => {
+    const p = buildEditorial("Prompt body.", "blur", "", {}, true);
+    expect(p).toContain(NEW_MODEL_RULE);
+    expect(p).toContain("Do not reproduce the person");
+    expect(buildEditorial("Prompt body.", "blur")).not.toContain("NEW MODEL");
   });
 });

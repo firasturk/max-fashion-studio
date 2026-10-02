@@ -27,6 +27,8 @@ export interface EditorialBrief {
 }
 
 export interface EditorialRequest {
+  /** Replace the person entirely with an AI-generated model; keep only what is worn. */
+  newModel?: boolean;
   image: ImageBytes;
   /** 1-based run number; used to rotate scene families so every card differs. */
   run: number;
@@ -157,7 +159,9 @@ export function builderInstruction(req: EditorialRequest): string {
     scene && !req.reference && !req.set
       ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
       : "",
-    `Market preference for a generated face (only when the face is not visible): ${market}.`,
+    req.newModel
+      ? `NEW MODEL RULE (overrides the FACE rule and anything else about the person): the person in image 1 is never reproduced. Treat the face as NO_FACE regardless of visibility. Invent an entirely new professional model (face, hair, skin tone, build, age within adult range) following the market preference "${market}", described with the realism block. Never describe or borrow the original person's features, hair, skin or body. Take from image 1 ONLY the garments, footwear, accessories and bags, kept exactly as worn, plus the framing. Write the opening line as: "Use the attached image as the single source of truth for the outfit only; the model is a different, newly generated person. Replace the plain background completely with the new setting described below."`
+      : `Market preference for a generated face (only when the face is not visible): ${market}.`,
     req.preference
       ? `EXTRA REQUESTS FROM THE USER for this batch (apply them to the prompt; they override the skill's direction and library but never the fixed rules): ${req.preference}`
       : "No extra requests from the user.",

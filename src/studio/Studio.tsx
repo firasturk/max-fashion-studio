@@ -36,6 +36,8 @@ import {
   cardsPerSource,
   exportsOriginals,
   type Config,
+  isSkillCampaign,
+  usesBuilder,
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
@@ -246,7 +248,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     // Skill campaign: a folder upload keeps only the _01/_02 shots of each product.
     const fromFolders = picked.some((f) => f.path.includes("/"));
     let trimmed = 0;
-    if (viewConfig.mode === "5" && fromFolders) {
+    if (isSkillCampaign(viewConfig.mode) && fromFolders) {
       const kept = picked.filter((f) => !f.path.includes("/") || isCampaignShot(f.path));
       trimmed = picked.length - kept.length;
       picked = kept;
@@ -715,14 +717,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   mode,
                   input: mode === "1" || mode === "6" ? c.input : "model",
                   // The skill prompt builder writes its own scene text; the default prompt would only confuse it.
-                  prompt:
-                    mode === "5"
-                      ? ""
-                      : mode === "7"
-                        ? zaidDirection
-                        : c.mode === "5" || c.mode === "7"
-                          ? DEFAULT_PROMPT
-                          : c.prompt,
+                  prompt: isSkillCampaign(mode)
+                    ? isSkillCampaign(c.mode)
+                      ? c.prompt
+                      : ""
+                    : mode === "7"
+                      ? zaidDirection
+                      : usesBuilder(c.mode)
+                        ? DEFAULT_PROMPT
+                        : c.prompt,
                 }))
               }
             />

@@ -28,6 +28,7 @@ import {
   SIZES,
   backdropColors,
   type Config,
+  isSkillCampaign,
 } from "@shared/config";
 import type { EngineModel, Preset, SkillInfo } from "@shared/types";
 
@@ -372,7 +373,7 @@ export default function CreativePanel({
         </>
       )}
 
-      {config.mode === "5" && (
+      {isSkillCampaign(config.mode) && (
         <>
           <div className="field-row">
             <label className="field-label">Skill</label>
@@ -564,7 +565,7 @@ export default function CreativePanel({
             ? "Background direction"
             : config.mode === "6"
               ? "Extra instructions (optional)"
-              : config.mode === "5"
+              : isSkillCampaign(config.mode)
                 ? "Extra requests for this skill (optional)"
                 : config.mode === "7"
                   ? "Extra direction for this batch (optional)"
@@ -604,7 +605,7 @@ export default function CreativePanel({
         disabled={locked}
         onChange={(e) => onChange({ prompt: e.target.value })}
       />
-      {config.mode !== "5" && config.mode !== "6" && config.mode !== "7" && (
+      {!isSkillCampaign(config.mode) && config.mode !== "6" && config.mode !== "7" && (
         <div className="prompt-tip">
           Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
         </div>
@@ -640,7 +641,7 @@ export default function CreativePanel({
       >
         {config.mode !== "4" &&
           config.mode !== "6" &&
-          config.mode !== "5" &&
+          !isSkillCampaign(config.mode) &&
           config.mode !== "7" && (
             <>
               <div className="centering">

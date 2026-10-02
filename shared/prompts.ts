@@ -7,6 +7,7 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
   "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
   "7": "Fashion imagery written per image by the prompt builder following Zaid's creative direction. The outfit is the hero and is never changed.",
+  "8": "Premium fashion editorial built by the prompt builder from the attached photo, worn by a new AI-generated model. Only the outfit, footwear, accessories and bags come from the photo; the person is replaced entirely.",
   "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
@@ -75,7 +76,8 @@ export function centeringApplies(c: Config, card: number): boolean {
     c.mode !== "4" &&
     c.mode !== "5" &&
     c.mode !== "6" &&
-    c.mode !== "7"
+    c.mode !== "7" &&
+    c.mode !== "8"
   );
 }
 
@@ -105,8 +107,9 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
       `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
     );
     if (c.prompt) parts.push(c.prompt);
-  } else if (c.mode === "5") {
+  } else if (c.mode === "5" || c.mode === "8") {
     parts.push("Editorial prompt is written per image by the prompt builder before generation.");
+    if (c.mode === "8") parts.push(NEW_MODEL_RULE);
     if (c.prompt) parts.push(`City / mood preference: ${c.prompt}`);
   } else if (c.mode === "7") {
     parts.push("Prompt is written per image by the prompt builder from Zaid's creative direction.");
@@ -145,19 +148,27 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
 }
 
 /** Final prompt for an editorial card: the builder's prompt plus roles, revision and the negative block. */
+/** Engine-facing rule for the new-model skill campaign: the person is replaced, what is worn is kept. */
+export const NEW_MODEL_RULE =
+  "NEW MODEL: the person in the reference photo is NOT reproduced. Generate an entirely different, AI-created professional model: a new face, hair, skin tone, build and identity that do not resemble the original person in any way. Take from the reference photo ONLY what is worn: every garment, the footwear, and any accessories or bags, all kept identical in colour, print, construction, length and fit. Keep the same framing and crop as the reference.";
+
 export function buildEditorialPrompt(
   briefPrompt: string,
   negative: string,
   edit = "",
   images: PromptImages = {},
+  newModel = false,
 ): string {
   const parts = [briefPrompt.trim()];
+  if (newModel) parts.push(NEW_MODEL_RULE);
   if (edit)
     parts.push(
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
     );
   const roles: string[] = [
-    "The attached first image is the reference photo of the outfit and model: keep every garment, the footwear and any accessory worn in it identical, nothing added or removed.",
+    newModel
+      ? "The attached first image is the reference photo of the outfit only: keep every garment, the footwear and any accessory or bag worn in it identical, nothing added or removed. Do not reproduce the person, face, hair or body from it; the model is newly generated."
+      : "The attached first image is the reference photo of the outfit and model: keep every garment, the footwear and any accessory worn in it identical, nothing added or removed.",
   ];
   let idx = 2;
   if (images.mood)
