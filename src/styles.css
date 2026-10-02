@@ -2935,3 +2935,44 @@ textarea:focus {
   background-image: linear-gradient(160deg, var(--blue-soft), var(--blue-pale));
   color: var(--blue-hover);
 }
+
+/* Icons in the blue family (gold stays for type) */
+.mode-top > svg,
+.mode-note > svg,
+.panel-heading > svg,
+.workflow-label > svg,
+.panel-section-head svg,
+.dropzone > svg,
+.generation-placeholder svg,
+.revision-progress svg,
+.spinning,
+.empty-results > svg,
+.image-info svg,
+.batches-row svg,
+.review-dialog h2 svg,
+.connection-dialog h2 svg {
+  color: var(--blue);
+}
+.mode-card.active .mode-top > svg {
+  color: var(--blue-hover);
+}
+.upload-icon {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.empty-grid-icon {
+  color: var(--blue-pale);
+  border-color: var(--blue-pale);
+}
+.panel-section-head svg {
+  color: var(--ink-400);
+}
+.mode-tool {
+  color: var(--ink-400);
+}
+.mode-tool:hover {
+  color: var(--blue);
+}
+.topbar .engine-tag svg {
+  color: var(--accent-glow);
+}
