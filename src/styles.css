@@ -22,15 +22,14 @@
 }
 /* ------------------------------------------------------------------
    Max Fashion Studio colour scheme: "Sand & Ink"
-   Warm neutrals built around the tan of the Max logo (#cd9b63).
+   Blue family from the Vibe palette; see the token list below.
    Every colour in this file is one of these tokens.
    ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------
-   Max Fashion Studio colour scheme: "Vibe Blue + Max Gold"
+   Max Fashion Studio colour scheme: "Vibe Blue"
    Blue family (Vivid Blue, Deep Blue, Pale Blue, Paper White, Stone
-   Gray, Vivid Orange) carries surfaces and actions. The Max gold is used
-   only as text and outlines on transparent backgrounds, never as a fill
-   under white text.
+   Gray, Vivid Orange). Accent tokens alias the blue family so labels,
+   outlines and type share one hue with the filled actions.
    ------------------------------------------------------------------ */
 :root {
   /* Surfaces, lightest to darkest */
@@ -54,14 +53,14 @@
   --blue-soft: #ecebff;
   --blue-pale: #d1cdff;
   --gradient: linear-gradient(135deg, #101018 0%, #3529bf 38%, #4737ff 68%, #aca5ff 100%);
-  /* Max gold: text and outlines only */
-  --accent: #a9743f;
-  --accent-hover: #93633a;
-  --accent-deep: #6f4a26;
-  --accent-glow: #cd9b63;
-  --accent-soft: #faf5ee;
-  --accent-border: #e6d2b8;
-  --accent-border-hover: #cfae86;
+  /* Accent (type, outlines, labels) = the blue family */
+  --accent: var(--blue);
+  --accent-hover: var(--blue-hover);
+  --accent-deep: var(--blue-hover);
+  --accent-glow: #aca5ff;
+  --accent-soft: var(--blue-soft);
+  --accent-border: var(--blue-pale);
+  --accent-border-hover: #aca5ff;
   /* Status */
   --success: #2e8b57;
   --success-soft: #e7f4ec;
@@ -2774,7 +2773,7 @@ textarea {
 }
 
 /* ------------------------------------------------------------------
-   Palette application: blue carries fills, gold carries type.
+   Palette application: blue carries fills, labels and outlines.
    ------------------------------------------------------------------ */
 /* Header on Deep Blue */
 .topbar {
@@ -2877,8 +2876,8 @@ textarea {
 .secondary,
 .connection-button {
   background: transparent;
-  border: 1px solid var(--accent-border-hover);
-  color: var(--accent);
+  border: 1px solid var(--blue-pale);
+  color: var(--blue);
 }
 .secondary:hover:enabled,
 .connection-button:hover {
@@ -2947,7 +2946,7 @@ textarea:focus {
   color: var(--blue-hover);
 }
 
-/* Icons in the blue family (gold stays for type) */
+/* Icons in the blue family */
 .mode-top > svg,
 .mode-note > svg,
 .panel-heading > svg,
@@ -3011,13 +3010,13 @@ textarea:focus {
   --blue-soft: #272452;
   --blue-pale: #3f3a8a;
   --gradient: linear-gradient(135deg, #0c0c12 0%, #2a2196 38%, #4737ff 68%, #8f87ff 100%);
-  --accent: #cd9b63;
-  --accent-hover: #ddb07c;
-  --accent-deep: #e9c597;
-  --accent-glow: #cd9b63;
-  --accent-soft: #2a2420;
-  --accent-border: #4a3b2a;
-  --accent-border-hover: #7a5f3c;
+  --accent: #8d82ff;
+  --accent-hover: #a79eff;
+  --accent-deep: #c9c3ff;
+  --accent-glow: #aca5ff;
+  --accent-soft: var(--blue-soft);
+  --accent-border: var(--blue-pale);
+  --accent-border-hover: #6f62ff;
   --success: #4cc27a;
   --success-soft: #16302a;
   --warning: #ff7a2e;
