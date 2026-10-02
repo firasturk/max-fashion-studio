@@ -611,14 +611,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               <div className="hero-banner">
                 <video
                   key={hero}
-                  src={`/api/studio/hero?v=${hero}`}
-                  autoPlay
+                                    autoPlay
                   muted
                   loop
                   playsInline
                   preload="metadata"
-                  onError={() => setHero("")}
-                />
+                >
+                  <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
+                  <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />
+                </video>
                 <div className="hero-veil" />
               </div>
             )}

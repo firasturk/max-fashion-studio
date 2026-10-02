@@ -132,15 +132,17 @@ export async function resolveFalKey(
 
 export const ZAID_DIRECTION_SETTING = "zaid_direction";
 export const MODES_SETTING = "modes_config";
-/** R2 key of the looping hero video shown under the studio title. */
-export const HERO_KEY = "hero/video";
+/** R2 keys of the looping hero video shown under the studio title, one per format. */
+export const HERO_KEYS = { mp4: "hero/video", webm: "hero/video.webm" } as const;
+export type HeroFormat = keyof typeof HERO_KEYS;
 
 let heroCache: { stamp: string; at: number } | null = null;
 /** Version stamp of the hero video ("" when none), from R2 metadata, cached briefly per isolate. */
 export async function heroStamp(env: Env, fresh = false): Promise<string> {
   if (!fresh && heroCache && Date.now() - heroCache.at < 60_000) return heroCache.stamp;
-  const head = await env.BUCKET.head(HERO_KEY);
-  const stamp = head ? String(head.uploaded.getTime()) : "";
+  const heads = await Promise.all(Object.values(HERO_KEYS).map((k) => env.BUCKET.head(k)));
+  const latest = Math.max(0, ...heads.map((h) => (h ? h.uploaded.getTime() : 0)));
+  const stamp = latest ? String(latest) : "";
   heroCache = { stamp, at: Date.now() };
   return stamp;
 }

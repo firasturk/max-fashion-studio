@@ -193,12 +193,14 @@ export default function AdminView({ me }: { me: string }) {
             <video
               key={hero}
               className="hero-preview"
-              src={`/api/studio/hero?v=${hero}`}
-              autoPlay
+                            autoPlay
               muted
               loop
               playsInline
-            />
+            >
+              <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
+              <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />
+            </video>
           ) : (
             <p className="quality-note">
               No video yet. Upload a short looping MP4 or WebM (under 40 MB) to show it under the

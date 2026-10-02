@@ -13,7 +13,7 @@ import {
   NOTIFY_WEBHOOK_SETTING,
   NOTIFY_EMAIL_SETTING,
   RESEND_KEY_SETTING,
-  HERO_KEY,
+  HERO_KEYS,
   heroStamp,
 } from "./settings";
 import { notify } from "./notify";
@@ -128,12 +128,13 @@ adminRoutes.post("/hero", async (c) => {
   if (!/^video\/(mp4|webm|quicktime)$/.test(f.type))
     throw new StudioError("Use an MP4 or WebM video.");
   if (f.size > HERO_MAX) throw new StudioError("Keep the hero video under 40 MB.");
-  await c.env.BUCKET.put(HERO_KEY, f.stream(), { httpMetadata: { contentType: f.type } });
+  const key = f.type === "video/webm" ? HERO_KEYS.webm : HERO_KEYS.mp4;
+  await c.env.BUCKET.put(key, f.stream(), { httpMetadata: { contentType: f.type } });
   return c.json({ ok: true, hero: await heroStamp(c.env, true) });
 });
 
 adminRoutes.delete("/hero", async (c) => {
-  await c.env.BUCKET.delete(HERO_KEY);
+  await c.env.BUCKET.delete(Object.values(HERO_KEYS));
   await heroStamp(c.env, true);
   return c.json({ ok: true });
 });

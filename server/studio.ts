@@ -34,7 +34,7 @@ import {
   resolveGoogleKey,
   resolveOpenAIKey,
   setSetting,
-  HERO_KEY,
+  HERO_KEYS,
   heroStamp,
 } from "./settings";
 import {
@@ -460,6 +460,7 @@ studioRoutes.get("/references/:id/file", async (c) => {
 
 /** Looping hero video for the studio page (admin-uploaded, stored in R2). Supports byte ranges. */
 studioRoutes.get("/hero", async (c) => {
+  const HERO_KEY = HERO_KEYS[c.req.query("f") === "webm" ? "webm" : "mp4"];
   const range = c.req.header("range");
   const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
   const head = await c.env.BUCKET.head(HERO_KEY);
