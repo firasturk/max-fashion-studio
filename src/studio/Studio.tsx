@@ -595,32 +595,42 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           </>
         ) : (
           <>
-            <div className="page-heading">
-              <div>
-                <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
-                <h1>From prompt to lifestyle.</h1>
-                <p>One collection. Every image. Your creative direction.</p>
-              </div>
-              <button className="secondary" onClick={newBatch} disabled={uploading}>
-                <ImagePlus size={17} />
-                New batch
-              </button>
-            </div>
-
-            {hero && (
-              <div className="hero-banner">
+            {hero ? (
+              <div className="hero-banner hero-with-title">
                 <video
                   key={hero}
-                                    autoPlay
+                  autoPlay
                   muted
                   loop
                   playsInline
                   preload="metadata"
+                  onError={() => setHero("")}
                 >
                   <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
                   <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />
                 </video>
                 <div className="hero-veil" />
+                <div className="hero-content">
+                  <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
+                  <h1>From prompt to lifestyle.</h1>
+                  <p>One collection. Every image. Your creative direction.</p>
+                </div>
+                <button className="secondary hero-cta" onClick={newBatch} disabled={uploading}>
+                  <ImagePlus size={17} />
+                  New batch
+                </button>
+              </div>
+            ) : (
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
+                  <h1>From prompt to lifestyle.</h1>
+                  <p>One collection. Every image. Your creative direction.</p>
+                </div>
+                <button className="secondary" onClick={newBatch} disabled={uploading}>
+                  <ImagePlus size={17} />
+                  New batch
+                </button>
               </div>
             )}
 

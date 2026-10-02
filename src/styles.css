@@ -3139,3 +3139,79 @@ textarea:focus {
 .hero-admin .secondary {
   cursor: pointer;
 }
+
+/* Hero banner with the title on top of the video */
+.hero-with-title {
+  margin: 0 0 34px;
+  aspect-ratio: 21 / 7;
+  min-height: 300px;
+}
+.hero-with-title .hero-veil {
+  background:
+    linear-gradient(90deg, rgb(10 10 18 / 0.72) 0%, rgb(10 10 18 / 0.35) 55%, transparent 100%),
+    linear-gradient(180deg, transparent 50%, rgb(10 10 18 / 0.55) 100%);
+}
+.hero-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 36px 44px;
+  color: #fff;
+}
+.hero-content .eyebrow {
+  color: var(--accent-glow);
+  margin-bottom: 14px;
+}
+.hero-content h1 {
+  background: none;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  font-size: clamp(44px, 6.4vw, 104px);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  max-width: 11ch;
+  text-shadow: 0 4px 24px rgb(0 0 0 / 0.45);
+  width: auto;
+}
+.hero-content p {
+  margin-top: 18px;
+  font-size: clamp(14px, 1.3vw, 18px);
+  color: rgb(255 255 255 / 0.85);
+  max-width: 48ch;
+}
+.hero-cta {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgb(10 10 18 / 0.45);
+  border-color: rgb(255 255 255 / 0.5);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+.hero-cta:hover:enabled {
+  background: rgb(255 255 255 / 0.95);
+  border-color: #fff;
+  color: var(--ink-900);
+}
+@media (max-width: 900px) {
+  .hero-with-title {
+    aspect-ratio: auto;
+    min-height: 320px;
+  }
+  .hero-content {
+    padding: 24px 20px;
+    justify-content: flex-end;
+  }
+  .hero-content h1 {
+    font-size: clamp(36px, 10vw, 56px);
+    max-width: none;
+  }
+  .hero-cta {
+    top: 14px;
+    right: 14px;
+    padding: 8px 12px;
+  }
+}
