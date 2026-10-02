@@ -132,6 +132,18 @@ export async function resolveFalKey(
 
 export const ZAID_DIRECTION_SETTING = "zaid_direction";
 export const MODES_SETTING = "modes_config";
+/** R2 key of the looping hero video shown under the studio title. */
+export const HERO_KEY = "hero/video";
+
+let heroCache: { stamp: string; at: number } | null = null;
+/** Version stamp of the hero video ("" when none), from R2 metadata, cached briefly per isolate. */
+export async function heroStamp(env: Env, fresh = false): Promise<string> {
+  if (!fresh && heroCache && Date.now() - heroCache.at < 60_000) return heroCache.stamp;
+  const head = await env.BUCKET.head(HERO_KEY);
+  const stamp = head ? String(head.uploaded.getTime()) : "";
+  heroCache = { stamp, at: Date.now() };
+  return stamp;
+}
 export const INVITE_CODE_SETTING = "invite_code";
 export const SPEND_THRESHOLD_SETTING = "spend_threshold";
 export const RETENTION_DAYS_SETTING = "retention_days";

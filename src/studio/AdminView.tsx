@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Bell, Check, LoaderCircle, ShieldCheck, UserX, UserCheck } from "lucide-react";
-import { get, post } from "@/api";
+import {
+  Bell,
+  Check,
+  Clapperboard,
+  LoaderCircle,
+  ShieldCheck,
+  Trash2,
+  UserX,
+  UserCheck,
+} from "lucide-react";
+import { del, get, post, postForm } from "@/api";
 
 interface AdminUser {
   id: string;
@@ -30,6 +39,40 @@ export default function AdminView({ me }: { me: string }) {
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [form, setForm] = useState<Partial<AdminSettings> & { resendApiKey?: string }>({});
   const [saving, setSaving] = useState(false);
+  const [hero, setHero] = useState<string>("");
+  const [heroBusy, setHeroBusy] = useState(false);
+  useEffect(() => {
+    get<{ hero?: string }>("/api/studio/state")
+      .then((d) => setHero(d.hero ?? ""))
+      .catch(() => {});
+  }, []);
+  const uploadHero = async (file: File | null) => {
+    if (!file) return;
+    setHeroBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await postForm<{ hero: string }>("/api/admin/hero", fd);
+      setHero(r.hero);
+      toast.success("Hero video updated. Reload the studio to see it.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setHeroBusy(false);
+    }
+  };
+  const removeHero = async () => {
+    setHeroBusy(true);
+    try {
+      await del("/api/admin/hero");
+      setHero("");
+      toast.success("Hero video removed.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setHeroBusy(false);
+    }
+  };
 
   async function load() {
     try {
@@ -137,6 +180,52 @@ export default function AdminView({ me }: { me: string }) {
               </span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="batches-page admin-settings">
+        <div className="panel-heading" style={{ padding: "8px 16px 0" }}>
+          <Clapperboard size={18} />
+          <h2>Studio hero video</h2>
+        </div>
+        <div className="hero-admin">
+          {hero ? (
+            <video
+              key={hero}
+              className="hero-preview"
+              src={`/api/studio/hero?v=${hero}`}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+          ) : (
+            <p className="quality-note">
+              No video yet. Upload a short looping MP4 or WebM (under 40 MB) to show it under the
+              studio title.
+            </p>
+          )}
+          <div className="footer-actions">
+            <label className="secondary">
+              {heroBusy ? <LoaderCircle className="spinning" size={16} /> : <Clapperboard size={16} />}
+              {hero ? "Replace video" : "Upload video"}
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                hidden
+                disabled={heroBusy}
+                onChange={(e) => {
+                  void uploadHero(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {hero && (
+              <button className="text-button danger-text" onClick={() => void removeHero()} disabled={heroBusy}>
+                <Trash2 size={14} /> Remove
+              </button>
+            )}
+          </div>
         </div>
       </section>
 

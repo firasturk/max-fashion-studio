@@ -115,6 +115,8 @@ export interface StateResponse {
   zaidDirection: string;
   /** Renamed or hidden production approaches, keyed by mode id. */
   modes: Record<string, ModeOverride>;
+  /** Version stamp of the uploaded hero video, empty when none. */
+  hero: string;
   engine: {
     model: string;
     configured: boolean;

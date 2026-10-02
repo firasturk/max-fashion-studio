@@ -13,6 +13,8 @@ import {
   NOTIFY_WEBHOOK_SETTING,
   NOTIFY_EMAIL_SETTING,
   RESEND_KEY_SETTING,
+  HERO_KEY,
+  heroStamp,
 } from "./settings";
 import { notify } from "./notify";
 import type { User } from "@shared/types";
@@ -114,6 +116,26 @@ adminRoutes.post("/settings", async (c) => {
     else await deleteSetting(c.env, RESEND_KEY_SETTING);
   }
   return c.json({ ok: true, settings: await readAdminSettings(c.env) });
+});
+
+const HERO_MAX = 40 * 1024 * 1024;
+
+/** Upload the looping hero video shown under the studio title. */
+adminRoutes.post("/hero", async (c) => {
+  const form = await c.req.formData().catch(() => null);
+  const f = form?.get("file");
+  if (!(f instanceof File)) throw new StudioError("Attach a video file.");
+  if (!/^video\/(mp4|webm|quicktime)$/.test(f.type))
+    throw new StudioError("Use an MP4 or WebM video.");
+  if (f.size > HERO_MAX) throw new StudioError("Keep the hero video under 40 MB.");
+  await c.env.BUCKET.put(HERO_KEY, f.stream(), { httpMetadata: { contentType: f.type } });
+  return c.json({ ok: true, hero: await heroStamp(c.env, true) });
+});
+
+adminRoutes.delete("/hero", async (c) => {
+  await c.env.BUCKET.delete(HERO_KEY);
+  await heroStamp(c.env, true);
+  return c.json({ ok: true });
 });
 
 adminRoutes.post("/notify/test", async (c) => {

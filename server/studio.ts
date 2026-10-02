@@ -34,6 +34,8 @@ import {
   resolveGoogleKey,
   resolveOpenAIKey,
   setSetting,
+  HERO_KEY,
+  heroStamp,
 } from "./settings";
 import {
   MODES,
@@ -129,6 +131,7 @@ studioRoutes.get("/state", async (c) => {
     spendThreshold: adminSettings.spendThreshold,
     zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || "",
     modes: await readModes(c.env),
+    hero: await heroStamp(c.env),
     engine: {
       model: await resolveEngineModel(c.env),
       configured: keyLooksValid(engineKey.key),
@@ -451,6 +454,41 @@ studioRoutes.get("/references/:id/file", async (c) => {
     headers: {
       "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
       "Cache-Control": "private, max-age=86400",
+    },
+  });
+});
+
+/** Looping hero video for the studio page (admin-uploaded, stored in R2). Supports byte ranges. */
+studioRoutes.get("/hero", async (c) => {
+  const range = c.req.header("range");
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+  const head = await c.env.BUCKET.head(HERO_KEY);
+  if (!head) throw new StudioError("No hero video.", 404);
+  const size = head.size;
+  const type = head.httpMetadata?.contentType || "video/mp4";
+  const base = {
+    "Accept-Ranges": "bytes",
+    "Content-Type": type,
+    "Cache-Control": "private, max-age=3600",
+  };
+  if (!m) {
+    const obj = await c.env.BUCKET.get(HERO_KEY);
+    if (!obj) throw new StudioError("No hero video.", 404);
+    return new Response(obj.body, { headers: { ...base, "Content-Length": String(size) } });
+  }
+  const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+  const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  if (start >= size || start > end) {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  }
+  const obj = await c.env.BUCKET.get(HERO_KEY, { range: { offset: start, length: end - start + 1 } });
+  if (!obj) throw new StudioError("No hero video.", 404);
+  return new Response(obj.body, {
+    status: 206,
+    headers: {
+      ...base,
+      "Content-Range": `bytes ${start}-${end}/${size}`,
+      "Content-Length": String(end - start + 1),
     },
   });
 });

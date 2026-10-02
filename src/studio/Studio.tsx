@@ -91,6 +91,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [spendThreshold, setSpendThreshold] = useState(20);
   const [zaidDirection, setZaidDirection] = useState("");
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
+  const [hero, setHero] = useState("");
   const [models, setModels] = useState<EngineModel[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
@@ -107,6 +108,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       setZaidDirection(d.zaidDirection ?? "");
       const ov = d.modes ?? {};
       setModeOverrides(ov);
+      setHero(d.hero ?? "");
       // A hidden approach must not stay selected for new batches.
       setConfig((c) => {
         if (!ov[c.mode]?.hidden) return c;
@@ -596,7 +598,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             <div className="page-heading">
               <div>
                 <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
-                <h1>From shoot to lifestyle.</h1>
+                <h1>From prompt to lifestyle.</h1>
                 <p>One collection. Every image. Your creative direction.</p>
               </div>
               <button className="secondary" onClick={newBatch} disabled={uploading}>
@@ -604,6 +606,22 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 New batch
               </button>
             </div>
+
+            {hero && (
+              <div className="hero-banner">
+                <video
+                  key={hero}
+                  src={`/api/studio/hero?v=${hero}`}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  onError={() => setHero("")}
+                />
+                <div className="hero-veil" />
+              </div>
+            )}
 
             <ModeCards
               value={viewConfig.mode}
