@@ -145,7 +145,7 @@ export default function ResultsTab({
             ["ready", "Ready", counts.ready],
             ["approved", "Approved", counts.approved],
             ["failed", "Failed", counts.failed],
-            ["active", "Generating", counts.active],
+            ["active", running ? "Generating" : "Waiting", counts.active],
           ] as const
         )
           .filter(([k, , n]) => k === "all" || n > 0)
@@ -178,7 +178,10 @@ export default function ResultsTab({
                   Set · {setSize}
                 </span>
               )}
-              <span className={`status-bar ${t.status}`} aria-hidden="true" />
+              <span
+                className={`status-bar ${t.status === "queued" && !running ? "waiting" : t.status}`}
+                aria-hidden="true"
+              />
               <button
                 className="photo-frame result-photo"
                 disabled={!t.output}
@@ -191,7 +194,9 @@ export default function ResultsTab({
                     loading="lazy"
                   />
                 ) : (
-                  <div className="generation-placeholder">
+                  <div
+                    className={`generation-placeholder ${t.status === "queued" && !running ? "waiting" : ""}`}
+                  >
                     {t.status === "processing" ? (
                       <LoaderCircle className="spinning" size={28} />
                     ) : (
@@ -202,7 +207,9 @@ export default function ResultsTab({
                         ? "Creating your image"
                         : t.status === "failed"
                           ? "Generation failed"
-                          : "In the queue"}
+                          : running
+                            ? "In the queue"
+                            : "Not generated yet"}
                     </span>
                   </div>
                 )}
@@ -227,7 +234,11 @@ export default function ResultsTab({
               <div className="image-info">
                 <strong title={s?.name}>{s?.name}</strong>
                 <span>
-                  <i className={`status-text ${t.status}`}>{STATUS_LABEL[t.status] ?? t.status}</i>
+                  <i className={`status-text ${t.status}`}>
+                    {t.status === "queued" && !running
+                      ? "Waiting"
+                      : (STATUS_LABEL[t.status] ?? t.status)}
+                  </i>
                   {" · "}
                   {cardLabel(mode, t.card)}
                 </span>

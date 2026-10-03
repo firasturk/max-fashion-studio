@@ -3407,3 +3407,15 @@ textarea:focus {
     max-height: 60vh;
   }
 }
+
+/* Queued but not started: a quiet card, no motion until Generate is pressed */
+.status-bar.waiting {
+  background: var(--line-strong);
+  background-image: none;
+  animation: none;
+}
+.generation-placeholder.waiting {
+  background-image: none;
+  animation: none;
+  background: var(--surface-3);
+}
