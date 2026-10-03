@@ -102,12 +102,17 @@ describe("config rules", () => {
 });
 
 describe("centering", () => {
-  it("applies to the model workflows only", async () => {
-    const { centeringApplies } = await import("../shared/prompts");
+  it("applies everywhere except the framing-preserving approaches", async () => {
+    const { centeringApplies, CENTERING } = await import("../shared/prompts");
     expect(centeringApplies({ ...base, mode: "1" }, 1)).toBe(true);
     expect(centeringApplies({ ...base, mode: "1" }, 6)).toBe(false);
-    expect(centeringApplies({ ...base, mode: "5", input: "model" }, 1)).toBe(false);
+    expect(centeringApplies({ ...base, mode: "5", input: "model" }, 1)).toBe(true);
+    expect(centeringApplies({ ...base, mode: "8", input: "model" }, 1)).toBe(true);
+    expect(centeringApplies({ ...base, mode: "7", input: "model" }, 1)).toBe(true);
     expect(centeringApplies({ ...base, mode: "4", input: "model" }, 1)).toBe(false);
+    expect(centeringApplies({ ...base, mode: "6" }, 1)).toBe(false);
+    expect(buildEditorial("Prompt body.", "blur")).toContain(CENTERING);
+    expect(buildEditorial("Prompt body.", "blur", "", {}, false, false)).not.toContain(CENTERING);
     expect(centeringApplies({ ...base, mode: "2", input: "model", center: false }, 1)).toBe(false);
   });
 });

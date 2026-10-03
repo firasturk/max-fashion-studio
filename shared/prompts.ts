@@ -42,7 +42,7 @@ const POSES = [
   "Candid mid-step pose, looking away from camera.",
 ];
 
-const CENTERING =
+export const CENTERING =
   "Composition: exactly ONE model. Centre the midpoint of the full model bounding box at x=50% of frame width, equal margins left and right. Keep head, hands, garment and feet fully inside the frame.";
 
 export interface PromptImages {
@@ -67,18 +67,11 @@ export function sceneFor(_c: Config, card: number): string {
 
 /**
  * Whether the prompt asks for a centred model and the reviewer may queue a centring retry.
- * Modes 4 and 6 keep the source framing; the skill workflow (5) composes its own frame.
+ * Modes 4 and 6 keep the source framing; every other approach, the skill campaigns included,
+ * composes its own frame and centres the model.
  */
 export function centeringApplies(c: Config, card: number): boolean {
-  return (
-    c.center &&
-    card !== FABRIC_CARD &&
-    c.mode !== "4" &&
-    c.mode !== "5" &&
-    c.mode !== "6" &&
-    c.mode !== "7" &&
-    c.mode !== "8"
-  );
+  return c.center && card !== FABRIC_CARD && c.mode !== "4" && c.mode !== "6";
 }
 
 /** Build the full generation prompt for one card. Deterministic so it can be stored and audited. */
@@ -158,9 +151,11 @@ export function buildEditorialPrompt(
   edit = "",
   images: PromptImages = {},
   newModel = false,
+  center = true,
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
+  if (center) parts.push(CENTERING);
   if (edit)
     parts.push(
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,

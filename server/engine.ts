@@ -828,7 +828,14 @@ async function promptFor(
   let prompt: string;
   if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
-    prompt = buildEditorialPrompt(brief.prompt, brief.negative, edit, roles, config.mode === "8");
+    prompt = buildEditorialPrompt(
+      brief.prompt,
+      brief.negative,
+      edit,
+      roles,
+      config.mode === "8",
+      centeringApplies(config, task.card),
+    );
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);
   }

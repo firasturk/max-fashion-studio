@@ -740,30 +740,27 @@ export default function CreativePanel({
         hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · filename + -AI`}
         defaultOpen={false}
       >
-        {config.mode !== "4" &&
-          config.mode !== "6" &&
-          !isSkillCampaign(config.mode) &&
-          config.mode !== "7" && (
-            <>
-              <div className="centering">
-                <ScanLine size={21} />
-                <div>
-                  <strong>Centre model</strong>
-                  <span>Check alignment · retry once if needed</span>
-                </div>
-                <Switch
-                  checked={config.center}
-                  disabled={locked}
-                  onCheckedChange={(v) => onChange({ center: v })}
-                  aria-label="Check model centering"
-                />
+        {config.mode !== "4" && config.mode !== "6" && (
+          <>
+            <div className="centering">
+              <ScanLine size={21} />
+              <div>
+                <strong>Centre model</strong>
+                <span>Check alignment · retry once if needed</span>
               </div>
-              <p className="quality-note">
-                Alignment is checked only when automatic review is configured. Uncertain results are
-                held for review. Extra attempts use additional credits.
-              </p>
-            </>
-          )}
+              <Switch
+                checked={config.center}
+                disabled={locked}
+                onCheckedChange={(v) => onChange({ center: v })}
+                aria-label="Check model centering"
+              />
+            </div>
+            <p className="quality-note">
+              Alignment is checked only when automatic review is configured. Uncertain results are
+              held for review. Extra attempts use additional credits.
+            </p>
+          </>
+        )}
 
         <div className="two-fields">
           <div>
