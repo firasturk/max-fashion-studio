@@ -3561,3 +3561,9 @@ textarea:focus {
   color: var(--blue);
   background: var(--blue-soft);
 }
+.look-pick .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+}
