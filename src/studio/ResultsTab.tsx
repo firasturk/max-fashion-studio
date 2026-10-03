@@ -25,6 +25,7 @@ export default function ResultsTab({
   running,
   selection,
   outputUrl,
+  sourceUrl,
   onSelect,
   onClearSelection,
   onOpen,
@@ -38,6 +39,8 @@ export default function ResultsTab({
   running: boolean;
   selection: Set<string>;
   outputUrl: (t: Task) => string;
+  /** Preview of the original photo, shown in the card until the AI result exists. */
+  sourceUrl: (id: string) => string;
   onSelect: (id: string, on: boolean) => void;
   onClearSelection: () => void;
   onOpen: (t: Task) => void;
@@ -195,22 +198,32 @@ export default function ResultsTab({
                   />
                 ) : (
                   <div
-                    className={`generation-placeholder ${t.status === "queued" && !running ? "waiting" : ""}`}
+                    className={`generation-placeholder ${t.status === "queued" && !running ? "waiting" : ""} ${t.status === "failed" ? "failed" : ""}`}
                   >
-                    {t.status === "processing" ? (
-                      <LoaderCircle className="spinning" size={28} />
-                    ) : (
-                      <FileImage size={26} />
+                    {s && (
+                      <img
+                        className="placeholder-source"
+                        src={sourceUrl(s.id)}
+                        alt={`Original photo ${s.name}`}
+                        loading="lazy"
+                      />
                     )}
-                    <span>
-                      {t.status === "processing"
-                        ? "Creating your image"
-                        : t.status === "failed"
-                          ? "Generation failed"
-                          : running
-                            ? "In the queue"
-                            : "Not generated yet"}
-                    </span>
+                    <div className="placeholder-state">
+                      {t.status === "processing" ? (
+                        <LoaderCircle className="spinning" size={28} />
+                      ) : t.status === "failed" ? (
+                        <FileImage size={26} />
+                      ) : null}
+                      <span>
+                        {t.status === "processing"
+                          ? "Creating your image"
+                          : t.status === "failed"
+                            ? "Generation failed"
+                            : running
+                              ? "In the queue"
+                              : "Original · not generated yet"}
+                      </span>
+                    </div>
                   </div>
                 )}
                 {t.output && (

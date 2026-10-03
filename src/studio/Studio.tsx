@@ -885,6 +885,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       running={running}
                       selection={selection}
                       outputUrl={outputUrl}
+                      sourceUrl={(id) => sourceUrl(id)}
                       onSelect={(id, on) =>
                         setSelection((a) => {
                           const n = new Set(a);
