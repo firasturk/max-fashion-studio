@@ -30,7 +30,7 @@ import { useTheme } from "@/theme";
 import { loadLastBatch, loadSavedConfig, saveConfig, saveLastBatch } from "./persist";
 import { makeReference } from "@/lib/image";
 import { folderCount, isCampaignShot } from "@shared/paths";
-import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
+import { buildZip, convertImage, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
   DEFAULT_PROMPT,
   cardsPerSource,
@@ -427,6 +427,26 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     try {
       await post("/api/studio/approve", { batch: batch.id, id: t.id });
       await refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  /** Save one AI result with the same name and format the export would use. */
+  async function downloadOne(t: Task) {
+    const src = sources.find((x) => x.id === t.source);
+    if (!t.output || !src) return;
+    try {
+      const format = viewConfig.output || "png";
+      const srcExt = outputExt(t.output);
+      let blob = await (await fetch(outputUrl(t))).blob();
+      let ext = srcExt;
+      if (format !== "png" && srcExt !== format) {
+        blob = await convertImage(blob, format, viewConfig.outputQuality || 90);
+        ext = format;
+      }
+      const name = outputName(src.name, t.card, viewConfig.mode, cardsPerSource(viewConfig), ext);
+      saveBlob(blob, name.split("/").pop() ?? name);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -1027,6 +1047,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           onClose={() => setSelected(null)}
           onRevise={revise}
           onApprove={approve}
+          onDownload={selected?.output ? () => void downloadOne(selected) : undefined}
           onPrev={goPrev}
           onNext={goNext}
         />

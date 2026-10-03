@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, ScanLine } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  LoaderCircle,
+  RefreshCw,
+  ScanLine,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +65,7 @@ export default function ReviewDialog({
   onClose,
   onRevise,
   onApprove,
+  onDownload,
   onPrev,
   onNext,
 }: {
@@ -69,6 +78,8 @@ export default function ReviewDialog({
   onClose: () => void;
   onRevise: (edit: string) => Promise<void>;
   onApprove: () => Promise<void>;
+  /** Save this one result to the computer; absent while there is no result yet. */
+  onDownload?: () => void;
   onPrev?: () => void;
   onNext?: () => void;
 }) {
@@ -287,6 +298,15 @@ export default function ReviewDialog({
             >
               <Check size={17} />
               {task?.status === "approved" ? "Approved" : "Approve for export (A)"}
+            </button>
+            <button
+              className="secondary"
+              onClick={onDownload}
+              disabled={!onDownload}
+              title="Save this AI result to your computer"
+            >
+              <Download size={17} />
+              Download this image
             </button>
             <span className="revision-note">
               Each revision is one more paid generation. Your original stays untouched.
