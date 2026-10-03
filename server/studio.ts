@@ -41,7 +41,8 @@ import { MODES, cardsPerSource, createsTasks, type Config, validateConfig } from
 import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
-import type { Batch, ModeOverride, Preset, Source, Task, User } from "@shared/types";
+import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
+import type { EditorialBrief } from "./editorial";
 import { readAdminSettings } from "./admin";
 
 type Variables = { user: User };
@@ -251,6 +252,95 @@ studioRoutes.post("/direction", async (c) => {
 studioRoutes.get("/skills", async (c) =>
   c.json({ skills: await listSkills(c.env, c.get("user").id) }),
 );
+
+/** Saved looks: prompts the team liked, reusable as the direction of later batches. */
+studioRoutes.get("/looks", async (c) =>
+  c.json({
+    looks: (
+      await all<Omit<LookInfo, "image"> & { image: string | null }>(
+        c.env.DB,
+        "SELECT id, skill, name, scene, pose, light, image, created FROM looks ORDER BY created DESC",
+      )
+    ).map((l) => ({ ...l, image: !!l.image })),
+  }),
+);
+
+studioRoutes.post("/looks", async (c) => {
+  const { task, name } = await body(
+    c,
+    z.object({ task: z.string().max(80), name: z.string().trim().min(1).max(60) }),
+  );
+  const t = await first<{ brief: string | null; batch: string; output: string | null }>(
+    c.env.DB,
+    "SELECT t.brief, t.batch, t.output FROM tasks t JOIN batches b ON b.id = t.batch WHERE t.id = ? AND b.owner = ?",
+    task,
+    c.get("user").id,
+  );
+  if (!t?.brief) throw new StudioError("This image has no skill prompt to save.", 404);
+  const b = await first<{ config: string }>(
+    c.env.DB,
+    "SELECT config FROM batches WHERE id = ?",
+    t.batch,
+  );
+  const cfg = b ? (JSON.parse(b.config) as Config) : null;
+  const brief = JSON.parse(t.brief) as EditorialBrief;
+  const skill = cfg?.mode === "7" ? "zaid" : cfg?.skill || "editorial";
+  const id = uuid();
+  // Keep a copy of the result as the look's reminder image, so deleting the batch later does not lose it.
+  let image: string | null = null;
+  if (t.output) {
+    const obj = await c.env.BUCKET.get(t.output);
+    if (obj) {
+      image = `looks/${id}.${t.output.split(".").pop() || "png"}`;
+      await c.env.BUCKET.put(image, obj.body, {
+        httpMetadata: { contentType: obj.httpMetadata?.contentType || "image/png" },
+      });
+    }
+  }
+  await run(
+    c.env.DB,
+    "INSERT INTO looks (id, skill, name, prompt, negative, scene, pose, light, image, created_by, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    id,
+    skill,
+    name,
+    brief.prompt,
+    brief.negative ?? "",
+    brief.scene ?? "",
+    brief.pose ?? "",
+    brief.light ?? "",
+    image,
+    c.get("user").id,
+    now(),
+  );
+  return c.json({ ok: true, id, skill });
+});
+
+studioRoutes.get("/looks/:id/image", async (c) => {
+  const row = await first<{ image: string | null }>(
+    c.env.DB,
+    "SELECT image FROM looks WHERE id = ?",
+    c.req.param("id"),
+  );
+  const obj = row?.image ? await c.env.BUCKET.get(row.image) : null;
+  if (!obj) throw new StudioError("No image for this look.", 404);
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": obj.httpMetadata?.contentType || "image/png",
+      "Cache-Control": "private, max-age=86400",
+    },
+  });
+});
+
+studioRoutes.delete("/looks/:id", async (c) => {
+  const row = await first<{ image: string | null }>(
+    c.env.DB,
+    "SELECT image FROM looks WHERE id = ?",
+    c.req.param("id"),
+  );
+  if (row?.image) await c.env.BUCKET.delete(row.image);
+  await run(c.env.DB, "DELETE FROM looks WHERE id = ?", c.req.param("id"));
+  return c.json({ ok: true });
+});
 
 studioRoutes.post("/skills/order", async (c) => {
   const { ids } = await body(c, z.object({ ids: z.array(z.string().max(60)).max(200) }));

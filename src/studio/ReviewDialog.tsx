@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Bookmark,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -66,6 +67,7 @@ export default function ReviewDialog({
   onRevise,
   onApprove,
   onDownload,
+  onSaveLook,
   onPrev,
   onNext,
 }: {
@@ -80,6 +82,8 @@ export default function ReviewDialog({
   onApprove: () => Promise<void>;
   /** Save this one result to the computer; absent while there is no result yet. */
   onDownload?: () => void;
+  /** Save this image's skill prompt as a reusable look; absent outside skill campaigns. */
+  onSaveLook?: () => void;
   onPrev?: () => void;
   onNext?: () => void;
 }) {
@@ -308,6 +312,17 @@ export default function ReviewDialog({
               <Download size={17} />
               Download this image
             </button>
+            {onSaveLook && (
+              <button
+                className="secondary"
+                onClick={onSaveLook}
+                disabled={busy}
+                title="Keep this prompt to reuse the same scene, pose and light on other photos"
+              >
+                <Bookmark size={17} />
+                Save prompt as a look
+              </button>
+            )}
             <span className="revision-note">
               Each revision is one more paid generation. Your original stays untouched.
             </span>

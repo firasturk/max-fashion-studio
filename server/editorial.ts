@@ -29,6 +29,15 @@ export interface EditorialBrief {
 export interface EditorialRequest {
   /** Replace the person entirely with an AI-generated model; keep only what is worn. */
   newModel?: boolean;
+  /** A saved prompt that leads this run: its scene, pose, light and style are reused as written. */
+  look?: {
+    name: string;
+    prompt: string;
+    negative: string;
+    scene: string;
+    pose: string;
+    light: string;
+  };
   image: ImageBytes;
   /** 1-based run number; used to rotate scene families so every card differs. */
   run: number;
@@ -131,6 +140,9 @@ export function builderInstruction(req: EditorialRequest): string {
     : "This is the first run for this outfit.";
   const skill = skillFor(req);
   const scene = req.scene !== undefined ? req.scene : pickScene(req, libraryScenes(skill.library));
+  const look = req.look
+    ? `SAVED LOOK "${req.look.name}" (overrides the reference rules, the scene assignment, the library and the avoid-repeats list). The team approved the prompt below on an earlier image and wants the SAME look again. Reuse its location and background, pose and stance, lighting, camera angle and distance, colour grade and overall style exactly as written; do not pick a different scene family and do not vary them for novelty. Rewrite ONLY what must follow image 1: the subject line, the garment inventory (every garment, footwear and accessory exactly as worn in image 1), the framing/crop of image 1, and the face rules. Keep the prompt structure, length and wording otherwise as close to the saved prompt as the new outfit allows.\n--- SAVED PROMPT ---\n${req.look.prompt}\n--- END SAVED PROMPT ---${req.look.negative ? `\nSaved negative prompt to reuse: ${req.look.negative}` : ""}`
+    : "";
   const mood = req.reference
     ? "REFERENCE FIRST. Image 2 is the primary creative source for this run: build the scene, the pose and stance (standing, sitting, walking, leaning), the lighting and the camera angle from it. Describe its kind of place, surfaces, depth, time of day and light with full density, and give the model a pose in the same spirit, then change the exact spot and details so the result is a sibling, not a copy. Ignore its clothing, face, hair, hats, bags, sunglasses, jewellery, props and accessories; the garment comes from image 1 alone and the framing follows image 1. The skill's written direction and library are secondary: use them for mood, colour and the avoid list, and only draw a scene from the library when it fits the reference."
     : "";
@@ -152,11 +164,12 @@ export function builderInstruction(req: EditorialRequest): string {
     "=== LIBRARY ===",
     skill.library,
     "=== RUN CONTEXT ===",
-    `Run number: ${req.run}. ${used}`,
-    recent,
+    `Run number: ${req.run}. ${req.look ? "Repeat the saved look; the avoid list does not apply." : used}`,
+    req.look ? "" : recent,
+    look,
     mood,
     set,
-    scene && !req.reference && !req.set
+    scene && !req.reference && !req.set && !req.look
       ? `Scene assigned to this run (use it as the location family; describe it with full density and you may refine details): "${scene}". Do not substitute another family.`
       : "",
     req.newModel

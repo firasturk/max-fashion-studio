@@ -48,6 +48,8 @@ export interface Config {
   skill: string;
   /** Skill workflow: look of a generated face when the reference face is not visible. */
   market: Market;
+  /** Skill workflow: id of a saved look whose prompt leads the direction instead of the reference photos. */
+  look?: string;
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
   backdrop: string;
   identity?: string;

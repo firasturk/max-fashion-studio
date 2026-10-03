@@ -30,7 +30,7 @@ import {
   type Config,
   isSkillCampaign,
 } from "@shared/config";
-import type { EngineModel, Preset, SkillInfo } from "@shared/types";
+import type { EngineModel, LookInfo, Preset, SkillInfo } from "@shared/types";
 
 const COUNTS = Array.from({ length: MAX_COUNT }, (_, i) => String(i + 1));
 
@@ -53,6 +53,8 @@ export default function CreativePanel({
   onDirectionSaved,
   skills = [],
   onSkillsChanged,
+  looks = [],
+  onLooksChanged,
 }: {
   config: Config;
   locked: boolean;
@@ -74,12 +76,27 @@ export default function CreativePanel({
   /** Skills as the server lists them (built-in plus team edits and additions). */
   skills?: SkillInfo[];
   onSkillsChanged?: (skills: SkillInfo[], selectId?: string) => void;
+  /** Saved looks (prompts the team liked) for every skill. */
+  looks?: LookInfo[];
+  onLooksChanged?: () => void;
 }) {
   const [skillEditor, setSkillEditor] = useState<{ open: boolean; skill: SkillInfo | null }>({
     open: false,
     skill: null,
   });
   const currentSkill = skills.find((s) => s.id === config.skill) ?? skills[0];
+  const skillLooks = looks.filter((l) => l.skill === (config.skill || "editorial"));
+  const currentLook = skillLooks.find((l) => l.id === config.look) ?? null;
+  async function deleteLook(l: LookInfo) {
+    if (!window.confirm(`Delete the saved look "${l.name}"?`)) return;
+    try {
+      await del(`/api/studio/looks/${encodeURIComponent(l.id)}`);
+      onChange({ look: undefined });
+      onLooksChanged?.();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
   const [rebuilding, setRebuilding] = useState(false);
 
   /** After the library changes, an automatic skill gets its text rewritten from the photos. */
@@ -460,6 +477,90 @@ export default function CreativePanel({
             </div>
           )}
           {currentSkill && (
+            <div className="direction-choice">
+              <label className="field-label">Direction for this skill</label>
+              <div className="segmented" role="radiogroup" aria-label="Direction">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!config.look}
+                  className={!config.look ? "on" : ""}
+                  disabled={locked}
+                  onClick={() => onChange({ look: undefined })}
+                >
+                  Reference photos
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!!config.look}
+                  className={config.look ? "on" : ""}
+                  disabled={locked || !skillLooks.length}
+                  title={
+                    skillLooks.length ? "" : "Save a prompt you like from the review dialog first"
+                  }
+                  onClick={() => onChange({ look: skillLooks[0]?.id })}
+                >
+                  Saved look{skillLooks.length ? ` (${skillLooks.length})` : ""}
+                </button>
+              </div>
+              {config.look && (
+                <div className="look-pick">
+                  <div className="look-strip" role="radiogroup" aria-label="Saved looks">
+                    {skillLooks.map((l) => (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={l.id === config.look}
+                        key={l.id}
+                        className={`look-card ${l.id === config.look ? "active" : ""}`}
+                        disabled={locked}
+                        onClick={() => onChange({ look: l.id })}
+                        title={l.scene}
+                      >
+                        {l.image ? (
+                          <img
+                            className="look-thumb"
+                            src={`/api/studio/looks/${l.id}/image`}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="look-thumb placeholder" aria-hidden="true">
+                            {l.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                        <strong>{l.name}</strong>
+                      </button>
+                    ))}
+                  </div>
+                  {currentLook && (
+                    <p className="prompt-tip">
+                      Same scene, pose and light every image: {currentLook.scene}
+                      {currentLook.light ? ` · ${currentLook.light}` : ""}. Only the outfit and
+                      framing follow each photo.
+                    </p>
+                  )}
+                  {currentLook && !locked && (
+                    <button
+                      type="button"
+                      className="text-button danger-text"
+                      onClick={() => void deleteLook(currentLook)}
+                    >
+                      <Trash2 size={13} /> Delete this look
+                    </button>
+                  )}
+                </div>
+              )}
+              {!config.look && (
+                <p className="prompt-tip">
+                  Each image borrows its scene from one of the reference photos below. Like a
+                  result? Save its prompt as a look from the review dialog and reuse it here.
+                </p>
+              )}
+            </div>
+          )}
+          {currentSkill && !config.look && (
             <Suspense fallback={null}>
               <ReferenceLibrary
                 key={currentSkill.id}

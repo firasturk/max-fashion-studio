@@ -42,6 +42,7 @@ import {
 import { estimateCost, formatUsd } from "@shared/pricing";
 import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
 import type {
+  LookInfo,
   Batch,
   EngineModel,
   ModeOverride,
@@ -95,6 +96,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [looks, setLooks] = useState<LookInfo[]>([]);
+  const loadLooks = useCallback(async () => {
+    try {
+      setLooks((await get<{ looks: LookInfo[] }>("/api/studio/looks")).looks);
+    } catch {
+      setLooks([]);
+    }
+  }, []);
   const [spendThreshold, setSpendThreshold] = useState(20);
   const [zaidDirection, setZaidDirection] = useState("");
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
@@ -184,8 +193,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       .finally(() => setStateReady(true))
       .then(loadModels)
       .then(loadPresets)
-      .then(loadSkills);
-  }, [loadState, loadModels, loadPresets, loadSkills]);
+      .then(loadSkills)
+      .then(loadLooks);
+  }, [loadState, loadModels, loadPresets, loadSkills, loadLooks]);
 
   // The batches page always shows fresh counts, including batches still generating in the background.
   useEffect(() => {
@@ -427,6 +437,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     try {
       await post("/api/studio/approve", { batch: batch.id, id: t.id });
       await refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  /** Keep this image's skill prompt as a reusable look for its skill. */
+  async function saveLook(t: Task) {
+    const name = window.prompt("Name this look (for example: Paris corner, golden hour)");
+    if (!name?.trim()) return;
+    try {
+      await post("/api/studio/looks", { task: t.id, name: name.trim() });
+      await loadLooks();
+      toast.success(`Saved look "${name.trim()}". Pick it under Direction for this skill.`);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -776,6 +799,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 <div className="sheet-backdrop" onClick={() => setSettingsOpen(false)} />
               )}
               <CreativePanel
+                looks={looks}
+                onLooksChanged={() => void loadLooks()}
                 config={viewConfig}
                 locked={locked}
                 saved={!!batch}
@@ -1049,6 +1074,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           onRevise={revise}
           onApprove={approve}
           onDownload={selected?.output ? () => void downloadOne(selected) : undefined}
+          onSaveLook={
+            selected?.brief && isSkillCampaign(viewConfig.mode)
+              ? () => void saveLook(selected)
+              : undefined
+          }
           onPrev={goPrev}
           onNext={goNext}
         />

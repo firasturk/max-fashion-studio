@@ -721,12 +721,30 @@ async function ensureBrief(
     used,
     newModel: config.mode === "8",
   };
+  // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
+  const look = config.look
+    ? await first<{
+        name: string;
+        prompt: string;
+        negative: string;
+        scene: string;
+        pose: string;
+        light: string;
+      }>(
+        env.DB,
+        "SELECT name, prompt, negative, scene, pose, light FROM looks WHERE id = ?",
+        config.look,
+      )
+    : null;
+  if (look) req.look = look;
   // Draw the scene here so the mood photo attached to the builder is the one the text names.
   const leader = await setLeader(env, batch, task, source);
   const leaderBrief = leader ? (JSON.parse(leader.brief) as EditorialBrief) : null;
   const plan = leaderBrief
     ? { scene: leaderBrief.scene || null, mood: leaderBrief.mood }
-    : planRun(req);
+    : look
+      ? { scene: look.scene || null }
+      : planRun(req);
   req.scene = plan.scene;
   if (plan.mood) {
     req.reference = plan.mood;

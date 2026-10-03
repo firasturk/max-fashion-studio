@@ -33,6 +33,7 @@ export const configSchema = z.object({
   skill: z.string().max(60).default("editorial"),
   /** Skill workflow: look of a generated face when the reference face is not visible. */
   market: z.enum(MARKETS).default("auto"),
+  look: z.string().max(80).optional(),
   /** Studio backdrop for mode 1 cards 2-5; identical across the set. */
   backdrop: z.string().max(1000).default("warm beige seamless paper backdrop"),
   identity: z.string().max(160).optional(),

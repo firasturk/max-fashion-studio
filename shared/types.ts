@@ -83,6 +83,19 @@ export interface Task {
   updated: number;
 }
 
+/** A prompt the team liked, saved under a skill to reuse as the direction of later batches. */
+export interface LookInfo {
+  id: string;
+  skill: string;
+  name: string;
+  scene: string;
+  pose: string;
+  light: string;
+  /** true when a reminder image (the result it was saved from) is stored with it. */
+  image: boolean;
+  created: number;
+}
+
 /** A skill as the team sees and edits it. */
 export interface SkillInfo {
   id: string;
