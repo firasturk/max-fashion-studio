@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Download,
@@ -27,12 +27,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { del, get, post, postForm } from "@/api";
 import { useTheme } from "@/theme";
+import { loadLastBatch, loadSavedConfig, saveConfig, saveLastBatch } from "./persist";
 import { makeReference } from "@/lib/image";
 import { folderCount, isCampaignShot } from "@shared/paths";
 import { buildZip, saveBlob, type ZipEntry } from "@/lib/zip";
 import {
   DEFAULT_PROMPT,
-  DEFAULT_CONFIG,
   cardsPerSource,
   exportsOriginals,
   type Config,
@@ -67,7 +67,9 @@ import type { EngineInfo } from "./ConnectionDialog";
 const ConnectionDialog = lazy(() => import("./ConnectionDialog"));
 
 export default function Studio({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
-  const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<Config>(loadSavedConfig);
+  // Remember the settings and the open batch in this browser so a refresh lands where you left off.
+  useEffect(() => saveConfig(config), [config]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [engine, setEngine] = useState<EngineInfo>({
@@ -279,6 +281,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         `${rejected} files skipped: unsupported, over 12 MB, or duplicate output name.`,
       );
   }
+
+  useEffect(() => saveLastBatch(batch?.id ?? null), [batch?.id]);
+  const restoredBatch = useRef(false);
+  useEffect(() => {
+    if (restoredBatch.current || !batches.length) return;
+    restoredBatch.current = true;
+    const last = loadLastBatch();
+    if (last && batches.some((b) => b.id === last)) void openBatch(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches]);
 
   async function openBatch(id: string) {
     if (uploading) return;
