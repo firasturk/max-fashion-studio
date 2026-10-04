@@ -12,7 +12,14 @@ import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfiel
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
 import { estimateCost } from "@shared/pricing";
 import { notify } from "./notify";
-import { StudioError, errorMessage, isFatalEngineError, isTransientEngineError } from "./errors";
+import {
+  StudioError,
+  errorMessage,
+  isFatalEngineError,
+  isTransientEngineError,
+  isRateLimit,
+  retryAfterMs,
+} from "./errors";
 import {
   buildPrompt,
   buildEditorialPrompt,
@@ -803,6 +810,8 @@ async function ensureBrief(
  * tick never holds a prompt and a generation in one go, and a lost tick costs nothing already written.
  * Returns the candidates that have a prompt now; the rest wait for the next tick.
  */
+let builderPausedUntil = 0; // after a vendor rate limit, no prompt is written before this time (per isolate)
+
 async function prepareBriefs(
   env: Env,
   batch: BatchRow,
@@ -812,6 +821,7 @@ async function prepareBriefs(
   const needs = candidates.filter((t) => !t.brief);
   if (!needs.length) return candidates;
   const ready = new Set(candidates.filter((t) => !!t.brief).map((t) => t.id));
+  if (now() < builderPausedUntil) return candidates.filter((t) => ready.has(t.id));
   await Promise.allSettled(
     needs.slice(0, concurrency(env)).map(async (task) => {
       const source = await first<SourceRow>(
@@ -823,7 +833,24 @@ async function prepareBriefs(
       try {
         await ensureBrief(env, batch, config, task, source);
         ready.add(task.id);
+        await run(
+          env.DB,
+          "UPDATE tasks SET error = NULL WHERE id = ? AND status = 'queued'",
+          task.id,
+        );
       } catch (e) {
+        if (isRateLimit(e)) {
+          // Stay in the queue and wait as long as the vendor asked; the next tick resumes.
+          builderPausedUntil = Math.max(builderPausedUntil, now() + retryAfterMs(e));
+          await run(
+            env.DB,
+            "UPDATE tasks SET error = ?, updated = ? WHERE id = ? AND status = 'queued'",
+            "Prompt builder is rate limited by the vendor; retrying automatically.",
+            now(),
+            task.id,
+          );
+          return;
+        }
         if (isTransientEngineError(e)) return; // next tick tries again
         await run(
           env.DB,

@@ -66,7 +66,7 @@ async function googleError(r: Response): Promise<StudioError> {
       502,
       true,
     );
-  if (r.status === 429) return new StudioError(`Google rate limit or quota: ${detail}`, 429, true);
+  if (r.status === 429) return new StudioError(`Google rate limit or quota: ${detail}`, 429);
   if (/billing|quota|exceeded/i.test(detail))
     return new StudioError(`Google billing or quota problem: ${detail}`, 502, true);
   return new StudioError(`Google request failed (${r.status}): ${detail}`, 502);

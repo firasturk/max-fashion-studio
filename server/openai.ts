@@ -65,7 +65,7 @@ async function openaiError(r: Response): Promise<StudioError> {
     return new StudioError(`OpenAI billing problem: ${detail}`, 502, true);
   if (r.status === 403) return new StudioError(`OpenAI refused the request: ${detail}`, 502, true);
   if (r.status === 404) return new StudioError(`OpenAI model not found: ${detail}`, 502, true);
-  if (r.status === 429) return new StudioError(`OpenAI rate limit: ${detail}`, 429, true);
+  if (r.status === 429) return new StudioError(`OpenAI rate limit: ${detail}`, 429);
   if (r.status === 400 && /safety|moderation|policy/i.test(detail))
     return new StudioError(`Rejected by OpenAI moderation: ${detail}`, 502);
   return new StudioError(`OpenAI request failed (${r.status}): ${detail}`, 502);

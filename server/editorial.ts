@@ -352,9 +352,14 @@ export async function askVisionOpenAI(
           role: "user",
           content: [
             { type: "text", text: instruction },
-            ...images.map((img) => ({
+            // The garment photo needs full detail; the reference and sibling images only set the
+            // scene, so low detail (a few dozen tokens each) keeps the call inside small rate limits.
+            ...images.map((img, i) => ({
               type: "image_url",
-              image_url: { url: `data:${img.mime};base64,${toBase64(img.bytes)}` },
+              image_url: {
+                url: `data:${img.mime};base64,${toBase64(img.bytes)}`,
+                detail: i === 0 ? "high" : "low",
+              },
             })),
           ],
         },
@@ -362,6 +367,14 @@ export async function askVisionOpenAI(
     }),
     signal: AbortSignal.timeout(120_000),
   });
+  if (r.status === 429) {
+    const detail = (await r.text()).slice(0, 200);
+    // Each model has its own token-per-minute pool; the mini model's is far larger, so one 429 on
+    // the main model falls through to it rather than stalling the batch.
+    if (model === "gpt-4.1")
+      return askVisionOpenAI(key, instruction, images, fetchImpl, "gpt-4.1-mini");
+    throw new StudioError(`Prompt builder (OpenAI) rate limited (429): ${detail}`, 429);
+  }
   if (!r.ok)
     throw new StudioError(
       `Prompt builder (OpenAI) failed (${r.status}): ${(await r.text()).slice(0, 200)}`,
