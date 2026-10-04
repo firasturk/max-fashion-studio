@@ -43,6 +43,7 @@ import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
 import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
 import type { EditorialBrief } from "./editorial";
+import { signObjectUrl } from "./signed";
 import { readAdminSettings } from "./admin";
 
 type Variables = { user: User };
@@ -1016,6 +1017,33 @@ studioRoutes.get("/file", async (c) => {
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(filename)}`,
     },
   });
+});
+
+/** A short-lived public link to one of the caller's originals or results (what fal.ai is given). */
+studioRoutes.get("/file-link", async (c) => {
+  const b = await ownedBatch(c.env, c.get("user"), c.req.query("batch"));
+  const id = c.req.query("id") ?? "";
+  const kind = c.req.query("kind") ?? "result";
+  let key: string | null = null;
+  if (kind === "original" || kind === "reference") {
+    const row = await first<{ key: string; reference_key: string | null }>(
+      c.env.DB,
+      "SELECT key, reference_key FROM sources WHERE id = ? AND batch = ?",
+      id,
+      b.id,
+    );
+    key = kind === "reference" ? (row?.reference_key ?? row?.key ?? null) : (row?.key ?? null);
+  } else {
+    const row = await first<{ output: string | null }>(
+      c.env.DB,
+      "SELECT output FROM tasks WHERE id = ? AND batch = ?",
+      id,
+      b.id,
+    );
+    key = row?.output ?? null;
+  }
+  if (!key) throw new StudioError("Image not found.", 404);
+  return c.json({ url: await signObjectUrl(c.env, key) });
 });
 
 const batchRef = z.object({ batch: z.string().min(1) });
