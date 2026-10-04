@@ -46,6 +46,7 @@ import {
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
+import { signObjectUrl } from "./signed";
 import { sanitizePrompt } from "@shared/safety";
 import { productKey } from "@shared/naming";
 import { resolveSkill } from "./skills";
@@ -1238,14 +1239,18 @@ async function submitFalTask(
   config: Config,
   task: TaskRow,
 ): Promise<string> {
-  const { images, roles, source } = await collectReferenceBytes(env, batch, config, task);
+  // fal fetches its inputs by URL: signed links to the stored images keep multi-megabyte results
+  // out of the Worker's memory, which is what cut off revisions and set siblings before.
+  const { keys, roles, source } = await collectReferenceKeys(env, batch, config, task);
   const edit = task.edit?.trim() ?? "";
   const prompt = await promptFor(env, batch, config, task, source, edit, roles);
+  const imageUrls: string[] = [];
+  for (const k of keys) imageUrls.push(await signObjectUrl(env, k));
   const client = await makeFalClient(env);
   const handle = await client.submit({
     model: config.model!,
     prompt,
-    images,
+    imageUrls,
     aspectRatio: config.ratio,
     size: config.size,
   });
@@ -1378,19 +1383,19 @@ async function setLeader(
 }
 
 /** Reference images as bytes (garment, card 1, card 2, latest result) for the synchronous engines. */
-async function collectReferenceBytes(
+/**
+ * The stored images one generation needs, as R2 keys in engine order: the garment photo first,
+ * then the consistency, mood, set-sibling and revision images that apply.
+ */
+async function collectReferenceKeys(
   env: Env,
   batch: BatchRow,
   config: Config,
   task: TaskRow,
-): Promise<{
-  images: ImageBytes[];
-  roles: PromptImages;
-  source: SourceRow;
-}> {
+): Promise<{ keys: string[]; roles: PromptImages; source: SourceRow }> {
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
-  const images: ImageBytes[] = [await sourceBytes(env, source)];
+  const keys: string[] = [source.reference_key || source.key];
   const roles = {
     identity: false,
     firstCard: false,
@@ -1400,9 +1405,9 @@ async function collectReferenceBytes(
     set: false,
   };
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
-    const firstCard = await first<TaskRow>(
+    const firstCard = await first<{ output: string | null }>(
       env.DB,
-      "SELECT id, output, output_engine_url FROM tasks WHERE batch = ? AND source = ? AND card = 1",
+      "SELECT output FROM tasks WHERE batch = ? AND source = ? AND card = 1",
       batch.id,
       task.source,
     );
@@ -1411,17 +1416,17 @@ async function collectReferenceBytes(
         "Generate lifestyle card 1 first to establish the model identity.",
         409,
       );
-    images.push(await outputBytes(env, firstCard));
+    keys.push(firstCard.output);
     roles.firstCard = true;
     if (task.card > 2) {
-      const studioCard = await first<TaskRow>(
+      const studioCard = await first<{ output: string | null }>(
         env.DB,
-        "SELECT id, output FROM tasks WHERE batch = ? AND source = ? AND card = 2",
+        "SELECT output FROM tasks WHERE batch = ? AND source = ? AND card = 2",
         batch.id,
         task.source,
       );
       if (studioCard?.output) {
-        images.push(await outputBytes(env, studioCard));
+        keys.push(studioCard.output);
         roles.studio = true;
       }
     }
@@ -1429,20 +1434,49 @@ async function collectReferenceBytes(
   if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
     if (brief.mood) {
-      images.push(await referenceBytes(env, brief.mood));
+      const ref = await first<{ key: string }>(
+        env.DB,
+        "SELECT key FROM refs WHERE id = ?",
+        brief.mood,
+      );
+      if (!ref) throw new StudioError("Reference photo is missing from the library.", 500);
+      keys.push(ref.key);
       roles.mood = true;
     }
     const sibling = brief.setOf ? await setSibling(env, brief.setOf) : null;
-    if (sibling) {
-      images.push(await outputBytes(env, sibling));
+    if (sibling?.output) {
+      keys.push(sibling.output);
       roles.set = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
   if ((edit || task.recenter) && task.output) {
-    images.push(await outputBytes(env, task));
+    keys.push(task.output);
     roles.revision = true;
   }
+  return { keys, roles, source };
+}
+
+async function objectBytes(
+  env: Env,
+  key: string,
+  fallbackMime = "image/jpeg",
+): Promise<ImageBytes> {
+  const obj = await env.BUCKET.get(key);
+  if (!obj) throw new StudioError("Image unavailable.", 404);
+  return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || fallbackMime };
+}
+
+/** Same as collectReferenceKeys, with the bytes loaded, for engines that need inline images. */
+async function collectReferenceBytes(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  task: TaskRow,
+): Promise<{ images: ImageBytes[]; roles: PromptImages; source: SourceRow }> {
+  const { keys, roles, source } = await collectReferenceKeys(env, batch, config, task);
+  const images: ImageBytes[] = [];
+  for (const k of keys) images.push(await objectBytes(env, k, source.mime));
   return { images, roles, source };
 }
 

@@ -3567,3 +3567,25 @@ textarea:focus {
   gap: 5px;
   align-self: flex-start;
 }
+
+/* A result being revised keeps its image, with a clear in-progress badge on top */
+.redo-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgb(10 10 18 / 0.72);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+.result-card:has(.redo-badge) .photo-frame img {
+  opacity: 0.55;
+}

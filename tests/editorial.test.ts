@@ -121,7 +121,7 @@ describe("editorial prompt builder", () => {
     expect(p.startsWith("Use the attached image")).toBe(true);
     expect(p).toContain("Revision of the existing result: brighter sky");
     expect(p).toContain("The LAST image is the existing result to revise");
-    expect(p.trim().endsWith("AVOID: extra buttons, plain studio background")).toBe(true);
+    expect(p).toContain("AVOID: extra buttons, plain studio background, wind-blown hair");
   });
 });
 

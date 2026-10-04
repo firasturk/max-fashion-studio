@@ -26,7 +26,8 @@ export function falModelId(slug: string): string {
 export interface FalJob {
   model: string;
   prompt: string;
-  images: ImageBytes[];
+  /** Public (signed) URLs of the input images; fal fetches them itself. */
+  imageUrls: string[];
   aspectRatio: string;
   size: string;
 }
@@ -48,14 +49,6 @@ export function falSize(aspectRatio: string, size: string): { width: number; hei
   const width = ratio < 1 ? Math.round((long * ratio) / 16) * 16 : long;
   const height = ratio < 1 ? long : Math.round(long / ratio / 16) * 16;
   return { width, height };
-}
-
-function toBase64(bytes: ArrayBuffer): string {
-  let s = "";
-  const view = new Uint8Array(bytes);
-  for (let i = 0; i < view.length; i += 0x8000)
-    s += String.fromCharCode(...view.subarray(i, i + 0x8000));
-  return btoa(s);
 }
 
 async function readError(r: Response): Promise<string> {
@@ -124,7 +117,7 @@ export class FalClient {
       headers: this.headers(),
       body: JSON.stringify({
         prompt: job.prompt,
-        image_urls: job.images.map((img) => `data:${img.mime};base64,${toBase64(img.bytes)}`),
+        image_urls: job.imageUrls,
         image_size: falSize(job.aspectRatio, job.size),
         num_images: 1,
         enable_safety_checker: false,

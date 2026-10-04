@@ -145,6 +145,10 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
 export const NEW_MODEL_RULE =
   "NEW MODEL: the person in the reference photo is NOT reproduced. Generate an entirely different, AI-created professional model: a new face, hair, skin tone, build and identity that do not resemble the original person in any way. Take from the reference photo ONLY what is worn: every garment, the footwear, and any accessories or bags, all kept identical in colour, print, construction, length and fit. Keep the same framing and crop as the reference.";
 
+/** Engine-facing hair rule: tidy hair, no wind-blown or stray strands. */
+export const HAIR_RULE =
+  "HAIR: neat and settled, exactly as styled in the reference photo when the model is kept; no wind-blown, flying, floating or stray strands, no hair across the face or eyes.";
+
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string): string {
   if (framing === "UPPER_BODY")
@@ -166,6 +170,7 @@ export function buildEditorialPrompt(
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
   parts.push(framingRule(framing));
+  parts.push(HAIR_RULE);
   if (center) parts.push(CENTERING);
   if (edit)
     parts.push(
@@ -188,7 +193,10 @@ export function buildEditorialPrompt(
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.
   if (roles.length > 1 || newModel) parts.push(roles.join(" "));
-  if (negative) parts.push(`AVOID: ${negative}`);
+  const avoid = [negative, "wind-blown hair, flying hair strands, messy hair"]
+    .filter(Boolean)
+    .join(", ");
+  parts.push(`AVOID: ${avoid}`);
   return parts.join("\n\n");
 }
 

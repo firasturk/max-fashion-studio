@@ -39,5 +39,6 @@
     "HIGGSFIELD_MODEL": "nano-banana-pro",
     "HIGGSFIELD_BASE_URL": "https://api.higgsfield.ai",
     "MAX_CONCURRENT_GENERATIONS": "6",
+    "PUBLIC_BASE_URL": "http://127.0.0.1:5174",
   },
 }

@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import { StudioError } from "./errors";
 import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
+import { verifyObjectToken } from "./signed";
 import { adminRoutes, cleanupOldBatches } from "./admin";
 import { advanceBatch, activeBatchIds } from "./engine";
 import type { User } from "@shared/types";
@@ -27,6 +28,25 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.route("/api/auth", authRoutes);
+
+// Signed, short-lived access to one stored image, for engines that fetch inputs by URL (fal.ai).
+app.get("/api/public/object", async (c) => {
+  const key = c.req.query("k") ?? "";
+  const exp = c.req.query("e") ?? "";
+  const sig = c.req.query("s") ?? "";
+  if (!key || !(await verifyObjectToken(c.env, key, exp, sig)))
+    return c.json({ error: "Invalid or expired link." }, 403);
+  const obj = await c.env.BUCKET.get(key);
+  if (!obj) return c.json({ error: "Not found." }, 404);
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+      "Content-Length": String(obj.size),
+      "Cache-Control": "private, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+});
 
 // Engine webhook: no session, protected by the shared token. Payload is ignored; state is re-read from the engine.
 app.post("/api/hooks/engine", async (c) => {

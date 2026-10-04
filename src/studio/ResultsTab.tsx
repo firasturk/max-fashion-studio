@@ -226,6 +226,18 @@ export default function ResultsTab({
                     </div>
                   </div>
                 )}
+                {t.output && (t.status === "processing" || t.status === "queued") && (
+                  <span className="redo-badge" aria-live="polite">
+                    {t.status === "processing" ? (
+                      <LoaderCircle className="spinning" size={16} />
+                    ) : null}
+                    {t.status === "processing"
+                      ? "Creating the revision"
+                      : running
+                        ? "Revision in the queue"
+                        : "Revision waiting"}
+                  </span>
+                )}
                 {t.output && (
                   <span className="zoom">
                     <ZoomIn size={17} />

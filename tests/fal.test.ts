@@ -32,7 +32,7 @@ describe("fal.ai client", () => {
       if (u === "https://queue.fal.run/bytedance/seedream/v5/pro/edit") {
         expect((init?.headers as Record<string, string>).Authorization).toBe(`Key ${KEY}`);
         const body = JSON.parse(String(init?.body));
-        expect(body.image_urls[0]).toMatch(/^data:image\/jpeg;base64,/);
+        expect(body.image_urls[0]).toMatch(/^https:\/\/example\.test\/api\/public\/object\?/);
         expect(body.image_size).toEqual({ width: 2048, height: 2048 });
         return new Response(
           JSON.stringify({
@@ -56,7 +56,7 @@ describe("fal.ai client", () => {
     const handle = await client.submit({
       model: "fal/bytedance/seedream/v5/pro/edit",
       prompt: "p",
-      images: [{ bytes: new ArrayBuffer(4), mime: "image/jpeg" }],
+      imageUrls: ["https://example.test/api/public/object?k=a&e=1&s=2"],
       aspectRatio: "1:1",
       size: "2K",
     });
