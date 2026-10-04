@@ -528,12 +528,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     setExporting(true);
     try {
       const folder = (byId.get(t.source)?.name ?? "").split("/").slice(0, -1).pop() || key;
+      const entries = zipEntriesFor(members);
+      // The set's originals go in beside the AI images, in the same folder.
+      const originals = sources.filter((s) => productKey(s.name) === key);
+      for (const s of originals) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
       const manifest = { set: key, files: members.map((x) => byId.get(x.source)?.name) };
-      saveBlob(
-        await buildZip(zipEntriesFor(members), manifest),
-        `${safeArchiveName(folder)}-AI.zip`,
-      );
-      toast.success(`${members.length} images of ${key} downloaded.`);
+      saveBlob(await buildZip(entries, manifest), `${safeArchiveName(folder)}-AI.zip`);
+      toast.success(`${members.length + originals.length} files of ${key} downloaded.`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -554,10 +555,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
       const entries = zipEntriesFor(chosen);
+      // Originals sit next to their AI images, in the same product folder, under their own name.
       const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
-        for (const s of sources)
-          entries.push({ name: `originals/${s.name}`, url: sourceUrl(s.id, "original") });
+        for (const s of sources) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
       const manifest = {
         batch: batch.name,
         engine: engine.model,

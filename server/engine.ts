@@ -37,7 +37,7 @@ import {
   FRAMING_CHECK_INSTRUCTION,
   FRAMING_SCHEMA,
   parseFramingCheck,
-  type Framing,
+  type FramingCheck,
 } from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
@@ -760,6 +760,7 @@ async function ensureBrief(
     newModel: config.mode === "8",
     uploadFraming: check.framing,
     visibleGarments: check.garments,
+    handsInPockets: check.handsInPockets,
   };
   // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
   const look = config.look
@@ -907,11 +908,18 @@ async function uploadFraming(
   env: Env,
   source: SourceRow,
   image: ImageBytes,
-): Promise<{ framing: Framing; faceVisible: boolean; garments: string }> {
+): Promise<FramingCheck> {
   if (source.framing) {
-    const [framing, face, ...rest] = source.framing.split("|");
+    const [framing, face, third, ...rest] = source.framing.split("|");
+    // Current form: framing|face|pockets|garments. Rows from before the pockets flag have three parts.
+    const hasPockets = third === "true" || third === "false";
     if (framing === "FULL_BODY" || framing === "UPPER_BODY" || framing === "LOWER_BODY")
-      return { framing, faceVisible: face === "true", garments: rest.join("|") };
+      return {
+        framing,
+        faceVisible: face === "true",
+        handsInPockets: hasPockets ? third === "true" : false,
+        garments: hasPockets ? rest.join("|") : [third, ...rest].filter(Boolean).join("|"),
+      };
   }
   const google = (await resolveGoogleKey(env)).key;
   const openai = (await resolveOpenAIKey(env)).key;
@@ -942,7 +950,7 @@ async function uploadFraming(
   await run(
     env.DB,
     "UPDATE sources SET framing = ? WHERE id = ?",
-    `${result.framing}|${result.faceVisible}|${result.garments}`,
+    `${result.framing}|${result.faceVisible}|${result.handsInPockets}|${result.garments}`,
     source.id,
   );
   return result;
@@ -997,6 +1005,7 @@ async function promptFor(
       config.mode === "8",
       centeringApplies(config, task.card),
       brief.framing,
+      source.framing?.split("|")[2] === "true",
     );
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);

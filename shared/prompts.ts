@@ -156,14 +156,29 @@ export const HAIR_RULE =
   "HAIR: neat and settled, exactly as styled in the reference photo when the model is kept; no wind-blown, flying, floating or stray strands, no hair across the face or eyes.";
 
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
-export function framingRule(framing?: string): string {
+export function framingRule(framing?: string, handsInPockets = false): string {
+  const hands = handsInPockets
+    ? " Hands: a hand may rest in a pocket, as in the reference photo."
+    : " Hands: no hand in a pocket; hands stay out of pockets, relaxed and visible.";
   if (framing === "UPPER_BODY")
-    return "FRAMING LOCK: upper body only, cropped at the same line as the reference photo (around the waist or hips). Do not show or invent legs, trousers, skirts, footwear or anything below that line; nothing outside the reference crop exists in this image.";
+    return (
+      "FRAMING LOCK: upper body only, cropped at the same line as the reference photo (around the waist or hips). Do not show or invent legs, trousers, skirts, footwear or anything below that line; nothing outside the reference crop exists in this image." +
+      hands
+    );
   if (framing === "LOWER_BODY")
-    return "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image.";
+    return (
+      "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. Arms hang straight down at the sides with the hands open and visible beside the thighs." +
+      hands
+    );
   if (framing === "FULL_BODY")
-    return "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
-  return "FRAMING LOCK: keep exactly the reference photo's crop. A full-body photo stays full body with footwear inside the frame; an upper-body photo stays upper body and ends at the same line, with no legs, trousers or footwear drawn; a lower-body photo stays lower body and starts at the same line, with no face or top drawn. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
+    return (
+      "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers." +
+      hands
+    );
+  return (
+    "FRAMING LOCK: keep exactly the reference photo's crop. A full-body photo stays full body with footwear inside the frame; an upper-body photo stays upper body and ends at the same line, with no legs, trousers or footwear drawn; a lower-body photo stays lower body and starts at the same line, with no face or top drawn. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers." +
+    hands
+  );
 }
 
 export function buildEditorialPrompt(
@@ -174,10 +189,11 @@ export function buildEditorialPrompt(
   newModel = false,
   center = true,
   framing?: string,
+  handsInPockets = false,
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
-  parts.push(framingRule(framing));
+  parts.push(framingRule(framing, handsInPockets));
   parts.push(HAIR_RULE);
   if (center) parts.push(CENTERING);
   if (edit)
@@ -201,7 +217,11 @@ export function buildEditorialPrompt(
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.
   if (roles.length > 1 || newModel) parts.push(roles.join(" "));
-  const avoid = [negative, "wind-blown hair, flying hair strands, messy hair"]
+  const avoid = [
+    negative,
+    "wind-blown hair, flying hair strands, messy hair",
+    handsInPockets ? "" : "hands in pockets",
+  ]
     .filter(Boolean)
     .join(", ");
   parts.push(`AVOID: ${avoid}`);

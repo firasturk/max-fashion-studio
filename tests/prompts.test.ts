@@ -133,8 +133,15 @@ describe("framing lock", () => {
     expect(buildEditorial("P.", "", "", {}, false, true, "UPPER_BODY")).toContain(
       "upper body only",
     );
-    expect(buildEditorial("P.", "", "", {}, false, true, "LOWER_BODY")).toContain(
-      "lower body only",
+    const lower = buildEditorial("P.", "", "", {}, false, true, "LOWER_BODY");
+    expect(lower).toContain("lower body only");
+    expect(lower).toContain("Arms hang straight down");
+    expect(lower).toContain("no hand in a pocket");
+    expect(lower).toContain(
+      "AVOID: wind-blown hair, flying hair strands, messy hair, hands in pockets",
+    );
+    expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY", true)).toContain(
+      "may rest in a pocket",
     );
     expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY")).toContain("no added shoes");
     expect(buildEditorial("P.", "")).toContain("FRAMING LOCK");

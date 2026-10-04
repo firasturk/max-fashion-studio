@@ -181,14 +181,23 @@ describe("verified framing", () => {
     ).toEqual({
       framing: "LOWER_BODY",
       faceVisible: false,
+      handsInPockets: false,
       garments: "black trousers, sneakers",
     });
     expect(parseFramingCheck("nonsense").framing).toBe("FULL_BODY");
+    expect(
+      parseFramingCheck(
+        '{"framing":"FULL_BODY","faceVisible":true,"handsInPockets":true,"garments":"coat"}',
+      ).handsInPockets,
+    ).toBe(true);
   });
   it("turns a lower-body crop into a binding instruction that excludes the face and top", () => {
     const d = framingDirective("LOWER_BODY", "black trousers, sneakers");
     expect(d).toContain("LOWER-BODY image");
     expect(d).toContain("overrides the skill");
     expect(d).toContain("black trousers, sneakers");
+    expect(d).toContain("straight down at the sides");
+    expect(d).toContain("no hand in a pocket");
+    expect(framingDirective("FULL_BODY", "coat", true)).toContain("pocket");
   });
 });
