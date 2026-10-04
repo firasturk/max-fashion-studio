@@ -145,6 +145,15 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
 export const NEW_MODEL_RULE =
   "NEW MODEL: the person in the reference photo is NOT reproduced. Generate an entirely different, AI-created professional model: a new face, hair, skin tone, build and identity that do not resemble the original person in any way. Take from the reference photo ONLY what is worn: every garment, the footwear, and any accessories or bags, all kept identical in colour, print, construction, length and fit. Keep the same framing and crop as the reference.";
 
+/** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
+export function framingRule(framing?: string): string {
+  if (framing === "UPPER_BODY")
+    return "FRAMING LOCK: upper body only, cropped at the same line as the reference photo (around the waist or hips). Do not show or invent legs, trousers, skirts, footwear or anything below that line; nothing outside the reference crop exists in this image.";
+  if (framing === "LOWER_BODY")
+    return "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image.";
+  return "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
+}
+
 export function buildEditorialPrompt(
   briefPrompt: string,
   negative: string,
@@ -152,9 +161,11 @@ export function buildEditorialPrompt(
   images: PromptImages = {},
   newModel = false,
   center = true,
+  framing?: string,
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
+  parts.push(framingRule(framing));
   if (center) parts.push(CENTERING);
   if (edit)
     parts.push(

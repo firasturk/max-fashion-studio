@@ -1071,7 +1071,13 @@ studioRoutes.post("/tick", async (c) => {
   // The tick keeps its connection open until the synchronous generations it started have been
   // saved, so they are never cut off by the post-response waitUntil limit.
   const jobs: Promise<unknown>[] = [];
-  await advanceBatch(c.env, b.id, { background: (p) => jobs.push(p) });
+  await advanceBatch(c.env, b.id, {
+    background: (p) => {
+      jobs.push(p);
+      // Also registered with the runtime so a reload or closed tab does not cut the work short.
+      c.executionCtx.waitUntil(p.catch(() => {}));
+    },
+  });
   await Promise.allSettled(jobs);
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });

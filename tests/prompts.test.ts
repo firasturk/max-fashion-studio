@@ -117,6 +117,19 @@ describe("centering", () => {
   });
 });
 
+describe("framing lock", () => {
+  it("tells the engine to keep the upload's crop and invent nothing outside it", () => {
+    expect(buildEditorial("P.", "", "", {}, false, true, "UPPER_BODY")).toContain(
+      "upper body only",
+    );
+    expect(buildEditorial("P.", "", "", {}, false, true, "LOWER_BODY")).toContain(
+      "lower body only",
+    );
+    expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY")).toContain("no added shoes");
+    expect(buildEditorial("P.", "")).toContain("FRAMING LOCK");
+  });
+});
+
 describe("new-model skill campaign", () => {
   it("tells the engine to replace the person and keep only what is worn", () => {
     const p = buildEditorial("Prompt body.", "blur", "", {}, true);

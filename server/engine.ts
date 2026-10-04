@@ -79,7 +79,8 @@ interface SourceRow {
   engine_url: string | null;
 }
 
-const SUBMIT_TIMEOUT_MS = 10 * 60 * 1000; // processing without a request id for this long = lost
+const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
+const FAL_PARALLEL = 24; // fal.ai queues on its side, so a batch can hand it many images at once
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
 const FINALIZE_TIMEOUT_MS = 5 * 60 * 1000; // finalizing this long = the saving job was cut off
@@ -212,8 +213,14 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
       continue;
     }
     if (!task.request_id) {
-      if (age > SUBMIT_TIMEOUT_MS)
-        await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
+      // The submission died with the request that carried it (a page reload, a closed tab, a dropped
+      // connection). Put it back in the queue automatically; only repeated losses fail the image.
+      if (age > SUBMIT_TIMEOUT_MS) {
+        if (task.attempts <= MAX_AUTO_ATTEMPTS)
+          await requeue(env, task, "submission was interrupted, starting again");
+        else
+          await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
+      }
       continue;
     }
     if (task.request_id.startsWith("google:")) {
@@ -555,9 +562,12 @@ async function submitNext(
     "SELECT COUNT(*) AS n FROM tasks WHERE batch = ? AND status IN ('processing','finalizing')",
     batch.id,
   );
-  const slots = concurrency(env) - (processing?.n ?? 0);
+  // Synchronous engines hold a connection per image, so they are capped; fal.ai queues on its side.
+  const slots = (fal ? FAL_PARALLEL : concurrency(env)) - (processing?.n ?? 0);
   if (slots <= 0) return;
-  const candidates = await eligibleQueued(env, batch, config, slots);
+  let candidates = await eligibleQueued(env, batch, config, slots);
+  if (SKILL_MODES.has(config.mode))
+    candidates = await prepareBriefs(env, batch, config, candidates);
   const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
@@ -787,6 +797,48 @@ async function ensureBrief(
   return brief;
 }
 
+/**
+ * Skill campaigns: write the prompts for queued images first, a few at a time, before anything is
+ * submitted. Each prompt is a 20-40 s vision call; keeping it out of the submission step means a
+ * tick never holds a prompt and a generation in one go, and a lost tick costs nothing already written.
+ * Returns the candidates that have a prompt now; the rest wait for the next tick.
+ */
+async function prepareBriefs(
+  env: Env,
+  batch: BatchRow,
+  config: Config,
+  candidates: TaskRow[],
+): Promise<TaskRow[]> {
+  const needs = candidates.filter((t) => !t.brief);
+  if (!needs.length) return candidates;
+  const ready = new Set(candidates.filter((t) => !!t.brief).map((t) => t.id));
+  await Promise.allSettled(
+    needs.slice(0, concurrency(env)).map(async (task) => {
+      const source = await first<SourceRow>(
+        env.DB,
+        "SELECT * FROM sources WHERE id = ?",
+        task.source,
+      );
+      if (!source) return;
+      try {
+        await ensureBrief(env, batch, config, task, source);
+        ready.add(task.id);
+      } catch (e) {
+        if (isTransientEngineError(e)) return; // next tick tries again
+        await run(
+          env.DB,
+          "UPDATE tasks SET status = 'failed', error = ?, updated = ? WHERE id = ? AND status = 'queued'",
+          errorMessage(e, "Prompt builder failed.").slice(0, 500),
+          now(),
+          task.id,
+        );
+        if (isFatalEngineError(e)) await pauseBatch(env, batch.id, errorMessage(e));
+      }
+    }),
+  );
+  return candidates.filter((t) => ready.has(t.id));
+}
+
 /** Google failures another vendor can cover: region refusal or an exhausted prepaid balance. */
 function googleUnavailable(e: unknown): boolean {
   return /location is not supported|credits are used up|credits are depleted/i.test(
@@ -835,6 +887,7 @@ async function promptFor(
       roles,
       config.mode === "8",
       centeringApplies(config, task.card),
+      brief.framing,
     );
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);
