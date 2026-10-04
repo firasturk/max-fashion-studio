@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bookmark,
-  Check,
   ChevronLeft,
   ChevronRight,
   Download,
+  FolderDown,
   LoaderCircle,
   RefreshCw,
   ScanLine,
@@ -65,8 +65,8 @@ export default function ReviewDialog({
   position,
   onClose,
   onRevise,
-  onApprove,
   onDownload,
+  onDownloadSet,
   onSaveLook,
   onPrev,
   onNext,
@@ -79,9 +79,10 @@ export default function ReviewDialog({
   position?: { index: number; total: number };
   onClose: () => void;
   onRevise: (edit: string) => Promise<void>;
-  onApprove: () => Promise<void>;
   /** Save this one result to the computer; absent while there is no result yet. */
   onDownload?: () => void;
+  /** Save every generated image of this product set as one ZIP; absent when the image is not in a set. */
+  onDownloadSet?: () => void;
   /** Save this image's skill prompt as a reusable look; absent outside skill campaigns. */
   onSaveLook?: () => void;
   onPrev?: () => void;
@@ -101,10 +102,9 @@ export default function ReviewDialog({
       })
     : null;
   const fabric = task?.card === 6;
-  const canApprove = !!task && (task.status === "ready" || task.status === "review");
   const inFlight = !!task && (task.status === "processing" || task.status === "queued");
 
-  // Keyboard: A approve, R revise, arrows navigate, 1/2/3 switch views. Ignored while typing.
+  // Keyboard: R revise, arrows navigate, 1/2/3 switch views. Ignored while typing.
   useEffect(() => {
     if (!task) return;
     const onKey = (e: KeyboardEvent) => {
@@ -114,7 +114,6 @@ export default function ReviewDialog({
       if (typing) return;
       if (e.key === "ArrowLeft" && onPrev) onPrev();
       else if (e.key === "ArrowRight" && onNext) onNext();
-      else if ((e.key === "a" || e.key === "A") && canApprove && !busy) void onApprove();
       else if (e.key === "r" || e.key === "R") editRef.current?.focus();
       else if (e.key === "1") setView("compare");
       else if (e.key === "2") setView("result");
@@ -124,7 +123,7 @@ export default function ReviewDialog({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [task, onPrev, onNext, onApprove, canApprove, busy]);
+  }, [task, onPrev, onNext, busy]);
 
   useEffect(() => setEdit(""), [task?.id]);
 
@@ -149,7 +148,7 @@ export default function ReviewDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            Drag the slider to compare. Keys: ← → next image · A approve · R revise · 1/2/3 views.
+            Drag the slider to compare. Keys: ← → next image · R revise · 1/2/3 views.
           </DialogDescription>
         </DialogHeader>
         <div className="review-layout">
@@ -297,14 +296,6 @@ export default function ReviewDialog({
             </button>
             <button
               className="secondary"
-              onClick={() => void onApprove()}
-              disabled={busy || !canApprove}
-            >
-              <Check size={17} />
-              {task?.status === "approved" ? "Approved" : "Approve for export (A)"}
-            </button>
-            <button
-              className="secondary"
               onClick={onDownload}
               disabled={!onDownload}
               title="Save this AI result to your computer"
@@ -312,6 +303,12 @@ export default function ReviewDialog({
               <Download size={17} />
               Download this image
             </button>
+            {onDownloadSet && (
+              <button className="secondary" onClick={onDownloadSet} disabled={busy}>
+                <FolderDown size={17} />
+                Download the set
+              </button>
+            )}
             {onSaveLook && (
               <button
                 className="secondary"

@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { Check, FileImage, LoaderCircle, Pencil, RotateCcw, ScanLine, ZoomIn } from "lucide-react";
+import {
+  Check,
+  Download,
+  FileImage,
+  FolderDown,
+  LoaderCircle,
+  Pencil,
+  RotateCcw,
+  ScanLine,
+  ZoomIn,
+} from "lucide-react";
 import { productKey } from "@shared/naming";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -30,8 +40,8 @@ export default function ResultsTab({
   onClearSelection,
   onOpen,
   onRetryTask,
-  onApproveAll,
-  onApproveTask,
+  onDownloadTask,
+  onDownloadSet,
 }: {
   tasks: Task[];
   sources: Source[];
@@ -45,8 +55,8 @@ export default function ResultsTab({
   onClearSelection: () => void;
   onOpen: (t: Task) => void;
   onRetryTask: (t: Task) => void;
-  onApproveAll?: () => void;
-  onApproveTask?: (t: Task) => void;
+  onDownloadTask?: (t: Task) => void;
+  onDownloadSet?: (t: Task) => void;
 }) {
   const PAGE = 60;
   const [limit, setLimit] = useState(PAGE);
@@ -133,12 +143,6 @@ export default function ResultsTab({
             Clear selection
           </button>
         )}
-        {onApproveAll && tasks.some((t) => t.status === "ready") && (
-          <button className="text-button" onClick={onApproveAll}>
-            <Check size={13} /> Approve all ready (
-            {tasks.filter((t) => t.status === "ready").length})
-          </button>
-        )}
       </div>
       <div className="filter-chips" role="tablist" aria-label="Filter results">
         {(
@@ -146,7 +150,6 @@ export default function ResultsTab({
             ["all", "All", tasks.length],
             ["review", "Needs review", counts.review],
             ["ready", "Ready", counts.ready],
-            ["approved", "Approved", counts.approved],
             ["failed", "Failed", counts.failed],
             ["active", running ? "Generating" : "Waiting", counts.active],
           ] as const
@@ -246,9 +249,22 @@ export default function ResultsTab({
               </button>
               {t.output && (
                 <div className="card-actions">
-                  {(t.status === "ready" || t.status === "review") && onApproveTask && (
-                    <button type="button" onClick={() => onApproveTask(t)} title="Approve (A)">
-                      <Check size={14} /> Approve
+                  {onDownloadTask && (
+                    <button
+                      type="button"
+                      onClick={() => onDownloadTask(t)}
+                      title="Download this image"
+                    >
+                      <Download size={14} /> Image
+                    </button>
+                  )}
+                  {setSize > 1 && onDownloadSet && (
+                    <button
+                      type="button"
+                      onClick={() => onDownloadSet(t)}
+                      title="Download the whole set in its folder"
+                    >
+                      <FolderDown size={14} /> Set
                     </button>
                   )}
                   <button type="button" onClick={() => onOpen(t)} title="Open review">

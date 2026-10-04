@@ -40,7 +40,7 @@ import {
   usesBuilder,
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
-import { outputExt, outputName, safeArchiveName, stemKey } from "@shared/naming";
+import { outputExt, outputName, productKey, safeArchiveName, stemKey } from "@shared/naming";
 import type {
   LookInfo,
   Batch,
@@ -134,7 +134,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [draft, setDraft] = useState<Config | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
-  const { batch, sources, tasks, active, open, close, refresh, action, remove } = useBatch();
+  const { batch, sources, tasks, active, open, close, action, remove } = useBatch();
 
   const loadState = useCallback(async () => {
     try {
@@ -435,16 +435,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     toast.info("Revision queued. The previous result stays until the new one arrives.");
   }
 
-  async function approveTask(t: Task) {
-    if (!batch) return;
-    try {
-      await post("/api/studio/approve", { batch: batch.id, id: t.id });
-      await refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   /** Keep this image's skill prompt as a reusable look for its skill. */
   async function saveLook(t: Task) {
     const name = window.prompt("Name this look (for example: Paris corner, golden hour)");
@@ -478,30 +468,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }
 
-  async function approve() {
-    if (!selected || !batch) return;
-    try {
-      await post("/api/studio/approve", { batch: batch.id, id: selected.id });
-      await refresh();
-      toast.success("Image approved for export.");
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
-  async function approveAll() {
-    if (!batch) return;
-    const n = tasks.filter((t) => t.status === "ready").length;
-    if (!window.confirm(`Approve all ${n} ready images for export?`)) return;
-    try {
-      const r = await post<{ approved: number }>("/api/studio/approve-all", { batch: batch.id });
-      await refresh();
-      toast.success(`${r.approved} images approved.`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   // Review navigation across generated images, in grid order.
   const reviewable = tasks.filter((t) => !!t.output);
   const selectedIndex = selected ? reviewable.findIndex((t) => t.id === selected.id) : -1;
@@ -529,6 +495,52 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }
 
+  /** ZIP entries for a list of results, named and converted the way the export does it. */
+  function zipEntriesFor(list: Task[]): ZipEntry[] {
+    const byId = new Map(sources.map((x) => [x.id, x]));
+    const mode = viewConfig.mode;
+    const total = cardsPerSource(viewConfig);
+    const format = viewConfig.output || "png";
+    return list.map((t) => {
+      const srcExt = outputExt(t.output);
+      const convert =
+        format !== "png" && srcExt !== format
+          ? { format, quality: viewConfig.outputQuality || 90 }
+          : undefined;
+      return {
+        name: outputName(byId.get(t.source)!.name, t.card, mode, total, convert ? format : srcExt),
+        url: outputUrl(t),
+        convert,
+      };
+    });
+  }
+
+  /** The generated images of one product set (same product id, e.g. _01 and _02) as one ZIP, folder kept. */
+  async function downloadSet(t: Task) {
+    if (exporting) return;
+    const byId = new Map(sources.map((x) => [x.id, x]));
+    const key = productKey(byId.get(t.source)?.name ?? "");
+    const members = ready.filter((x) => productKey(byId.get(x.source)?.name ?? "") === key);
+    if (!members.length) {
+      toast.error("No generated images in this set yet.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const folder = (byId.get(t.source)?.name ?? "").split("/").slice(0, -1).pop() || key;
+      const manifest = { set: key, files: members.map((x) => byId.get(x.source)?.name) };
+      saveBlob(
+        await buildZip(zipEntriesFor(members), manifest),
+        `${safeArchiveName(folder)}-AI.zip`,
+      );
+      toast.success(`${members.length} images of ${key} downloaded.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function downloadZip() {
     if (!batch || exporting) return;
     const mode = viewConfig.mode;
@@ -541,25 +553,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     setExporting(true);
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
-      const format = viewConfig.output || "png";
-      const entries: ZipEntry[] = chosen.map((t) => {
-        const srcExt = outputExt(t.output);
-        const convert =
-          format !== "png" && srcExt !== format
-            ? { format, quality: viewConfig.outputQuality || 90 }
-            : undefined;
-        return {
-          name: outputName(
-            byId.get(t.source)!.name,
-            t.card,
-            mode,
-            total,
-            convert ? format : srcExt,
-          ),
-          url: outputUrl(t),
-          convert,
-        };
-      });
+      const entries = zipEntriesFor(chosen);
       const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
         for (const s of sources)
@@ -925,8 +919,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onClearSelection={() => setSelection(new Set())}
                       onOpen={setSelected}
                       onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
-                      onApproveTask={(t) => void approveTask(t)}
-                      onApproveAll={() => void approveAll()}
+                      onDownloadTask={(t) => void downloadOne(t)}
+                      onDownloadSet={(t) => void downloadSet(t)}
                     />
                   </TabsContent>
                 </Tabs>
@@ -1075,8 +1069,17 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           }
           onClose={() => setSelected(null)}
           onRevise={revise}
-          onApprove={approve}
           onDownload={selected?.output ? () => void downloadOne(selected) : undefined}
+          onDownloadSet={
+            selected?.output &&
+            ready.filter(
+              (x) =>
+                productKey(sources.find((y) => y.id === x.source)?.name ?? "") ===
+                productKey(sources.find((y) => y.id === selected.source)?.name ?? ""),
+            ).length > 1
+              ? () => void downloadSet(selected)
+              : undefined
+          }
           onSaveLook={
             selected?.brief && isSkillCampaign(viewConfig.mode)
               ? () => void saveLook(selected)

@@ -98,7 +98,7 @@ export const STATUS_LABEL: Record<string, string> = {
   processing: "Generating",
   ready: "Ready",
   review: "Review needed",
-  approved: "Approved",
+  approved: "Ready",
   failed: "Retry needed",
 };
 
