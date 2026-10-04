@@ -118,6 +118,17 @@ describe("centering", () => {
 });
 
 describe("framing lock", () => {
+  it("applies to the non-builder approaches too, but not to the packshot recolour or fabric card", async () => {
+    const { buildPrompt: bp, HAIR_RULE } = await import("../shared/prompts");
+    const base = { ...DEFAULT_CONFIG, input: "model" as const };
+    for (const mode of ["2", "3", "4"] as const) {
+      const p = bp({ ...base, mode }, 1);
+      expect(p).toContain("FRAMING LOCK");
+      expect(p).toContain(HAIR_RULE);
+    }
+    expect(bp({ ...base, mode: "6" }, 1)).not.toContain("FRAMING LOCK");
+    expect(bp({ ...base, mode: "1" }, 6)).not.toContain("FRAMING LOCK");
+  });
   it("tells the engine to keep the upload's crop and invent nothing outside it", () => {
     expect(buildEditorial("P.", "", "", {}, false, true, "UPPER_BODY")).toContain(
       "upper body only",

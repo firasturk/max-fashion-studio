@@ -113,6 +113,12 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   }
 
   parts.push(fidelity);
+  // Every approach that shows a person keeps the upload's crop and tidy hair; the fabric macro and
+  // the packshot recolour have no model to frame.
+  if (c.mode !== "6" && !(c.mode === "1" && card === FABRIC_CARD)) {
+    parts.push(framingRule());
+    parts.push(HAIR_RULE);
+  }
   if (c.mode === "1" && card === FABRIC_CARD)
     parts.push(
       "Output must be a flat textile macro photograph only. If a person would appear, the result is wrong.",
@@ -155,7 +161,9 @@ export function framingRule(framing?: string): string {
     return "FRAMING LOCK: upper body only, cropped at the same line as the reference photo (around the waist or hips). Do not show or invent legs, trousers, skirts, footwear or anything below that line; nothing outside the reference crop exists in this image.";
   if (framing === "LOWER_BODY")
     return "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image.";
-  return "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
+  if (framing === "FULL_BODY")
+    return "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
+  return "FRAMING LOCK: keep exactly the reference photo's crop. A full-body photo stays full body with footwear inside the frame; an upper-body photo stays upper body and ends at the same line, with no legs, trousers or footwear drawn; a lower-body photo stays lower body and starts at the same line, with no face or top drawn. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers.";
 }
 
 export function buildEditorialPrompt(
