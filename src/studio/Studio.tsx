@@ -241,7 +241,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const outputUrl = (t: Task) =>
     `/api/studio/file?batch=${batch?.id}&id=${t.id}&kind=result&v=${t.output?.split("/").at(-1)}`;
 
-  const ready = tasks.filter((t) => t.status === "ready" || t.status === "approved");
+  // Every generated image can be downloaded; approval is an optional mark, not a gate.
+  const ready = tasks.filter(
+    (t) => !!t.output && (t.status === "ready" || t.status === "approved" || t.status === "review"),
+  );
   const effectiveConfig: Config = { ...viewConfig, model: viewConfig.model || engine.model };
   const pendingLeads = pending.filter((p) => p.role === "lead").length;
   const pendingCost = estimateCost(effectiveConfig, pendingLeads * cardsPerSource(effectiveConfig));
@@ -532,7 +535,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     const total = cardsPerSource(viewConfig);
     const chosen = ready.filter((t) => selection.size === 0 || selection.has(t.id));
     if (!chosen.length) {
-      toast.error("Select at least one ready or approved result.");
+      toast.error("No generated images to download yet.");
       return;
     }
     setExporting(true);
@@ -941,7 +944,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   <div>
                     <strong>
                       {batch
-                        ? `${ready.length} ready to export${spentSoFar ? ` · spent ≈ ${formatUsd(spentSoFar)}` : ""}${queueCost.images && queueCost.known ? ` · next run ≈ ${formatUsd(queueCost.total)}` : ""}`
+                        ? `${ready.length} generated · download any time${spentSoFar ? ` · spent ≈ ${formatUsd(spentSoFar)}` : ""}${queueCost.images && queueCost.known ? ` · next run ≈ ${formatUsd(queueCost.total)}` : ""}`
                         : `${pending.length} images selected${pendingCost.images && pendingCost.known ? ` · ${pendingCost.images} AI results ≈ ${formatUsd(pendingCost.total)}` : ""}`}
                     </strong>
                     <span>

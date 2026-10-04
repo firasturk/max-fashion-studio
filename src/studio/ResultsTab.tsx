@@ -126,7 +126,7 @@ export default function ResultsTab({
         <p>
           {selection.size
             ? `${selection.size} selected`
-            : "Export includes all ready and approved results."}
+            : "The ZIP includes every generated image. Approval is optional."}
         </p>
         {selection.size > 0 && (
           <button className="text-button" onClick={onClearSelection}>
