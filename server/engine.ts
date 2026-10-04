@@ -32,6 +32,12 @@ import {
   planRun,
   type EditorialBrief,
   type EditorialRequest,
+  askVisionGoogle,
+  askVisionOpenAI,
+  FRAMING_CHECK_INSTRUCTION,
+  FRAMING_SCHEMA,
+  parseFramingCheck,
+  type Framing,
 } from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
@@ -86,6 +92,8 @@ interface SourceRow {
   reference_key: string | null;
   mime: string;
   engine_url: string | null;
+  /** Verified crop, stored after the first framing check: "LOWER_BODY|true|jeans, sneakers". */
+  framing: string | null;
 }
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
@@ -703,6 +711,9 @@ async function ensureBrief(
 ): Promise<EditorialBrief> {
   if (task.brief) return JSON.parse(task.brief) as EditorialBrief;
   const image = await sourceBytes(env, source);
+  // Step 0, before any skill text is read: what does the upload actually show? Checked once per
+  // upload with a tiny dedicated vision call and stored, so every card and retry uses the same fact.
+  const check = await uploadFraming(env, source, image);
   const siblings = await all<{ card: number; brief: string | null }>(
     env.DB,
     "SELECT card, brief FROM tasks WHERE batch = ? AND source = ? AND id != ? AND brief IS NOT NULL ORDER BY card",
@@ -747,6 +758,8 @@ async function ensureBrief(
     aspectRatio: config.ratio,
     used,
     newModel: config.mode === "8",
+    uploadFraming: check.framing,
+    visibleGarments: check.garments,
   };
   // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
   const look = config.look
@@ -812,6 +825,8 @@ async function ensureBrief(
   }
   if (plan.mood) brief.mood = plan.mood;
   if (leader) brief.setOf = leader.id;
+  // The verified crop is binding: the builder's own reading never replaces it.
+  brief.framing = check.framing;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
 }
@@ -882,6 +897,55 @@ async function prepareBriefs(
     }),
   );
   return candidates.filter((t) => ready.has(t.id));
+}
+
+/**
+ * The verified crop of an upload (FULL_BODY / UPPER_BODY / LOWER_BODY), from a small dedicated
+ * vision call, cached on the source row. Runs before any prompt is written.
+ */
+async function uploadFraming(
+  env: Env,
+  source: SourceRow,
+  image: ImageBytes,
+): Promise<{ framing: Framing; faceVisible: boolean; garments: string }> {
+  if (source.framing) {
+    const [framing, face, ...rest] = source.framing.split("|");
+    if (framing === "FULL_BODY" || framing === "UPPER_BODY" || framing === "LOWER_BODY")
+      return { framing, faceVisible: face === "true", garments: rest.join("|") };
+  }
+  const google = (await resolveGoogleKey(env)).key;
+  const openai = (await resolveOpenAIKey(env)).key;
+  let text = "";
+  try {
+    if (google)
+      text = await askVisionGoogle(google, FRAMING_CHECK_INSTRUCTION, [image], FRAMING_SCHEMA);
+    else if (openai)
+      text = await askVisionOpenAI(
+        openai,
+        FRAMING_CHECK_INSTRUCTION,
+        [image],
+        fetch,
+        "gpt-4.1-mini",
+      );
+  } catch (e) {
+    if (openai && google && googleUnavailable(e))
+      text = await askVisionOpenAI(
+        openai,
+        FRAMING_CHECK_INSTRUCTION,
+        [image],
+        fetch,
+        "gpt-4.1-mini",
+      );
+    else throw e;
+  }
+  const result = parseFramingCheck(text);
+  await run(
+    env.DB,
+    "UPDATE sources SET framing = ? WHERE id = ?",
+    `${result.framing}|${result.faceVisible}|${result.garments}`,
+    source.id,
+  );
+  return result;
 }
 
 /** Google failures another vendor can cover: region refusal or an exhausted prepaid balance. */

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  framingDirective,
+  parseFramingCheck,
   buildBriefWithGoogle,
   buildBriefWithOpenAI,
   builderInstruction,
@@ -167,5 +169,26 @@ describe("product sets", () => {
     expect(text).toContain('Scene to reuse: "Overcast meadow with a timber fence."');
     expect(text).toContain("generated sibling is attached as the last image");
     expect(text).not.toContain("Scene assigned to this run");
+  });
+});
+
+describe("verified framing", () => {
+  it("parses the check and treats unknown answers as full body", () => {
+    expect(
+      parseFramingCheck(
+        '{"framing":"LOWER_BODY","faceVisible":false,"garments":"black trousers, sneakers"}',
+      ),
+    ).toEqual({
+      framing: "LOWER_BODY",
+      faceVisible: false,
+      garments: "black trousers, sneakers",
+    });
+    expect(parseFramingCheck("nonsense").framing).toBe("FULL_BODY");
+  });
+  it("turns a lower-body crop into a binding instruction that excludes the face and top", () => {
+    const d = framingDirective("LOWER_BODY", "black trousers, sneakers");
+    expect(d).toContain("LOWER-BODY image");
+    expect(d).toContain("overrides the skill");
+    expect(d).toContain("black trousers, sneakers");
   });
 });
