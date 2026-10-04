@@ -67,6 +67,7 @@ interface TaskRow {
   card: number;
   status: string;
   output: string | null;
+  error: string | null;
   output_engine_url: string | null;
   edit: string | null;
   attempts: number;
@@ -88,7 +89,8 @@ interface SourceRow {
 }
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
-const FAL_PARALLEL = 24; // fal.ai queues on its side, so a batch can hand it many images at once
+const FAL_PARALLEL = 24;
+const BUILDER_PARALLEL = 3; // vision calls carry base64 images; three at a time keeps memory comfortable // fal.ai queues on its side, so a batch can hand it many images at once
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
 const FINALIZE_TIMEOUT_MS = 5 * 60 * 1000; // finalizing this long = the saving job was cut off
@@ -224,7 +226,14 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
       // The submission died with the request that carried it (a page reload, a closed tab, a dropped
       // connection). Put it back in the queue automatically; only repeated losses fail the image.
       if (age > SUBMIT_TIMEOUT_MS) {
-        if (task.attempts <= MAX_AUTO_ATTEMPTS)
+        console.error("[lost submission]", {
+          task: task.id,
+          batch: batch.id,
+          attempts: task.attempts,
+          lastStage: task.error,
+        });
+        // An interrupted submission costs nothing, so it gets more automatic tries than an engine failure.
+        if (task.attempts <= MAX_AUTO_ATTEMPTS + 2)
           await requeue(env, task, "submission was interrupted, starting again");
         else
           await failTask(env, task, "Submission was interrupted. Retry this image.", task.output);
@@ -582,7 +591,7 @@ async function submitNext(
     const token = uuid();
     const claimed = await run(
       env.DB,
-      "UPDATE tasks SET status = 'processing', lease = ?, leased_at = ?, request_id = NULL, attempts = attempts + 1, updated = ? WHERE id = ? AND status = 'queued'",
+      "UPDATE tasks SET status = 'processing', lease = ?, leased_at = ?, request_id = NULL, attempts = attempts + 1, error = 'Submitting to the engine…', updated = ? WHERE id = ? AND status = 'queued'",
       token,
       now(),
       now(),
@@ -769,13 +778,15 @@ async function ensureBrief(
     req.extraImages = [await referenceBytes(env, plan.mood)];
   }
   if (leader && leaderBrief) {
+    // The prompt builder gets the sibling's scene, light and pose as text only. Inlining the 2K
+    // sibling image (base64, several copies) with several prompts in flight exhausted the Worker's
+    // memory and silently killed the request. The image engine still receives the sibling image.
     req.set = {
       scene: leaderBrief.scene,
       light: leaderBrief.light,
       pose: leaderBrief.pose,
-      hasImage: true,
+      hasImage: false,
     };
-    req.extraImages = [...(req.extraImages ?? []), await outputBytes(env, leader)];
   }
   // The builder follows the image engine's vendor when possible (OpenAI model -> OpenAI builder),
   // so one key is enough and errors come from a single provider.
@@ -824,7 +835,7 @@ async function prepareBriefs(
   const ready = new Set(candidates.filter((t) => !!t.brief).map((t) => t.id));
   if (now() < builderPausedUntil) return candidates.filter((t) => ready.has(t.id));
   await Promise.allSettled(
-    needs.slice(0, concurrency(env)).map(async (task) => {
+    needs.slice(0, BUILDER_PARALLEL).map(async (task) => {
       const source = await first<SourceRow>(
         env.DB,
         "SELECT * FROM sources WHERE id = ?",
@@ -832,6 +843,12 @@ async function prepareBriefs(
       );
       if (!source) return;
       try {
+        await run(
+          env.DB,
+          "UPDATE tasks SET error = 'Writing the prompt…', updated = ? WHERE id = ? AND status = 'queued'",
+          now(),
+          task.id,
+        );
         await ensureBrief(env, batch, config, task, source);
         ready.add(task.id);
         await run(

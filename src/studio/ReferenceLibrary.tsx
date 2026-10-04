@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { del, get } from "@/api";
+import { makeReference } from "@/lib/image";
 
 interface Reference {
   id: string;
@@ -48,7 +49,12 @@ export default function ReferenceLibrary({
     try {
       const form = new FormData();
       form.append("skill", skill);
-      for (const f of Array.from(files)) form.append("file", f, f.name);
+      // Reference photos are sent to the prompt builder on every run; a resized copy keeps those
+      // calls small and fast without changing what the builder sees.
+      for (const f of Array.from(files)) {
+        const small = await makeReference(f).catch(() => f);
+        form.append("file", small, f.name.replace(/\.[^.]+$/, "") + ".jpg");
+      }
       const r = await fetch("/api/studio/references", { method: "POST", body: form });
       if (!r.ok)
         throw new Error(((await r.json()) as { error?: string }).error || "Upload failed.");

@@ -3589,3 +3589,9 @@ textarea:focus {
 .result-card:has(.redo-badge) .photo-frame img {
   opacity: 0.55;
 }
+.image-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-400);
+}

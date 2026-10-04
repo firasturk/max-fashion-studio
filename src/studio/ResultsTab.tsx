@@ -267,7 +267,11 @@ export default function ResultsTab({
                   {" · "}
                   {cardLabel(mode, t.card)}
                 </span>
-                {t.error && <span className="image-error">{t.error}</span>}
+                {t.error && (
+                  <span className={/…$/.test(t.error) ? "image-note" : "image-error"}>
+                    {t.error}
+                  </span>
+                )}
                 {t.status === "failed" && (
                   <button className="text-button" onClick={() => onRetryTask(t)}>
                     <RotateCcw size={13} /> Retry this image
