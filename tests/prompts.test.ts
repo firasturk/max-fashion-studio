@@ -135,7 +135,7 @@ describe("framing lock", () => {
     );
     const lower = buildEditorial("P.", "", "", {}, false, true, "LOWER_BODY");
     expect(lower).toContain("lower body only");
-    expect(lower).toContain("Arms hang straight down");
+    expect(lower).toContain("hands are visible inside the frame");
     expect(lower).toContain("no hand in a pocket");
     expect(lower).toContain(
       "AVOID: wind-blown hair, flying hair strands, messy hair, hands in pockets",

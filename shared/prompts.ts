@@ -167,7 +167,7 @@ export function framingRule(framing?: string, handsInPockets = false): string {
     );
   if (framing === "LOWER_BODY")
     return (
-      "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. Arms hang straight down at the sides with the hands open and visible beside the thighs." +
+      "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. The hands are visible inside the frame, relaxed and natural, in a position that fits the scene and the body's movement; never cropped out or raised above the crop line." +
       hands
     );
   if (framing === "FULL_BODY")

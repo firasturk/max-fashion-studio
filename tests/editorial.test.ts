@@ -196,7 +196,7 @@ describe("verified framing", () => {
     expect(d).toContain("LOWER-BODY image");
     expect(d).toContain("overrides the skill");
     expect(d).toContain("black trousers, sneakers");
-    expect(d).toContain("straight down at the sides");
+    expect(d).toContain("HANDS IN FRAME");
     expect(d).toContain("no hand in a pocket");
     expect(framingDirective("FULL_BODY", "coat", true)).toContain("pocket");
   });
