@@ -232,10 +232,18 @@ export function planRun(req: EditorialRequest): { scene: string | null; mood?: s
   // With reference photos the photo leads and rotates; the text library's scenes only step in without photos.
   if (!refs.length) return { scene: pickScene(req, libraryScenes(skill.library)) };
   const scene = null;
-  const taken = new Set(req.usedReferences ?? []);
-  const fresh = refs.filter((r) => !taken.has(r));
-  const pool = fresh.length ? fresh : refs;
   const random = req.random ?? Math.random;
+  // usedReferences is most-recent-first. Pick at random among the photos not used yet; when every
+  // photo has been used, take the ones whose last use is the oldest, so the library rotates evenly.
+  const used = req.usedReferences ?? [];
+  const taken = new Set(used);
+  const fresh = refs.filter((r) => !taken.has(r));
+  let pool = fresh;
+  if (!pool.length) {
+    const lastUse = (r: string) => used.indexOf(r);
+    const oldest = Math.max(...refs.map(lastUse));
+    pool = refs.filter((r) => lastUse(r) === oldest);
+  }
   return { scene, mood: pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))] };
 }
 

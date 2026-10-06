@@ -743,6 +743,21 @@ async function ensureBrief(
     batch.owner,
     batch.id,
   );
+  // Every mood photo already used in this batch (all products), newest first, then the owner's
+  // last few hundred images from other batches, so a reference photo is not picked twice while
+  // unused ones remain.
+  const batchMoods = await all<{ mood: string }>(
+    env.DB,
+    "SELECT json_extract(brief, '$.mood') AS mood FROM tasks WHERE batch = ? AND id != ? AND brief IS NOT NULL AND json_extract(brief, '$.mood') IS NOT NULL ORDER BY updated DESC",
+    batch.id,
+    task.id,
+  );
+  const pastMoods = await all<{ mood: string }>(
+    env.DB,
+    "SELECT json_extract(t.brief, '$.mood') AS mood FROM tasks t JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.batch != ? AND t.brief IS NOT NULL AND json_extract(t.brief, '$.mood') IS NOT NULL ORDER BY t.updated DESC LIMIT 300",
+    batch.owner,
+    batch.id,
+  );
   const recentBriefs = recentRows.map((r) => JSON.parse(r.brief) as EditorialBrief);
   const recent = recentBriefs.map((b) => b.scene).filter(Boolean);
   const skillId = config.mode === "7" ? "zaid" : config.skill || "editorial";
@@ -751,10 +766,7 @@ async function ensureBrief(
     "SELECT id FROM refs WHERE skill = ? ORDER BY created",
     skillId,
   );
-  const usedReferences = [
-    ...siblings.map((t) => (JSON.parse(t.brief!) as EditorialBrief).mood),
-    ...recentBriefs.map((b) => b.mood),
-  ].filter((x): x is string => !!x);
+  const usedReferences = [...batchMoods, ...pastMoods].map((r) => r.mood).filter(Boolean);
   const req: EditorialRequest = {
     image,
     run: task.card,

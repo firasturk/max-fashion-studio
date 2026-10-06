@@ -56,6 +56,16 @@ describe("zaid creative direction", () => {
       random: () => 0.99,
     });
     expect(plan.mood).toBe("b");
+    // Everything used: the photo whose last use is the oldest comes back first.
+    expect(
+      planRun({
+        ...req,
+        skill: "zaid",
+        references: ["a", "b", "c"],
+        usedReferences: ["c", "a", "b", "a"],
+        random: () => 0.5,
+      }).mood,
+    ).toBe("b");
     const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene, reference: "b" });
     expect(text).toContain("REFERENCE FIRST");
     expect(text).toContain("Framing lock");
