@@ -29,6 +29,8 @@ export interface EditorialBrief {
 export type Framing = "FULL_BODY" | "UPPER_BODY" | "LOWER_BODY";
 
 export interface EditorialRequest {
+  /** Zaid creative direction: Zaid's prompt structure, examples and rules around the chosen skill. */
+  zaid?: boolean;
   /** Replace the person entirely with an AI-generated model; keep only what is worn. */
   newModel?: boolean;
   /** Crop of the upload, verified by a separate check before the prompt is written. Binding. */
@@ -144,7 +146,7 @@ export function wordCount(text: string): number {
 export function builderInstruction(req: EditorialRequest): string {
   // Zaid creative direction: outfit, framing, pockets, centring and bright balanced light are hard rules;
   // hair and catalogue wording follow the direction.
-  const relaxed = req.skill === "zaid";
+  const relaxed = !!req.zaid || req.skill === "zaid";
   const market =
     req.market === "arab"
       ? "Arab / Middle-Eastern / Gulf / Levantine features"
@@ -223,6 +225,7 @@ export function builderInstruction(req: EditorialRequest): string {
  */
 function skillFor(req: EditorialRequest): SkillDef {
   if (req.skill === "zaid") return zaidSkill(req.direction ?? "");
+  if (req.zaid) return zaidSkill(req.direction ?? "", req.skillDef ?? skillById(req.skill));
   return req.skillDef ?? skillById(req.skill);
 }
 

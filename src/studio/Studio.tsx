@@ -785,6 +785,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   ...c,
                   mode,
                   input: mode === "1" || mode === "6" ? c.input : "model",
+                  // Zaid creative direction opens on Zaid's own mood board; the campaigns never use it.
+                  skill: mode === "7" ? "zaid" : c.skill === "zaid" ? "editorial" : c.skill,
                   // The skill prompt builder writes its own scene text; the default prompt would only confuse it.
                   prompt: isSkillCampaign(mode)
                     ? isSkillCampaign(c.mode)
@@ -1098,7 +1100,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               : undefined
           }
           onSaveLook={
-            selected?.brief && isSkillCampaign(viewConfig.mode)
+            selected?.brief && usesBuilder(viewConfig.mode)
               ? () => void saveLook(selected)
               : undefined
           }

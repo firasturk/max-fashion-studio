@@ -760,7 +760,8 @@ async function ensureBrief(
   );
   const recentBriefs = recentRows.map((r) => JSON.parse(r.brief) as EditorialBrief);
   const recent = recentBriefs.map((b) => b.scene).filter(Boolean);
-  const skillId = config.mode === "7" ? "zaid" : config.skill || "editorial";
+  // Zaid creative direction: Zaid's own mood board unless the team picked another skill.
+  const skillId = config.mode === "7" ? config.skill || "zaid" : config.skill || "editorial";
   const library = await all<{ id: string }>(
     env.DB,
     "SELECT id FROM refs WHERE skill = ? ORDER BY created",
@@ -773,6 +774,7 @@ async function ensureBrief(
     recent,
     skill: skillId,
     skillDef: skillId === "zaid" ? undefined : await resolveSkill(env, skillId),
+    zaid: config.mode === "7",
     references: library.map((r) => r.id),
     usedReferences,
     direction: config.mode === "7" ? config.prompt : undefined,

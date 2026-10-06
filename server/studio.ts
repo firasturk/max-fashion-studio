@@ -285,7 +285,7 @@ studioRoutes.post("/looks", async (c) => {
   );
   const cfg = b ? (JSON.parse(b.config) as Config) : null;
   const brief = JSON.parse(t.brief) as EditorialBrief;
-  const skill = cfg?.mode === "7" ? "zaid" : cfg?.skill || "editorial";
+  const skill = cfg?.mode === "7" ? cfg?.skill || "zaid" : cfg?.skill || "editorial";
   const id = uuid();
   // Keep a copy of the result as the look's reminder image, so deleting the batch later does not lose it.
   let image: string | null = null;

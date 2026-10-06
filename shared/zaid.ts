@@ -86,22 +86,28 @@ export const ZAID_EXAMPLES: { title: string; prompt: string }[] = [
 ];
 
 /** The mode-7 skill. `extra` is the per-batch / saved-default direction added by the team. */
-export function zaidSkill(extra = ""): SkillDef {
+/**
+ * Zaid's prompt structure, examples and rules on top of a skill: with no base, Zaid's own mood
+ * board and world; with a base skill, that skill's goal, world and reference library instead.
+ */
+export function zaidSkill(extra = "", base?: SkillDef): SkillDef {
   const examples = ZAID_EXAMPLES.map(
     (e, i) => `### Example ${i + 1}: ${e.title}\n\n${e.prompt}`,
   ).join("\n\n");
   return {
-    id: "zaid",
-    title: "Zaid creative direction",
+    id: base?.id ?? "zaid",
+    title: base ? `${base.title} · Zaid structure` : "Zaid creative direction",
     caption: "Smart direction · mood board + prompt structure",
     description:
       "Learns from Zaid's mood board and example prompts and writes a new prompt in the same world and structure for every image.",
-    instructions: `# Zaid creative direction Prompt Builder\n\nGoal: from ONE product-on-model photo write ONE long image prompt that a fashion photographer working for Zaid would write: same world, same photographic language and same section structure as his examples below, but a NEW scene, pose and light combination every run. Never copy an example prompt; write a fresh one of the same depth. The garment is what the customer sells and is never changed.\n\n## Creative direction\n\n${ZAID_DIRECTION}${
+    instructions: `# Zaid creative direction Prompt Builder\n\nGoal: from ONE product-on-model photo write ONE long image prompt that a fashion photographer working for Zaid would write: same world, same photographic language and same section structure as his examples below, but a NEW scene, pose and light combination every run. Never copy an example prompt; write a fresh one of the same depth. The garment is what the customer sells and is never changed.\n\n## Creative direction\n\n${base ? `${base.goal}\n\n${base.description}\n\nPHOTOGRAPHIC SIGNATURE (always): the same analog-film character as Zaid's examples below: fine organic grain, gentle highlight roll-off, soft bloom, natural colour.` : ZAID_DIRECTION}${
       extra.trim()
         ? `\n\nADDITIONAL DIRECTION FROM THE TEAM (takes priority where it conflicts):\n${extra.trim()}`
         : ""
-    }\n\n## Mood board\n\nA second attached image, when present, is a mood-board photograph from Zaid: match its environment family, light quality, framing distance and film treatment, but do not reproduce it; change the exact spot, pose and details so the result is a sibling, not a copy. Ignore its clothing and face entirely.\n\n${CORE_RULES.replace("Prompt length target: 600-1100 words, in English.", "Prompt length target: at least 1,500 words (aim for 1,500-2,000), in English. Shorter prompts are rejected.")}\n\n## Example prompts by Zaid (structure and depth reference only; do not reuse their scenes verbatim)\n\n${examples}`,
-    library: `# Library\n\n## Scene families (rotate; invent siblings in the same world when needed)\n${ZAID_SCENES.map((s, i) => `${i + 1}. ${s.scene}`).join("\n")}\n\n## Poses\n- Leaning one shoulder on the wall, one knee softly bent and the foot lifted, arms relaxed, gaze to camera.\n- Standing centred with ankles gently crossed, one hand resting on a tiled ledge, torso slightly angled.\n- Mid-stride walk along the sidewalk, one hand in a pocket when the outfit allows, head turned to the camera.\n- Resting a hand on a window frame, weight on one leg, calm half-smile.\n- Standing in a block of window sun, arms loose, chin slightly lifted.\n\n## Light\n- Hard diagonal sun from upper left with deep shade and organic leaf shadows.\n- Window sun spilling across tiles and ledges, interior ambient fill.\n- Open shade on a sidewalk with warm sunlit patches on facades and paving.\n\n## Camera\n- 50-70 mm, waist-to-chest height, very close full body, centred.\n- 35-50 mm, several metres back, full body slightly off-centre with sidewalk context.`,
+    }\n\n## Mood board\n\nA second attached image, when present, is a ${base ? "reference photograph from this skill's library" : "mood-board photograph from Zaid"}: match its environment family, light quality, framing distance and film treatment, but do not reproduce it; change the exact spot, pose and details so the result is a sibling, not a copy. Ignore its clothing and face entirely.\n\n${CORE_RULES.replace("Prompt length target: 600-1100 words, in English.", "Prompt length target: at least 1,500 words (aim for 1,500-2,000), in English. Shorter prompts are rejected.")}\n\n## Example prompts by Zaid (structure and depth reference only; do not reuse their scenes verbatim)\n\n${examples}`,
+    library: base
+      ? base.library
+      : `# Library\n\n## Scene families (rotate; invent siblings in the same world when needed)\n${ZAID_SCENES.map((s, i) => `${i + 1}. ${s.scene}`).join("\n")}\n\n## Poses\n- Leaning one shoulder on the wall, one knee softly bent and the foot lifted, arms relaxed, gaze to camera.\n- Standing centred with ankles gently crossed, one hand resting on a tiled ledge, torso slightly angled.\n- Mid-stride walk along the sidewalk, one hand in a pocket when the outfit allows, head turned to the camera.\n- Resting a hand on a window frame, weight on one leg, calm half-smile.\n- Standing in a block of window sun, arms loose, chin slightly lifted.\n\n## Light\n- Hard diagonal sun from upper left with deep shade and organic leaf shadows.\n- Window sun spilling across tiles and ledges, interior ambient fill.\n- Open shade on a sidewalk with warm sunlit patches on facades and paving.\n\n## Camera\n- 50-70 mm, waist-to-chest height, very close full body, centred.\n- 35-50 mm, several metres back, full body slightly off-centre with sidewalk context.`,
     template: ZAID_TEMPLATE,
   };
 }

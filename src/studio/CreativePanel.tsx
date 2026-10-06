@@ -9,9 +9,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { del, post } from "@/api";
+import { del, get, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 const SkillDialog = lazy(() => import("./SkillDialog"));
@@ -29,6 +29,7 @@ import {
   backdropColors,
   type Config,
   isSkillCampaign,
+  usesBuilder,
 } from "@shared/config";
 import type { EngineModel, LookInfo, Preset, SkillInfo } from "@shared/types";
 
@@ -84,7 +85,32 @@ export default function CreativePanel({
     open: false,
     skill: null,
   });
-  const currentSkill = skills.find((s) => s.id === config.skill) ?? skills[0];
+  // Zaid creative direction lists Zaid's own mood board first, then the shared skills.
+  const zaidMode = config.mode === "7";
+  const [zaidThumb, setZaidThumb] = useState<string | undefined>();
+  useEffect(() => {
+    if (!zaidMode) return;
+    get<{ references: { id: string }[] }>("/api/studio/references?skill=zaid")
+      .then((r) => setZaidThumb(r.references[0]?.id))
+      .catch(() => setZaidThumb(undefined));
+  }, [zaidMode]);
+  const zaidEntry: SkillInfo = {
+    id: "zaid",
+    title: "Zaid's mood board",
+    caption: "Zaid's world · his prompt structure",
+    description:
+      "Each image gets a new scene from Zaid's mood board, written in Zaid's prompt structure. Add notes below only when a batch needs something specific (a city, a colour story, a pose).",
+    goal: "",
+    library: "",
+    builtIn: true,
+    edited: false,
+    auto: false,
+    favourite: false,
+    thumb: zaidThumb,
+  };
+  const skillList = zaidMode ? [zaidEntry, ...skills] : skills;
+  const currentSkill = skillList.find((s) => s.id === config.skill) ?? skillList[0];
+  const isZaidEntry = currentSkill?.id === "zaid";
   const skillLooks = looks.filter((l) => l.skill === (config.skill || "editorial"));
   const currentLook = skillLooks.find((l) => l.id === config.look) ?? null;
   async function deleteLook(l: LookInfo) {
@@ -390,12 +416,12 @@ export default function CreativePanel({
         </>
       )}
 
-      {isSkillCampaign(config.mode) && (
+      {usesBuilder(config.mode) && (
         <>
           <div className="field-row">
             <label className="field-label">Skill</label>
             <span className="field-row-actions">
-              {currentSkill && (
+              {currentSkill && !isZaidEntry && (
                 <button
                   type="button"
                   className="text-button"
@@ -404,7 +430,7 @@ export default function CreativePanel({
                   <Pencil size={13} /> Edit
                 </button>
               )}
-              {currentSkill && skills.length > 1 && (
+              {currentSkill && !isZaidEntry && skills.length > 1 && (
                 <button
                   type="button"
                   className="text-button danger-text"
@@ -423,11 +449,11 @@ export default function CreativePanel({
             </span>
           </div>
           <div className="skills" role="radiogroup" aria-label="Skill">
-            {skills.map((s) => (
+            {skillList.map((s) => (
               <div
                 key={s.id}
                 className={`skill-card ${config.skill === s.id ? "active" : ""} ${dragId === s.id ? "dragging" : ""}`}
-                draggable={!locked}
+                draggable={!locked && s.id !== "zaid"}
                 onDragStart={() => setDragId(s.id)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => void reorder(s.id)}
@@ -457,15 +483,17 @@ export default function CreativePanel({
                   <strong>{s.title}</strong>
                   <span>{s.caption}</span>
                 </button>
-                <button
-                  type="button"
-                  className={`skill-star ${s.favourite ? "on" : ""}`}
-                  aria-label={s.favourite ? "Remove from favourites" : "Add to favourites"}
-                  aria-pressed={s.favourite}
-                  onClick={() => void toggleFavourite(s)}
-                >
-                  <Star size={14} fill={s.favourite ? "currentColor" : "none"} />
-                </button>
+                {s.id !== "zaid" && (
+                  <button
+                    type="button"
+                    className={`skill-star ${s.favourite ? "on" : ""}`}
+                    aria-label={s.favourite ? "Remove from favourites" : "Add to favourites"}
+                    aria-pressed={s.favourite}
+                    onClick={() => void toggleFavourite(s)}
+                  >
+                    <Star size={14} fill={s.favourite ? "currentColor" : "none"} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -565,7 +593,9 @@ export default function CreativePanel({
               <ReferenceLibrary
                 key={currentSkill.id}
                 skill={currentSkill.id}
-                title={`${currentSkill.title} reference library`}
+                title={
+                  isZaidEntry ? "Zaid's mood board" : `${currentSkill.title} reference library`
+                }
                 onChanged={libraryChanged}
               />
             </Suspense>
@@ -578,36 +608,6 @@ export default function CreativePanel({
               onSaved={(list, id) => onSkillsChanged?.(list, id)}
             />
           </Suspense>
-
-          <label className="field-label">Generated face (when the reference face is hidden)</label>
-          <Picker
-            value={config.market}
-            label="Market look"
-            disabled={locked}
-            items={MARKETS}
-            render={(v) =>
-              v === "auto"
-                ? "Auto (alternate Arab / European)"
-                : v === "arab"
-                  ? "Arab / Middle-Eastern"
-                  : v === "european"
-                    ? "European"
-                    : "Mixed"
-            }
-            onChange={(v) => onChange({ market: v as Config["market"] })}
-          />
-        </>
-      )}
-
-      {config.mode === "7" && (
-        <>
-          <Suspense fallback={null}>
-            <ReferenceLibrary skill="zaid" title="Zaid's mood board" />
-          </Suspense>
-          <div className="prompt-tip">
-            Each image gets a new scene in this world, written in Zaid's prompt structure. Add notes
-            below only when a batch needs something specific (a city, a colour story, a pose).
-          </div>
 
           <label className="field-label">Generated face (when the reference face is hidden)</label>
           <Picker
