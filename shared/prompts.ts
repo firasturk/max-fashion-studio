@@ -159,6 +159,10 @@ export const HAIR_RULE =
 export const LIGHT_RULE =
   "LIGHT: bright but balanced. Well-lit daylight scene with open shadows and no blown-out highlights; no dim, murky, heavy-shadow or harsh high-contrast lighting. The model is evenly lit and the garment colours read true.";
 
+/** Engine-facing background detail rule for Zaid creative direction. */
+export const DETAIL_RULE =
+  "BACKGROUND DETAIL: render the whole background in full, crisp, high-resolution detail: architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces and distant layers all sharply defined and rich. Only a gentle, natural depth of field that keeps the entire setting readable; never an empty, plain, smeared, washed-out or heavily blurred background.";
+
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string, handsInPockets = false): string {
   const hands = handsInPockets
@@ -200,7 +204,7 @@ export function buildEditorialPrompt(
   if (newModel) parts.push(NEW_MODEL_RULE);
   parts.push(framingRule(framing, handsInPockets));
   // Zaid creative direction: hair follows the direction; the light is bright but balanced.
-  if (relaxed) parts.push(LIGHT_RULE);
+  if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE);
   else parts.push(HAIR_RULE);
   if (center) parts.push(CENTERING);
   if (edit)
@@ -227,7 +231,7 @@ export function buildEditorialPrompt(
   const avoid = [
     negative,
     relaxed
-      ? "dim scene, murky light, blown-out highlights, harsh shadows"
+      ? "dim scene, murky light, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background"
       : "wind-blown hair, flying hair strands, messy hair",
     handsInPockets ? "" : "hands in pockets",
   ]

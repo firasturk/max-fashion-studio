@@ -60,6 +60,7 @@ describe("zaid creative direction", () => {
     expect(text).toContain("REFERENCE FIRST");
     expect(text).toContain("Framing lock");
     expect(text).toContain("LIGHT: the background");
+    expect(text).toContain("BACKGROUND DETAIL");
   });
 });
 
