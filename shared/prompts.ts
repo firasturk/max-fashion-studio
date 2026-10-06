@@ -256,3 +256,26 @@ export function buildEditorialPrompt(
 
 export const RECENTER_SUFFIX =
   "Correct composition: full person bounding box exactly at x=50%. Preserve garment and entire body.";
+
+/**
+ * A short, plain prompt used for the one retry after a content checker refused the full prompt:
+ * the scene, pose and light in one line each, the outfit lock and the fixed rules, nothing else.
+ */
+export function buildCompactPrompt(
+  brief: { scene: string; pose: string; light: string; garments: string; negative: string },
+  newModel: boolean,
+  center: boolean,
+  framing?: string,
+  handsInPockets = false,
+): string {
+  const parts = [
+    `Catalogue lifestyle photograph of the model from the reference photo wearing exactly the supplied outfit (${brief.garments}). Setting: ${brief.scene}. Pose: ${brief.pose}. Light: ${brief.light}. Photorealistic, natural colour, clean editorial look.`,
+    newModel ? NEW_MODEL_RULE : IDENTITY_RULE,
+    framingRule(framing, handsInPockets),
+  ];
+  if (center) parts.push(CENTERING);
+  parts.push(
+    `AVOID: ${[brief.negative, handsInPockets ? "" : "hands in pockets"].filter(Boolean).join(", ")}`,
+  );
+  return parts.join("\n\n");
+}

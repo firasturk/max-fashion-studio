@@ -186,6 +186,30 @@ describe("Zaid creative direction", () => {
   });
 });
 
+describe("compact retry prompt", () => {
+  it("keeps scene, pose, light, outfit and the fixed rules only", async () => {
+    const { buildCompactPrompt } = await import("../shared/prompts");
+    const p = buildCompactPrompt(
+      {
+        scene: "brick stairway",
+        pose: "standing",
+        light: "golden hour",
+        garments: "grey tee",
+        negative: "blur",
+      },
+      false,
+      true,
+      "UPPER_BODY",
+    );
+    expect(p).toContain("Setting: brick stairway");
+    expect(p).toContain("(grey tee)");
+    expect(p).toContain(IDENTITY_RULE);
+    expect(p).toContain("upper body only");
+    expect(p).toContain("AVOID: blur, hands in pockets");
+    expect(p.split(/\s+/).length).toBeLessThan(260);
+  });
+});
+
 describe("new-model skill campaign", () => {
   it("tells the engine to replace the person and keep only what is worn", () => {
     const p = buildEditorial("Prompt body.", "blur", "", {}, true);

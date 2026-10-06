@@ -22,6 +22,7 @@ import {
 } from "./errors";
 import {
   buildPrompt,
+  buildCompactPrompt,
   buildEditorialPrompt,
   RECENTER_SUFFIX,
   type PromptImages,
@@ -55,7 +56,12 @@ import {
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { signObjectUrl } from "./signed";
-import { sanitizePrompt } from "@shared/safety";
+import {
+  isChildSubject,
+  isContentPolicyError,
+  sanitizeChildPrompt,
+  sanitizePrompt,
+} from "@shared/safety";
 import { productKey, shotNumber } from "@shared/naming";
 import { resolveSkill } from "./skills";
 import { centeringApplies } from "@shared/prompts";
@@ -460,7 +466,15 @@ async function settleFailedAttempt(
     ]).total + (task.edit || task.recenter ? 0.008 : 0);
   await run(env.DB, "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?", refund, task.id);
   const message = errorMessage(e, "Generation failed.");
-  if (isTransientEngineError(e) && task.attempts < MAX_AUTO_ATTEMPTS)
+  // A content checker refusal gets one retry with a short, plain prompt (see promptFor).
+  const refused = isContentPolicyError(message) && !/content check/i.test(task.error ?? "");
+  if (refused && task.attempts < MAX_AUTO_ATTEMPTS)
+    await requeue(
+      env,
+      task,
+      `the content check refused the full prompt; trying a short plain one. ${message}`,
+    );
+  else if (isTransientEngineError(e) && task.attempts < MAX_AUTO_ATTEMPTS)
     await requeue(env, task, message);
   else await failTask(env, task, message, task.output);
   if (isFatalEngineError(e)) await pauseBatch(env, batch.id, message);
@@ -854,7 +868,12 @@ async function ensureBrief(
   };
   let brief = await build();
   // Zaid creative direction: a short draft gets one more attempt with the shortfall spelled out.
-  if (config.mode === "7" && wordCount(brief.prompt) < ZAID_MIN_WORDS) {
+  // Children keep the standard length: long body-and-skin description is what content checkers refuse.
+  if (
+    config.mode === "7" &&
+    !isChildSubject(brief.subject, config.skill) &&
+    wordCount(brief.prompt) < ZAID_MIN_WORDS
+  ) {
     const words = wordCount(brief.prompt);
     console.log(`[short prompt] task ${task.id}: ${words} words, rebuilding`);
     req.expand = `YOUR PREVIOUS DRAFT WAS REJECTED: it was ${words} words, below the mandatory minimum of ${ZAID_MIN_WORDS}. Write it again, same facts and the same scene, at least ${ZAID_MIN_WORDS} words: expand every section with more concrete, specific sentences (each background element and its material, where the light lands on each one, every garment detail, the pose joint by joint). Do not pad with repetition.`;
@@ -1038,17 +1057,30 @@ async function promptFor(
   let prompt: string;
   if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
-    prompt = buildEditorialPrompt(
-      brief.prompt,
-      brief.negative,
-      edit,
-      roles,
-      config.mode === "8",
-      centeringApplies(config, task.card),
-      brief.framing,
-      source.framing?.split("|")[2] === "true",
-      config.mode === "7",
-    );
+    const pockets = source.framing?.split("|")[2] === "true";
+    const child = isChildSubject(brief.subject, config.skill);
+    // After a content checker refused the full prompt, the retry sends a short plain one.
+    const compact = /content check/i.test(task.error ?? "");
+    prompt = compact
+      ? buildCompactPrompt(
+          brief,
+          config.mode === "8",
+          centeringApplies(config, task.card),
+          brief.framing,
+          pockets,
+        )
+      : buildEditorialPrompt(
+          brief.prompt,
+          brief.negative,
+          edit,
+          roles,
+          config.mode === "8",
+          centeringApplies(config, task.card),
+          brief.framing,
+          pockets,
+          config.mode === "7",
+        );
+    if (child) prompt = sanitizeChildPrompt(prompt);
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);
   }

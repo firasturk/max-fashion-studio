@@ -100,7 +100,18 @@ describe("safe wording and framing", () => {
     }
   });
   it("sanitises risky words before a prompt leaves the server", async () => {
-    const { sanitizePrompt } = await import("../shared/safety");
+    const { sanitizePrompt, sanitizeChildPrompt, isChildSubject, isContentPolicyError } =
+      await import("../shared/safety");
+    expect(isChildSubject("child model, boy, about 6 years old")).toBe(true);
+    expect(isChildSubject("adult woman", "kids")).toBe(true);
+    expect(isChildSubject("adult woman")).toBe(false);
+    expect(
+      sanitizeChildPrompt(
+        "The upper-body child model stands by the wall. The skin is photorealistic with fine texture. Arms show soft muscle definition of a young child. The t-shirt has a Sonic print.",
+      ),
+    ).toBe("The upper-body child model stands by the wall. The t-shirt has a Sonic print.");
+    expect(isContentPolicyError('{"type":"content_policy_violation"}')).toBe(true);
+    expect(isContentPolicyError("fal.ai timed out (504)")).toBe(false);
     expect(
       sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress"),
     ).toBe("A elegant pose with a calm expression and the shoulders in a fitted dress");

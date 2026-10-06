@@ -32,3 +32,33 @@ export function sanitizePrompt(text: string): string {
   for (const [re, rep] of SWAPS) out = out.replace(re, rep);
   return out;
 }
+
+/** True when the brief's subject line (or the skill) says the model is a child. */
+export function isChildSubject(subject: string, skill?: string): boolean {
+  if (skill === "kids") return true;
+  return /\b(child|children|kid|kids|boy|girl|toddler|baby|infant|teen|teenager|years? old|aged? \d)\b/i.test(
+    subject,
+  );
+}
+
+/**
+ * Child prompts: partner content checkers refuse descriptions of a child's skin, body or physique,
+ * however innocent. Sentences carrying such words are dropped; the clothes, pose, scene and light
+ * remain. "upper-body" / "full-body" style crop words are kept.
+ */
+const CHILD_BODY_WORDS =
+  /\b(skin|complexion|muscle|muscles|muscular|physique|torso|chest|thighs?|belly|tummy|limbs?|bare|flesh|cheeks?|neck|collarbones?|shoulders?|hips?|waistline|curves?|figure|anatomy|anatomical|proportions?)\b|(?<![-\w])body\b/i;
+
+export function sanitizeChildPrompt(text: string): string {
+  return text
+    .split(/(?<=[.!?])\s+|\n/)
+    .filter((sentence) => !CHILD_BODY_WORDS.test(sentence))
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** The content checker's refusal, as fal.ai and Higgsfield phrase it. */
+export function isContentPolicyError(message: string): boolean {
+  return /content[_ ]policy|content checker|partner_validation|flagged|moderation/i.test(message);
+}

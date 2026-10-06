@@ -207,6 +207,7 @@ export function builderInstruction(req: EditorialRequest): string {
     req.uploadFraming
       ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets)
       : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
+    "CHILDREN: when the subject is a child, the prompt stays at 500-800 words whatever other length rule says, and it never describes the child's skin, body, physique, muscles, limbs, proportions or anything physical beyond the clothes: describe the outfit, a simple happy natural pose in plain words (standing, walking, sitting on a step), the scene and the light only.",
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
     relaxed
