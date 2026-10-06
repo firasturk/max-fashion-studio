@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPrompt,
   buildEditorialPrompt as buildEditorial,
+  LIGHT_RULE,
   NEW_MODEL_RULE,
   RECENTER_SUFFIX,
 } from "../shared/prompts";
@@ -149,12 +150,15 @@ describe("framing lock", () => {
 });
 
 describe("Zaid creative direction", () => {
-  it("keeps only the pockets rule and centring, no framing lock or hair rule", () => {
+  it("locks framing and outfit, asks for bright balanced light, and leaves hair to the direction", () => {
     const p = buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", false, true);
-    expect(p).not.toContain("FRAMING LOCK");
+    expect(p).toContain("FRAMING LOCK: lower body only");
+    expect(p).toContain(LIGHT_RULE);
     expect(p).not.toContain("HAIR:");
     expect(p).toContain("no hand in a pocket");
-    expect(p).toContain("AVOID: blur, hands in pockets");
+    expect(p).toContain(
+      "AVOID: blur, dim scene, murky light, blown-out highlights, harsh shadows, hands in pockets",
+    );
     expect(buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", true, true)).toContain(
       "may rest in a pocket",
     );

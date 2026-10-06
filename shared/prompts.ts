@@ -155,12 +155,9 @@ export const NEW_MODEL_RULE =
 export const HAIR_RULE =
   "HAIR: neat and settled, exactly as styled in the reference photo when the model is kept; no wind-blown, flying, floating or stray strands, no hair across the face or eyes.";
 
-/** Engine-facing hands rule on its own, for the approaches without a framing lock. */
-export function handsRule(handsInPockets = false): string {
-  return handsInPockets
-    ? "HANDS: a hand may rest in a pocket, as in the reference photo."
-    : "HANDS: no hand in a pocket; hands stay out of pockets, relaxed and visible.";
-}
+/** Engine-facing light rule for Zaid creative direction. */
+export const LIGHT_RULE =
+  "LIGHT: bright but balanced. Well-lit daylight scene with open shadows and no blown-out highlights; no dim, murky, heavy-shadow or harsh high-contrast lighting. The model is evenly lit and the garment colours read true.";
 
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string, handsInPockets = false): string {
@@ -201,12 +198,10 @@ export function buildEditorialPrompt(
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
-  // Zaid creative direction: framing and hair follow the direction; only pockets stay bound.
-  if (relaxed) parts.push(handsRule(handsInPockets));
-  else {
-    parts.push(framingRule(framing, handsInPockets));
-    parts.push(HAIR_RULE);
-  }
+  parts.push(framingRule(framing, handsInPockets));
+  // Zaid creative direction: hair follows the direction; the light is bright but balanced.
+  if (relaxed) parts.push(LIGHT_RULE);
+  else parts.push(HAIR_RULE);
   if (center) parts.push(CENTERING);
   if (edit)
     parts.push(
@@ -231,7 +226,9 @@ export function buildEditorialPrompt(
   if (roles.length > 1 || newModel) parts.push(roles.join(" "));
   const avoid = [
     negative,
-    relaxed ? "" : "wind-blown hair, flying hair strands, messy hair",
+    relaxed
+      ? "dim scene, murky light, blown-out highlights, harsh shadows"
+      : "wind-blown hair, flying hair strands, messy hair",
     handsInPockets ? "" : "hands in pockets",
   ]
     .filter(Boolean)

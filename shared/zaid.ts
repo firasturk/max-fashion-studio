@@ -5,7 +5,7 @@
  * and photographic language for every image, with a different scene each run.
  */
 import type { SkillDef } from "./skills";
-import { CORE_RULES_RELAXED } from "./skills";
+import { CORE_RULES } from "./skills";
 
 /** Scene families in Zaid's world. */
 export const ZAID_SCENES: { scene: string; mood: string }[] = [
@@ -100,7 +100,7 @@ export function zaidSkill(extra = ""): SkillDef {
       extra.trim()
         ? `\n\nADDITIONAL DIRECTION FROM THE TEAM (takes priority where it conflicts):\n${extra.trim()}`
         : ""
-    }\n\n## Mood board\n\nA second attached image, when present, is a mood-board photograph from Zaid: match its environment family, light quality, framing distance and film treatment, but do not reproduce it; change the exact spot, pose and details so the result is a sibling, not a copy. Ignore its clothing and face entirely.\n\n${CORE_RULES_RELAXED}\n\n## Example prompts by Zaid (structure and depth reference only; do not reuse their scenes verbatim)\n\n${examples}`,
+    }\n\n## Mood board\n\nA second attached image, when present, is a mood-board photograph from Zaid: match its environment family, light quality, framing distance and film treatment, but do not reproduce it; change the exact spot, pose and details so the result is a sibling, not a copy. Ignore its clothing and face entirely.\n\n${CORE_RULES}\n\n## Example prompts by Zaid (structure and depth reference only; do not reuse their scenes verbatim)\n\n${examples}`,
     library: `# Library\n\n## Scene families (rotate; invent siblings in the same world when needed)\n${ZAID_SCENES.map((s, i) => `${i + 1}. ${s.scene}`).join("\n")}\n\n## Poses\n- Leaning one shoulder on the wall, one knee softly bent and the foot lifted, arms relaxed, gaze to camera.\n- Standing centred with ankles gently crossed, one hand resting on a tiled ledge, torso slightly angled.\n- Mid-stride walk along the sidewalk, one hand in a pocket when the outfit allows, head turned to the camera.\n- Resting a hand on a window frame, weight on one leg, calm half-smile.\n- Standing in a block of window sun, arms loose, chin slightly lifted.\n\n## Light\n- Hard diagonal sun from upper left with deep shade and organic leaf shadows.\n- Window sun spilling across tiles and ledges, interior ambient fill.\n- Open shade on a sidewalk with warm sunlit patches on facades and paving.\n\n## Camera\n- 50-70 mm, waist-to-chest height, very close full body, centred.\n- 35-50 mm, several metres back, full body slightly off-centre with sidewalk context.`,
     template: ZAID_TEMPLATE,
   };

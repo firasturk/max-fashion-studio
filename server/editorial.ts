@@ -133,7 +133,8 @@ const SCHEMA = {
 };
 
 export function builderInstruction(req: EditorialRequest): string {
-  // Zaid creative direction keeps only centring, reference use and the pocket fact as hard rules.
+  // Zaid creative direction: outfit, framing, pockets, centring and bright balanced light are hard rules;
+  // hair and catalogue wording follow the direction.
   const relaxed = req.skill === "zaid";
   const market =
     req.market === "arab"
@@ -189,14 +190,12 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `EXTRA REQUESTS FROM THE USER for this batch (apply them to the prompt; they override the skill's direction and library but never the fixed rules): ${req.preference}`
       : "No extra requests from the user.",
     relaxed
-      ? "Fixed rules for every prompt (they override the skill's own direction, template and library): (1) a reference image contributes only setting, pose and stance, lighting and camera angle; (2) never copy hats, bags, sunglasses, jewellery or props from a reference; (3) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible; (4) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section."
+      ? "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) OUTFIT: everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented; (2) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload stays upper body and ends at the same line with no legs or footwear drawn, a lower-body upload stays lower body and starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible; (3) a reference image contributes only setting, pose and stance, lighting and camera angle; (4) never copy hats, bags, sunglasses, jewellery or props from a reference; (5) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible; (6) LIGHT: the background and the scene are bright but balanced, well lit daylight with open shadows and no blown-out highlights, no dim, murky, heavy-shadow or high-contrast scenes; the model is lit evenly and the garment colours read true; (7) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section."
       : "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented, no shoes, bags, hats, jewellery or extra layers that are not visible in image 1; (2) a reference image contributes only setting, pose and stance, lighting and camera angle; (3) never copy hats, bags, sunglasses, jewellery or props from a reference; (4) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload ends at the same line with no legs or footwear drawn, a lower-body upload starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible; (5) catalogue-safe wording only; (8) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible, and in a lower-body image the hands are visible in the frame, in a natural position that fits the scene and the body's movement (resting beside the thighs, lightly touching the garment, mid-stride), never cropped out, never raised out of frame; (7) HAIR: when the model is kept, the same hairstyle, length and colour as image 1; in every case the hair is neat and settled, no wind-blown, flying, floating or stray strands, no hair across the face, and the AVOID block lists wind-blown hair, flying hair strands and messy hair; (6) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
-    relaxed
-      ? handsDirective(req.handsInPockets)
-      : req.uploadFraming
-        ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets)
-        : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
+    req.uploadFraming
+      ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets)
+      : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
     "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
@@ -368,13 +367,6 @@ export function framingDirective(
   if (framing === "UPPER_BODY")
     return `VERIFIED UPLOAD FRAMING: UPPER_BODY. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is an UPPER-BODY image: from above the head down to the same crop line as the upload (waist or hips). Legs, trousers, skirts and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for an upper-body shot. Report framing as UPPER_BODY.${seen}${hands}`;
   return `VERIFIED UPLOAD FRAMING: FULL_BODY. The output is a full-body image, head to footwear completely inside the frame, as in the upload. Report framing as FULL_BODY.${seen}${hands}`;
-}
-
-/** Zaid creative direction: only the pocket fact is binding; framing and hair follow the direction. */
-export function handsDirective(handsInPockets = false): string {
-  return handsInPockets
-    ? "VERIFIED HANDS: the upload shows a hand in a pocket, so a hand in a pocket is allowed in the output."
-    : "VERIFIED HANDS: the upload shows no hand in a pocket, so NO hand goes into a pocket in the output; hands stay out of pockets, relaxed and visible.";
 }
 
 /** JSON schema for the framing check (Google structured output). */

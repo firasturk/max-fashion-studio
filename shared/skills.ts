@@ -96,15 +96,6 @@ export function deriveSkill(d: SkillDraft): SkillDef {
   };
 }
 
-/**
- * Core rules for Zaid creative direction: the same analysis, but the upload's framing and the
- * garment inventory are guidance rather than a lock, so the composition can follow the direction.
- */
-export const CORE_RULES_RELAXED = CORE_RULES.replace(
-  /4\. \*\*Nothing is invented\*\*[\s\S]*?adapt any pose to it\.\n/,
-  "4. **Framing of the upload**: `FULL_BODY` (head to footwear), `UPPER_BODY` (cropped around the waist or hips) or `LOWER_BODY` (waist down). Note it, and choose the output framing that suits the direction and the garment.\n",
-);
-
 const derive = deriveSkill;
 
 const EDITORIAL: SkillDef = {
