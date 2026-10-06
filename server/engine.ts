@@ -506,9 +506,8 @@ async function eligibleQueued(
     "SELECT t.*, s.name AS source_name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.status = 'queued' ORDER BY s.name, t.card",
     batch.id,
   );
-  // Zaid creative direction: the highest shot (_02 before _01) leads the set; the others follow it.
-  if (SKILL_MODES.has(config.mode))
-    return setAwareQueue(env, batch, queued, limit, config.mode === "7");
+  // The highest shot (_02 before _01) leads every set; the others follow its scene and light.
+  if (SKILL_MODES.has(config.mode)) return setAwareQueue(env, batch, queued, limit, true);
   if (config.mode !== "1") return queued.slice(0, limit);
   const out: TaskRow[] = [];
   for (const t of queued) {

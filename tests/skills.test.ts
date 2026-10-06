@@ -62,6 +62,7 @@ describe("zaid creative direction", () => {
     expect(text).toContain("LIGHT: real sun");
     expect(text).toContain("BACKGROUND DETAIL");
     expect(text).toContain("INTEGRATION");
+    expect(text).toContain("CAMERA ANGLE");
     expect(text).toContain("golden-hour sun");
     expect(text).toContain("at least 1500 words");
     expect(text).not.toContain("600-1100 words");

@@ -160,6 +160,21 @@ describe("Zaid creative direction", () => {
     expect(p).toContain(DETAIL_RULE);
     expect(p).toContain(BLEND_RULE);
     expect(p).toContain("golden-hour sun");
+    const full = buildEditorial(
+      "P.",
+      "",
+      "",
+      { mood: true },
+      false,
+      true,
+      "FULL_BODY",
+      false,
+      true,
+    );
+    expect(full).toContain("reproduce the reference's camera angle");
+    expect(
+      buildEditorial("P.", "", "", { mood: true }, false, true, "UPPER_BODY", false, true),
+    ).not.toContain("reproduce the reference's camera angle");
     expect(p).not.toContain("HAIR:");
     expect(p).toContain("no hand in a pocket");
     expect(p).toContain(

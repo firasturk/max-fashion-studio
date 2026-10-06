@@ -228,7 +228,11 @@ export function buildEditorialPrompt(
   let idx = 2;
   if (images.mood)
     roles.push(
-      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).`,
+      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).${
+        relaxed && framing === "FULL_BODY"
+          ? " For this full-body image reproduce the reference's camera angle, camera height, tilt and distance exactly as the prompt describes them."
+          : ""
+      }`,
     );
   if (images.set)
     roles.push(
