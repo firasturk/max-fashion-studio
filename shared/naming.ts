@@ -10,21 +10,21 @@ export function stemKey(name: string): string {
   return stemOf(name).normalize("NFC").toLowerCase();
 }
 
-/** Trailing shot counters: `_01`, `-2`, ` (3)` and an earlier result's `_0_4`. */
-const COUNTER = /(?:_0_\d{1,3}|[\s_-]+\d{1,2}|\s*\(\d{1,3}\))$/;
+/** Trailing shot counters: `_1`, `_01`, `_001`, `-2`, ` (3)` and an earlier result's `_0_4`. */
+const COUNTER = /(?:_0_\d{1,3}|[\s_-]+\d{1,3}|\s*\(\d{1,3}\))$/;
 
 /**
  * Product id of an upload, folder kept and case kept: `Denim/169800580_01.jpg` -> `Denim/169800580`.
- * The extension, "-AI", a trailing one- or two-digit counter such as _01 / -2 / (3) and an earlier
- * result's `_0_N` are removed. Three-digit endings like MAX_001 are part of the id.
+ * The extension, "-AI", a trailing shot counter of one to three digits (_1, _01, _001, -2, (3)) and
+ * an earlier result's `_0_N` are removed.
  */
 export function productId(name: string): string {
   return stemOf(name).normalize("NFC").replace(COUNTER, "");
 }
 
-/** Trailing shot number of an upload: `169800580_02.jpg` -> 2, `MAX-3.png` -> 3, none -> 0. */
+/** Trailing shot number of an upload: `_1`, `_01` and `_001` are all shot 1; `MAX-3.png` -> 3; none -> 0. */
 export function shotNumber(name: string): number {
-  const m = /(?:[\s_-]+(\d{1,2})|\s*\((\d{1,3})\))$/.exec(stemOf(name).normalize("NFC"));
+  const m = /(?:[\s_-]+(\d{1,3})|\s*\((\d{1,3})\))$/.exec(stemOf(name).normalize("NFC"));
   return m ? Number(m[1] ?? m[2]) : 0;
 }
 
