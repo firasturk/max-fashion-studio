@@ -14,6 +14,10 @@ export function isSkillCampaign(mode: string): boolean {
 export function usesBuilder(mode: string): boolean {
   return mode === "5" || mode === "7" || mode === "8";
 }
+/** Approaches that take product folders: only the _01/_02 shots are kept and each product runs as a set. */
+export function usesProductSets(mode: string): boolean {
+  return usesBuilder(mode);
+}
 /** The person in the upload is replaced by an AI-generated model; only what is worn is kept. */
 export function newModelMode(mode: string): boolean {
   return mode === "8";

@@ -37,6 +37,7 @@ import {
   exportsOriginals,
   type Config,
   isSkillCampaign,
+  usesProductSets,
   usesBuilder,
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
@@ -260,10 +261,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const completed = tasks.filter((t) => !!t.output).length;
 
   function addFiles(picked: PickedFile[], root?: string | null) {
-    // Skill campaign: a folder upload keeps only the _01/_02 shots of each product.
+    // Skill campaigns and Zaid creative direction: a folder upload keeps only the _01/_02 shots.
     const fromFolders = picked.some((f) => f.path.includes("/"));
     let trimmed = 0;
-    if (isSkillCampaign(viewConfig.mode) && fromFolders) {
+    if (usesProductSets(viewConfig.mode) && fromFolders) {
       const kept = picked.filter((f) => !f.path.includes("/") || isCampaignShot(f.path));
       trimmed = picked.length - kept.length;
       picked = kept;
@@ -288,7 +289,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       if (root) setBatchName((n) => n || root);
     }
     if (trimmed)
-      toast.info(`Skill campaign: ${trimmed} photos left out. Only _01 and _02 shots are used.`);
+      toast.info(`${trimmed} photos left out. Only _01 and _02 shots of each product are used.`);
     if (rejected)
       toast.warning(
         `${rejected} files skipped: unsupported, over 12 MB, or duplicate output name.`,
