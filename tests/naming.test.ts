@@ -5,6 +5,7 @@ import {
   outputExt,
   outputName,
   productId,
+  shotNumber,
   safeArchiveName,
   stemKey,
   stemOf,
@@ -28,6 +29,13 @@ describe("naming", () => {
     expect(isValidSourceName("Denim/MAX_001.jpg")).toBe(true);
     expect(isValidSourceName("Denim//MAX_001.jpg")).toBe(false);
     expect(isValidSourceName("../MAX_001.jpg")).toBe(false);
+  });
+  it("reads the trailing shot number", () => {
+    expect(shotNumber("169800580_02.jpg")).toBe(2);
+    expect(shotNumber("Denim/169800580_001.jpg")).toBe(0);
+    expect(shotNumber("MAX-3.png")).toBe(3);
+    expect(shotNumber("look (12).jpg")).toBe(12);
+    expect(shotNumber("169800580.jpg")).toBe(0);
   });
   it("numbers the images of one product together, by upload name then card", () => {
     const items = [

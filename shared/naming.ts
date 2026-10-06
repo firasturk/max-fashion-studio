@@ -22,6 +22,12 @@ export function productId(name: string): string {
   return stemOf(name).normalize("NFC").replace(COUNTER, "");
 }
 
+/** Trailing shot number of an upload: `169800580_02.jpg` -> 2, `MAX-3.png` -> 3, none -> 0. */
+export function shotNumber(name: string): number {
+  const m = /(?:[\s_-]+(\d{1,2})|\s*\((\d{1,3})\))$/.exec(stemOf(name).normalize("NFC"));
+  return m ? Number(m[1] ?? m[2]) : 0;
+}
+
 /**
  * Files of one product share a key (the product id, case-insensitive): `169800580_01.jpg` and
  * `169800580_02.jpg` -> `169800580`. Images of one product are generated as one set with the same

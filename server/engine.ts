@@ -56,7 +56,7 @@ import { GoogleImageClient, isGoogleModel } from "./google";
 import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { signObjectUrl } from "./signed";
 import { sanitizePrompt } from "@shared/safety";
-import { productKey } from "@shared/naming";
+import { productKey, shotNumber } from "@shared/naming";
 import { resolveSkill } from "./skills";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
@@ -506,7 +506,9 @@ async function eligibleQueued(
     "SELECT t.*, s.name AS source_name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.status = 'queued' ORDER BY s.name, t.card",
     batch.id,
   );
-  if (SKILL_MODES.has(config.mode)) return setAwareQueue(env, batch, queued, limit);
+  // Zaid creative direction: the highest shot (_02 before _01) leads the set; the others follow it.
+  if (SKILL_MODES.has(config.mode))
+    return setAwareQueue(env, batch, queued, limit, config.mode === "7");
   if (config.mode !== "1") return queued.slice(0, limit);
   const out: TaskRow[] = [];
   for (const t of queued) {
@@ -1436,6 +1438,7 @@ async function setAwareQueue(
   batch: BatchRow,
   queued: (TaskRow & { source_name: string })[],
   limit: number,
+  highestShotLeads = false,
 ): Promise<TaskRow[]> {
   const rows = await all<{
     id: string;
@@ -1453,6 +1456,9 @@ async function setAwareQueue(
     const k = `${productKey(r.name)}#${r.card}`;
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
+  // The first row of a group is its leader: by name (_01 first), or the highest shot number first.
+  if (highestShotLeads)
+    for (const g of groups.values()) g.sort((a, b) => shotNumber(b.name) - shotNumber(a.name));
   const out: TaskRow[] = [];
   const claimedGroups = new Set<string>();
   for (const t of queued) {
