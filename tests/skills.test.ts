@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SKILL, SKILLS, skillById } from "../shared/skills";
-import { builderInstruction } from "../server/editorial";
+import { builderInstruction, wordCount } from "../server/editorial";
 
 const req = {
   image: { bytes: new ArrayBuffer(4), mime: "image/jpeg" },
@@ -61,6 +61,13 @@ describe("zaid creative direction", () => {
     expect(text).toContain("Framing lock");
     expect(text).toContain("LIGHT: the background");
     expect(text).toContain("BACKGROUND DETAIL");
+    expect(text).toContain("at least 1500 words");
+    expect(text).not.toContain("600-1100 words");
+    expect(s.template).toContain("at least 1,500 words");
+    expect(
+      builderInstruction({ ...req, skill: "zaid", expand: "YOUR PREVIOUS DRAFT WAS REJECTED" }),
+    ).toContain("YOUR PREVIOUS DRAFT WAS REJECTED");
+    expect(wordCount("one two  three\nfour")).toBe(4);
   });
 });
 

@@ -37,6 +37,8 @@ export interface EditorialRequest {
   visibleGarments?: string;
   /** Verified: the upload shows a hand in a pocket. Only then may the output. */
   handsInPockets?: boolean;
+  /** Second attempt note when the first draft was too short (Zaid creative direction). */
+  expand?: string;
   /** A saved prompt that leads this run: its scene, pose, light and style are reused as written. */
   look?: {
     name: string;
@@ -132,6 +134,13 @@ const SCHEMA = {
   ],
 };
 
+/** Zaid creative direction prompts are long-form: this many words at least. */
+export const ZAID_MIN_WORDS = 1500;
+
+export function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
 export function builderInstruction(req: EditorialRequest): string {
   // Zaid creative direction: outfit, framing, pockets, centring and bright balanced light are hard rules;
   // hair and catalogue wording follow the direction.
@@ -198,7 +207,10 @@ export function builderInstruction(req: EditorialRequest): string {
       : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
-    "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
+    relaxed
+      ? `The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, English, all template sections). LENGTH: the prompt field must be at least ${ZAID_MIN_WORDS} words (aim for ${ZAID_MIN_WORDS}-2000). Develop every section with several concrete sentences: name and describe each background element, surface and material, the exact light on each of them, every garment detail, and the pose joint by joint. A prompt under ${ZAID_MIN_WORDS} words is rejected.`
+      : "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
+    req.expand,
     "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, UPPER_BODY or LOWER_BODY).",
   ]
     .filter(Boolean)

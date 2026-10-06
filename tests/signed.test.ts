@@ -19,6 +19,8 @@ describe("signed object links", () => {
     expect(await verifyObjectToken(env, k, e, s)).toBe(true);
     expect(await verifyObjectToken(env, "sources/abc/other.jpg", e, s)).toBe(false);
     expect(await verifyObjectToken(env, k, "1", s)).toBe(false);
-    expect(await verifyObjectToken(env, k, e, s.replace(/^./, "0"))).toBe(false);
+    // Flip the first character to one it is not, so the tampered signature always differs.
+    const tampered = (s[0] === "0" ? "1" : "0") + s.slice(1);
+    expect(await verifyObjectToken(env, k, e, tampered)).toBe(false);
   });
 });

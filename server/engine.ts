@@ -37,6 +37,8 @@ import {
   FRAMING_CHECK_INSTRUCTION,
   FRAMING_SCHEMA,
   parseFramingCheck,
+  wordCount,
+  ZAID_MIN_WORDS,
   type FramingCheck,
 } from "./editorial";
 import { FABRIC_CARD, type Config } from "@shared/config";
@@ -813,16 +815,24 @@ async function ensureBrief(
       true,
     );
   const preferOpenAI = isOpenAIModel(config.model) ? !!openai : !google;
-  let brief: EditorialBrief;
-  if (preferOpenAI) brief = await buildBriefWithOpenAI(openai!, req);
-  else {
+  const build = async (): Promise<EditorialBrief> => {
+    if (preferOpenAI) return buildBriefWithOpenAI(openai!, req);
     try {
-      brief = await buildBriefWithGoogle(google!, req);
+      return await buildBriefWithGoogle(google!, req);
     } catch (e) {
       // Gemini refuses some Cloudflare regions, and a drained prepaid balance; OpenAI can take over.
-      if (openai && googleUnavailable(e)) brief = await buildBriefWithOpenAI(openai, req);
-      else throw e;
+      if (openai && googleUnavailable(e)) return buildBriefWithOpenAI(openai, req);
+      throw e;
     }
+  };
+  let brief = await build();
+  // Zaid creative direction: a short draft gets one more attempt with the shortfall spelled out.
+  if (config.mode === "7" && wordCount(brief.prompt) < ZAID_MIN_WORDS) {
+    const words = wordCount(brief.prompt);
+    console.log(`[short prompt] task ${task.id}: ${words} words, rebuilding`);
+    req.expand = `YOUR PREVIOUS DRAFT WAS REJECTED: it was ${words} words, below the mandatory minimum of ${ZAID_MIN_WORDS}. Write it again, same facts and the same scene, at least ${ZAID_MIN_WORDS} words: expand every section with more concrete, specific sentences (each background element and its material, where the light lands on each one, every garment detail, the pose joint by joint). Do not pad with repetition.`;
+    const longer = await build();
+    if (wordCount(longer.prompt) > words) brief = longer;
   }
   if (plan.mood) brief.mood = plan.mood;
   if (leader) brief.setOf = leader.id;
