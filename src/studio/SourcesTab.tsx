@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, ChevronDown, FolderOpen, Upload, X } from "lucide-react";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
@@ -74,6 +74,23 @@ export default function SourcesTab({
     ? sources.length - visibleSources.length
     : pending.length - visiblePending.length;
   const leads = pending.filter((p) => p.role === "lead").length;
+  // Zaid creative direction: the N key clears every selected photo (nothing selected for generation).
+  const clearAll = config.mode === "7" && !batchOpen && !uploading && leads > 0;
+  useEffect(() => {
+    if (!clearAll) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== "n" && e.key !== "N") return;
+      e.preventDefault();
+      onRoles(
+        pending.map((p) => p.url),
+        "supporting",
+      );
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clearAll, pending, onRoles]);
   const expected = leads * cardsPerSource(config);
   const folders = new Set(
     pending.map((p) => p.name.split("/").slice(0, -1).join("/")).filter(Boolean),
@@ -206,7 +223,7 @@ export default function SourcesTab({
                 )
               }
             >
-              Clear
+              Clear{config.mode === "7" && <kbd className="key-hint">N</kbd>}
             </button>
           </div>
         </div>

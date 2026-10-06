@@ -3595,3 +3595,17 @@ textarea:focus {
   font-size: 12px;
   color: var(--ink-400);
 }
+
+/* Keyboard hint beside a text button, e.g. "Clear N". */
+.key-hint {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: 600 0.68rem/1.4 inherit;
+  font-family: inherit;
+  color: var(--ink-500);
+  background: var(--surface-2);
+  vertical-align: middle;
+}
