@@ -937,10 +937,7 @@ studioRoutes.post("/upload", async (c) => {
     stem,
   );
   if (duplicate)
-    throw new StudioError(
-      `Duplicate output name: ${stemOf(name)}-AI.png already exists in this batch.`,
-      409,
-    );
+    throw new StudioError(`Duplicate upload: ${stemOf(name)} is already in this batch.`, 409);
 
   const role = form.get("role") === "supporting" ? "supporting" : "lead";
   const id = uuid();

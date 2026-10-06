@@ -737,7 +737,7 @@ export default function CreativePanel({
 
       <Section
         title="Export & checks"
-        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · filename + -AI`}
+        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · ProductID_0_N`}
         defaultOpen={false}
       >
         {config.mode !== "4" && config.mode !== "6" && (
@@ -790,9 +790,10 @@ export default function CreativePanel({
         <div className="export-rule">
           <FileImage size={18} />
           <div>
-            Original filename + <b>-AI</b>
+            Product ID + <b>_0_</b> + image number
             <span>
-              Example: MAX_001.jpg → MAX_001-AI.{config.output} (or -AI-01, -AI-02 for sets)
+              Example: 168761402_01.jpg → 168761402_0_1.{config.output}, 168761402_02.jpg →
+              168761402_0_2.{config.output}
             </span>
           </div>
         </div>
