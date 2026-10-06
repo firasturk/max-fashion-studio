@@ -185,6 +185,17 @@ describe("verified framing", () => {
       garments: "black trousers, sneakers",
     });
     expect(parseFramingCheck("nonsense").framing).toBe("FULL_BODY");
+    // What is inside the picture overrides the label: no head but feet is lower body.
+    expect(
+      parseFramingCheck(
+        '{"framing":"UPPER_BODY","headVisible":false,"feetVisible":true,"faceVisible":false,"handsInPockets":true,"garments":"black top, blue jeans, sneakers"}',
+      ).framing,
+    ).toBe("LOWER_BODY");
+    expect(
+      parseFramingCheck(
+        '{"framing":"FULL_BODY","headVisible":true,"feetVisible":false,"faceVisible":true,"handsInPockets":false,"garments":"denim top"}',
+      ).framing,
+    ).toBe("UPPER_BODY");
     expect(
       parseFramingCheck(
         '{"framing":"FULL_BODY","faceVisible":true,"handsInPockets":true,"garments":"coat"}',

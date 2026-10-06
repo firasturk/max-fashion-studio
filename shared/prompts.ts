@@ -155,6 +155,10 @@ export const NEW_MODEL_RULE =
 export const HAIR_RULE =
   "HAIR: neat and settled, exactly as styled in the reference photo when the model is kept; no wind-blown, flying, floating or stray strands, no hair across the face or eyes.";
 
+/** Engine-facing identity rule: the person in the reference photo is the model in the output. */
+export const IDENTITY_RULE =
+  "IDENTITY: the model is the same person as in the reference photo (image 1): the same face, facial features, skin tone, age, body and hair; no identity change, no beautifying, no different person. When the face is not visible in the reference photo, it is not visible in the output either.";
+
 /** Engine-facing light rule for Zaid creative direction. */
 export const LIGHT_RULE =
   "LIGHT: real sun, golden-hour sun (low, warm, long soft shadows) or midday sun (high, clean, short shadows) as the prompt names it; never overcast, dusk, night or artificial light. Bright but balanced: open shadows and no blown-out highlights; no dim, murky, heavy-shadow or harsh high-contrast lighting. The model is evenly lit and the garment colours read true.";
@@ -206,6 +210,7 @@ export function buildEditorialPrompt(
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
+  else parts.push(IDENTITY_RULE);
   parts.push(framingRule(framing, handsInPockets));
   // Zaid creative direction: hair follows the direction; the light is bright but balanced.
   if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE, BLEND_RULE);

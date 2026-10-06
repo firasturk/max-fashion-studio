@@ -711,7 +711,15 @@ async function ensureBrief(
   task: TaskRow,
   source: SourceRow,
 ): Promise<EditorialBrief> {
-  if (task.brief) return JSON.parse(task.brief) as EditorialBrief;
+  if (task.brief) {
+    const cached = JSON.parse(task.brief) as EditorialBrief;
+    // A mood photo removed from the library since the brief was written is not used again:
+    // the brief is rebuilt with a photo that still exists.
+    if (!cached.mood || (await referenceExists(env, cached.mood))) return cached;
+    console.log(
+      `[missing reference] task ${task.id}: mood ${cached.mood} removed, rebuilding brief`,
+    );
+  }
   const image = await sourceBytes(env, source);
   // Step 0, before any skill text is read: what does the upload actually show? Checked once per
   // upload with a tiny dedicated vision call and stored, so every card and retry uses the same fact.
@@ -783,8 +791,12 @@ async function ensureBrief(
   // Draw the scene here so the mood photo attached to the builder is the one the text names.
   const leader = await setLeader(env, batch, task, source);
   const leaderBrief = leader ? (JSON.parse(leader.brief) as EditorialBrief) : null;
+  const leaderMood =
+    leaderBrief?.mood && (await referenceExists(env, leaderBrief.mood))
+      ? leaderBrief.mood
+      : undefined;
   const plan = leaderBrief
-    ? { scene: leaderBrief.scene || null, mood: leaderBrief.mood }
+    ? { scene: leaderBrief.scene || null, mood: leaderMood }
     : look
       ? { scene: look.scene || null }
       : planRun(req);
@@ -974,6 +986,10 @@ function googleUnavailable(e: unknown): boolean {
 }
 
 /** A reference-library photo from R2. */
+async function referenceExists(env: Env, id: string): Promise<boolean> {
+  return !!(await first<{ id: string }>(env.DB, "SELECT id FROM refs WHERE id = ?", id));
+}
+
 async function referenceBytes(env: Env, id: string): Promise<ImageBytes> {
   const row = await first<{ key: string }>(env.DB, "SELECT key FROM refs WHERE id = ?", id);
   const obj = row ? await env.BUCKET.get(row.key) : null;

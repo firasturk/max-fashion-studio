@@ -386,15 +386,17 @@ export const FRAMING_SCHEMA = {
   type: "object",
   properties: {
     framing: { type: "string", enum: ["FULL_BODY", "UPPER_BODY", "LOWER_BODY"] },
+    headVisible: { type: "boolean" },
+    feetVisible: { type: "boolean" },
     faceVisible: { type: "boolean" },
     handsInPockets: { type: "boolean" },
     garments: { type: "string" },
   },
-  required: ["framing", "faceVisible", "handsInPockets", "garments"],
+  required: ["framing", "headVisible", "feetVisible", "faceVisible", "handsInPockets", "garments"],
 };
 
 export const FRAMING_CHECK_INSTRUCTION =
-  "Look at the attached product photo and answer with JSON only. framing: FULL_BODY if the person is shown from the head (or at least the shoulders) down to the feet; UPPER_BODY if the photo is cropped around the waist or hips and shows no legs below the hips; LOWER_BODY if the photo starts at or near the waist and shows legs and/or footwear with no face or chest, even if a sliver of a top is visible at the top edge. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, faceVisible, handsInPockets, garments.";
+  "Look at the attached product photo and answer with JSON only. headVisible: true only if the head (face or back of the head) is inside the picture. feetVisible: true only if the feet, shoes or ankles are inside the picture. framing follows from those two facts: FULL_BODY when head and feet are both inside; UPPER_BODY when the head is inside and the picture ends at the waist or hips with no legs below the hips; LOWER_BODY when the head is NOT inside and the picture shows legs and/or footwear from the waist, hips or chest down, even if a sliver of a top is visible at the top edge. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, headVisible, feetVisible, faceVisible, handsInPockets, garments.";
 
 /** Parse the framing check's answer; unknown answers are treated as full body. */
 export interface FramingCheck {
@@ -413,12 +415,21 @@ export function parseFramingCheck(text: string): FramingCheck {
       .trim();
     const d = JSON.parse(cleaned) as {
       framing?: string;
+      headVisible?: boolean;
+      feetVisible?: boolean;
       faceVisible?: boolean;
       handsInPockets?: boolean;
       garments?: string;
     };
-    const framing: Framing =
+    let framing: Framing =
       d.framing === "UPPER_BODY" || d.framing === "LOWER_BODY" ? d.framing : "FULL_BODY";
+    // What is inside the picture decides, not the label: no head but feet is a lower-body crop,
+    // head but no feet an upper-body crop, both a full body.
+    if (typeof d.headVisible === "boolean" && typeof d.feetVisible === "boolean") {
+      if (!d.headVisible && d.feetVisible) framing = "LOWER_BODY";
+      else if (d.headVisible && !d.feetVisible) framing = "UPPER_BODY";
+      else if (d.headVisible && d.feetVisible) framing = "FULL_BODY";
+    }
     return {
       framing,
       faceVisible: !!d.faceVisible,

@@ -5,6 +5,7 @@ import {
   LIGHT_RULE,
   DETAIL_RULE,
   BLEND_RULE,
+  IDENTITY_RULE,
   NEW_MODEL_RULE,
   RECENTER_SUFFIX,
 } from "../shared/prompts";
@@ -174,6 +175,8 @@ describe("new-model skill campaign", () => {
   it("tells the engine to replace the person and keep only what is worn", () => {
     const p = buildEditorial("Prompt body.", "blur", "", {}, true);
     expect(p).toContain(NEW_MODEL_RULE);
+    expect(p).not.toContain(IDENTITY_RULE);
+    expect(buildEditorial("Prompt body.", "blur")).toContain(IDENTITY_RULE);
     expect(p).toContain("Do not reproduce the person");
     expect(buildEditorial("Prompt body.", "blur")).not.toContain("NEW MODEL");
   });
