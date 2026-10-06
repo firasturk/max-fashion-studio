@@ -1071,10 +1071,15 @@ studioRoutes.post("/start", async (c) => {
     now(),
     b.id,
   );
-  await advanceBatch(c.env, b.id, {
-    background: (p) => c.executionCtx.waitUntil(p),
-    deferSync: true,
-  });
+  // The first pass (framing checks, prompt building, submissions) runs after the response: the
+  // click answers at once, and the tick and the cron carry on if this invocation is cut short.
+  // Running it inline made the start request itself fail when the pass outgrew the request.
+  c.executionCtx.waitUntil(
+    advanceBatch(c.env, b.id, {
+      background: (p) => c.executionCtx.waitUntil(p),
+      deferSync: true,
+    }).catch((e) => console.error("[start] first pass failed", e)),
+  );
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
