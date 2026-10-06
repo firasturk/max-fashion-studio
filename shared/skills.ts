@@ -39,7 +39,8 @@ export const CORE_RULES = `## Inputs
 1. **Subject class**: adult woman / adult man / child (estimate age band). Body type and height impression.
 2. **Face visibility**: \`FACE_VISIBLE\`, \`FACE_PARTIAL\` or \`NO_FACE\`. Treat FACE_PARTIAL as NO_FACE for identity, but keep any visible chin/hair traits consistent.
 3. **Outfit inventory — garment by garment, top to bottom** (the most important part). For each item: garment type, exact colour names, fabric and finish, fit and silhouette, length, neckline/collar, sleeves and cuffs, closures (number, colour, material), pockets, seams and topstitching, hems, waist treatment, prints (motif, scale, repeat, colours), graphics or embroidery (exact position and size, text spelled exactly), trims, layering order, how it is worn. Footwear and accessories only if they appear in the upload, otherwise "not supplied".
-4. **Framing of the upload**: \`FULL_BODY\` (head to footwear), \`UPPER_BODY\` (cropped around the waist or hips) or \`LOWER_BODY\` (waist down). Note it, and choose the output framing that suits the skill's composition and the garment.
+4. **Nothing is invented**: the output shows only what the upload shows. Never add shoes, bags, hats, jewellery, belts, layers or a top or bottom garment that is not visible in the upload. There are no "styling gaps" to complete: if the crop excludes an item, the output's crop excludes it too.
+5. **Framing of the upload (HARD LOCK)**: \`FULL_BODY\` (head to footwear), \`UPPER_BODY\` (cropped around the waist or hips) or \`LOWER_BODY\` (waist down). The output keeps exactly the same framing and the same crop line: an upper-body upload gives an upper-body image that ends at the same line, with no legs, trousers or footwear drawn; a lower-body upload gives a lower-body image that starts at the same line, with no face or top drawn; a full-body upload gives a full-body image with footwear visible. State this crop explicitly in the CAMERA & COMPOSITION section and adapt any pose to it.
 
 ## Outfit, footwear and accessories lock (image 1)
 
@@ -94,6 +95,15 @@ export function deriveSkill(d: SkillDraft): SkillDef {
     template: EDITORIAL_TEMPLATE,
   };
 }
+
+/**
+ * Core rules for Zaid creative direction: the same analysis, but the upload's framing and the
+ * garment inventory are guidance rather than a lock, so the composition can follow the direction.
+ */
+export const CORE_RULES_RELAXED = CORE_RULES.replace(
+  /4\. \*\*Nothing is invented\*\*[\s\S]*?adapt any pose to it\.\n/,
+  "4. **Framing of the upload**: `FULL_BODY` (head to footwear), `UPPER_BODY` (cropped around the waist or hips) or `LOWER_BODY` (waist down). Note it, and choose the output framing that suits the direction and the garment.\n",
+);
 
 const derive = deriveSkill;
 

@@ -117,30 +117,50 @@ describe("centering", () => {
   });
 });
 
-describe("hands rule", () => {
+describe("framing lock", () => {
   it("applies to the non-builder approaches too, but not to the packshot recolour or fabric card", async () => {
-    const { buildPrompt: bp, HANDS_RULE } = await import("../shared/prompts");
+    const { buildPrompt: bp, HAIR_RULE } = await import("../shared/prompts");
     const base = { ...DEFAULT_CONFIG, input: "model" as const };
     for (const mode of ["2", "3", "4"] as const) {
       const p = bp({ ...base, mode }, 1);
-      expect(p).toContain(HANDS_RULE);
-      expect(p).not.toContain("FRAMING LOCK");
-      expect(p).not.toContain("HAIR:");
+      expect(p).toContain("FRAMING LOCK");
+      expect(p).toContain(HAIR_RULE);
     }
-    expect(bp({ ...base, mode: "6" }, 1)).not.toContain(HANDS_RULE);
-    expect(bp({ ...base, mode: "1" }, 6)).not.toContain(HANDS_RULE);
+    expect(bp({ ...base, mode: "6" }, 1)).not.toContain("FRAMING LOCK");
+    expect(bp({ ...base, mode: "1" }, 6)).not.toContain("FRAMING LOCK");
   });
-  it("lets the engine use a pocket only when the original shows one", () => {
-    const p = buildEditorial("P.", "", "", {}, false, true);
-    expect(p).toContain("no hand in a pocket");
-    expect(p).toContain("AVOID: hands in pockets");
-    expect(p).not.toContain("FRAMING LOCK");
-    expect(p).not.toContain("HAIR:");
-    const allowed = buildEditorial("P.", "", "", {}, false, true, true);
-    expect(allowed).toContain("may rest in a pocket");
-    expect(allowed).not.toContain("hands in pockets");
+  it("tells the engine to keep the upload's crop and invent nothing outside it", () => {
+    expect(buildEditorial("P.", "", "", {}, false, true, "UPPER_BODY")).toContain(
+      "upper body only",
+    );
+    const lower = buildEditorial("P.", "", "", {}, false, true, "LOWER_BODY");
+    expect(lower).toContain("lower body only");
+    expect(lower).toContain("hands are visible inside the frame");
+    expect(lower).toContain("no hand in a pocket");
+    expect(lower).toContain(
+      "AVOID: wind-blown hair, flying hair strands, messy hair, hands in pockets",
+    );
+    expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY", true)).toContain(
+      "may rest in a pocket",
+    );
+    expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY")).toContain("no added shoes");
+    expect(buildEditorial("P.", "")).toContain("FRAMING LOCK");
   });
 });
+
+describe("Zaid creative direction", () => {
+  it("keeps only the pockets rule and centring, no framing lock or hair rule", () => {
+    const p = buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", false, true);
+    expect(p).not.toContain("FRAMING LOCK");
+    expect(p).not.toContain("HAIR:");
+    expect(p).toContain("no hand in a pocket");
+    expect(p).toContain("AVOID: blur, hands in pockets");
+    expect(buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", true, true)).toContain(
+      "may rest in a pocket",
+    );
+  });
+});
+
 describe("new-model skill campaign", () => {
   it("tells the engine to replace the person and keep only what is worn", () => {
     const p = buildEditorial("Prompt body.", "blur", "", {}, true);

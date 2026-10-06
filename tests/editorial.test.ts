@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  handsDirective,
+  framingDirective,
   parseFramingCheck,
   buildBriefWithGoogle,
   buildBriefWithOpenAI,
@@ -123,7 +123,7 @@ describe("editorial prompt builder", () => {
     expect(p.startsWith("Use the attached image")).toBe(true);
     expect(p).toContain("Revision of the existing result: brighter sky");
     expect(p).toContain("The LAST image is the existing result to revise");
-    expect(p).toContain("AVOID: extra buttons, plain studio background, hands in pockets");
+    expect(p).toContain("AVOID: extra buttons, plain studio background, wind-blown hair");
   });
 });
 
@@ -191,8 +191,13 @@ describe("verified framing", () => {
       ).handsInPockets,
     ).toBe(true);
   });
-  it("turns the pocket fact into a binding instruction", () => {
-    expect(handsDirective(false)).toContain("NO hand goes into a pocket");
-    expect(handsDirective(true)).toContain("allowed");
+  it("turns a lower-body crop into a binding instruction that excludes the face and top", () => {
+    const d = framingDirective("LOWER_BODY", "black trousers, sneakers");
+    expect(d).toContain("LOWER-BODY image");
+    expect(d).toContain("overrides the skill");
+    expect(d).toContain("black trousers, sneakers");
+    expect(d).toContain("HANDS IN FRAME");
+    expect(d).toContain("no hand in a pocket");
+    expect(framingDirective("FULL_BODY", "coat", true)).toContain("pocket");
   });
 });

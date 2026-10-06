@@ -113,9 +113,12 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   }
 
   parts.push(fidelity);
-  // Every approach that shows a person follows the upload on pockets; the fabric macro and the
-  // packshot recolour have no model.
-  if (c.mode !== "6" && !(c.mode === "1" && card === FABRIC_CARD)) parts.push(HANDS_RULE);
+  // Every approach that shows a person keeps the upload's crop and tidy hair; the fabric macro and
+  // the packshot recolour have no model to frame.
+  if (c.mode !== "6" && !(c.mode === "1" && card === FABRIC_CARD)) {
+    parts.push(framingRule());
+    parts.push(HAIR_RULE);
+  }
   if (c.mode === "1" && card === FABRIC_CARD)
     parts.push(
       "Output must be a flat textile macro photograph only. If a person would appear, the result is wrong.",
@@ -148,14 +151,41 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
 export const NEW_MODEL_RULE =
   "NEW MODEL: the person in the reference photo is NOT reproduced. Generate an entirely different, AI-created professional model: a new face, hair, skin tone, build and identity that do not resemble the original person in any way. Take from the reference photo ONLY what is worn: every garment, the footwear, and any accessories or bags, all kept identical in colour, print, construction, length and fit. Keep the same framing and crop as the reference.";
 
-/** Engine-facing hands rule: pockets only when the reference photo shows them. */
-export const HANDS_RULE =
-  "HANDS: a hand goes into a pocket only if the reference photo shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible.";
+/** Engine-facing hair rule: tidy hair, no wind-blown or stray strands. */
+export const HAIR_RULE =
+  "HAIR: neat and settled, exactly as styled in the reference photo when the model is kept; no wind-blown, flying, floating or stray strands, no hair across the face or eyes.";
 
+/** Engine-facing hands rule on its own, for the approaches without a framing lock. */
 export function handsRule(handsInPockets = false): string {
   return handsInPockets
     ? "HANDS: a hand may rest in a pocket, as in the reference photo."
     : "HANDS: no hand in a pocket; hands stay out of pockets, relaxed and visible.";
+}
+
+/** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
+export function framingRule(framing?: string, handsInPockets = false): string {
+  const hands = handsInPockets
+    ? " Hands: a hand may rest in a pocket, as in the reference photo."
+    : " Hands: no hand in a pocket; hands stay out of pockets, relaxed and visible.";
+  if (framing === "UPPER_BODY")
+    return (
+      "FRAMING LOCK: upper body only, cropped at the same line as the reference photo (around the waist or hips). Do not show or invent legs, trousers, skirts, footwear or anything below that line; nothing outside the reference crop exists in this image." +
+      hands
+    );
+  if (framing === "LOWER_BODY")
+    return (
+      "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. The hands are visible inside the frame, relaxed and natural, in a position that fits the scene and the body's movement; never cropped out or raised above the crop line." +
+      hands
+    );
+  if (framing === "FULL_BODY")
+    return (
+      "FRAMING LOCK: full body, head to footwear completely inside the frame, as in the reference photo. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers." +
+      hands
+    );
+  return (
+    "FRAMING LOCK: keep exactly the reference photo's crop. A full-body photo stays full body with footwear inside the frame; an upper-body photo stays upper body and ends at the same line, with no legs, trousers or footwear drawn; a lower-body photo stays lower body and starts at the same line, with no face or top drawn. Nothing is worn in this image that is not visible in the reference photo: no added shoes, bags, hats, jewellery or layers." +
+    hands
+  );
 }
 
 export function buildEditorialPrompt(
@@ -165,11 +195,18 @@ export function buildEditorialPrompt(
   images: PromptImages = {},
   newModel = false,
   center = true,
+  framing?: string,
   handsInPockets = false,
+  relaxed = false,
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
-  parts.push(handsRule(handsInPockets));
+  // Zaid creative direction: framing and hair follow the direction; only pockets stay bound.
+  if (relaxed) parts.push(handsRule(handsInPockets));
+  else {
+    parts.push(framingRule(framing, handsInPockets));
+    parts.push(HAIR_RULE);
+  }
   if (center) parts.push(CENTERING);
   if (edit)
     parts.push(
@@ -183,7 +220,7 @@ export function buildEditorialPrompt(
   let idx = 2;
   if (images.mood)
     roles.push(
-      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot.`,
+      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).`,
     );
   if (images.set)
     roles.push(
@@ -192,7 +229,13 @@ export function buildEditorialPrompt(
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.
   if (roles.length > 1 || newModel) parts.push(roles.join(" "));
-  const avoid = [negative, handsInPockets ? "" : "hands in pockets"].filter(Boolean).join(", ");
+  const avoid = [
+    negative,
+    relaxed ? "" : "wind-blown hair, flying hair strands, messy hair",
+    handsInPockets ? "" : "hands in pockets",
+  ]
+    .filter(Boolean)
+    .join(", ");
   parts.push(`AVOID: ${avoid}`);
   return parts.join("\n\n");
 }
