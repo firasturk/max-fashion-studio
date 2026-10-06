@@ -265,10 +265,10 @@ export default function SkillDialog({
               </>
             )}
             <p className="prompt-tip">
-              Shared rules apply to every skill automatically: the original outfit, footwear and
-              accessories stay identical; references give only setting, pose, light and camera
-              angle; nothing is copied from a reference's hats, bags or props; one reference is
-              picked at random per image; the upload's framing is kept; catalogue-safe wording.
+              Shared rules apply to every skill automatically: references give only setting, pose,
+              light and camera angle; nothing is copied from a reference's hats, bags or props; one
+              reference is picked at random per image; the model is centred; hands go in a pocket
+              only when the original photo shows that.
             </p>
           </>
         )}

@@ -58,7 +58,7 @@ describe("zaid creative direction", () => {
     expect(plan.mood).toBe("b");
     const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene, reference: "b" });
     expect(text).toContain("REFERENCE FIRST");
-    expect(text).toContain("Framing lock");
+    expect(text).toContain("VERIFIED HANDS");
   });
 });
 

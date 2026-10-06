@@ -537,8 +537,8 @@ export default function CreativePanel({
                   {currentLook && (
                     <p className="prompt-tip">
                       Same scene, pose and light every image: {currentLook.scene}
-                      {currentLook.light ? ` · ${currentLook.light}` : ""}. Only the outfit and
-                      framing follow each photo.
+                      {currentLook.light ? ` · ${currentLook.light}` : ""}. Only the outfit follows
+                      each photo.
                     </p>
                   )}
                   {currentLook && !locked && (

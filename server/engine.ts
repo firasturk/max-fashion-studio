@@ -711,8 +711,8 @@ async function ensureBrief(
 ): Promise<EditorialBrief> {
   if (task.brief) return JSON.parse(task.brief) as EditorialBrief;
   const image = await sourceBytes(env, source);
-  // Step 0, before any skill text is read: what does the upload actually show? Checked once per
-  // upload with a tiny dedicated vision call and stored, so every card and retry uses the same fact.
+  // Step 0: a tiny dedicated vision call records what the upload shows (hands in pockets, crop,
+  // garments), once per upload, so every card and retry uses the same fact.
   const check = await uploadFraming(env, source, image);
   const siblings = await all<{ card: number; brief: string | null }>(
     env.DB,
@@ -758,8 +758,6 @@ async function ensureBrief(
     aspectRatio: config.ratio,
     used,
     newModel: config.mode === "8",
-    uploadFraming: check.framing,
-    visibleGarments: check.garments,
     handsInPockets: check.handsInPockets,
   };
   // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
@@ -826,8 +824,6 @@ async function ensureBrief(
   }
   if (plan.mood) brief.mood = plan.mood;
   if (leader) brief.setOf = leader.id;
-  // The verified crop is binding: the builder's own reading never replaces it.
-  brief.framing = check.framing;
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
 }
@@ -1004,7 +1000,6 @@ async function promptFor(
       roles,
       config.mode === "8",
       centeringApplies(config, task.card),
-      brief.framing,
       source.framing?.split("|")[2] === "true",
     );
   } else {

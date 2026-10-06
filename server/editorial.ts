@@ -31,10 +31,6 @@ export type Framing = "FULL_BODY" | "UPPER_BODY" | "LOWER_BODY";
 export interface EditorialRequest {
   /** Replace the person entirely with an AI-generated model; keep only what is worn. */
   newModel?: boolean;
-  /** Crop of the upload, verified by a separate check before the prompt is written. Binding. */
-  uploadFraming?: Framing;
-  /** What the verified check saw worn in the upload, as a short list. */
-  visibleGarments?: string;
   /** Verified: the upload shows a hand in a pocket. Only then may the output. */
   handsInPockets?: boolean;
   /** A saved prompt that leads this run: its scene, pose, light and style are reused as written. */
@@ -186,11 +182,9 @@ export function builderInstruction(req: EditorialRequest): string {
     req.preference
       ? `EXTRA REQUESTS FROM THE USER for this batch (apply them to the prompt; they override the skill's direction and library but never the fixed rules): ${req.preference}`
       : "No extra requests from the user.",
-    "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented, no shoes, bags, hats, jewellery or extra layers that are not visible in image 1; (2) a reference image contributes only setting, pose and stance, lighting and camera angle; (3) never copy hats, bags, sunglasses, jewellery or props from a reference; (4) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload ends at the same line with no legs or footwear drawn, a lower-body upload starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible; (5) catalogue-safe wording only; (8) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible, and in a lower-body image the hands are visible in the frame, in a natural position that fits the scene and the body's movement (resting beside the thighs, lightly touching the garment, mid-stride), never cropped out, never raised out of frame; (7) HAIR: when the model is kept, the same hairstyle, length and colour as image 1; in every case the hair is neat and settled, no wind-blown, flying, floating or stray strands, no hair across the face, and the AVOID block lists wind-blown hair, flying hair strands and messy hair; (6) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
+    "Fixed rules for every prompt (they override the skill's own direction, template and library): (1) a reference image contributes only setting, pose and stance, lighting and camera angle; (2) never copy hats, bags, sunglasses, jewellery or props from a reference; (3) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible; (4) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
-    req.uploadFraming
-      ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets)
-      : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
+    handsDirective(req.handsInPockets),
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
     "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
@@ -344,24 +338,11 @@ export async function askVisionGoogle(
 }
 
 /** One vision call to OpenAI returning the model's JSON text. */
-/**
- * The verified crop, stated as a hard instruction. Written before the skill text is read, so a
- * skill that defaults to full body (or a name like "Full Body") cannot override it.
- */
-export function framingDirective(
-  framing: Framing,
-  garments?: string,
-  handsInPockets = false,
-): string {
-  const seen = garments ? ` Verified items worn in the upload: ${garments}.` : "";
-  const hands = handsInPockets
-    ? " HANDS: the upload shows a hand in a pocket, so a hand in a pocket is allowed."
-    : " HANDS: the upload shows no hand in a pocket, so NO hand goes into a pocket in the output; hands stay out of pockets, relaxed and visible.";
-  if (framing === "LOWER_BODY")
-    return `VERIFIED UPLOAD FRAMING: LOWER_BODY (waist down). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a LOWER-BODY image: it starts at the same crop line as the upload (waist or hips) and ends below the footwear. The head, face, hair and shoulders are NOT in the image at all. Do not describe a face, hair, expression, gaze, a top garment or anything above the crop line; the only upper garment that may be mentioned is the sliver visible at the top edge of the upload, exactly as shown. Pose and scene are written for a lower-body shot: legs, stance, footwear, ground surface and the lower part of the setting. HANDS IN FRAME: the hands are visible inside the lower-body crop, relaxed and natural, in a position that fits the setting and the movement (resting beside the thighs, brushing the garment, swinging mid-step); never cropped out of the frame and never raised above the crop line. Report framing as LOWER_BODY.${seen}${hands}`;
-  if (framing === "UPPER_BODY")
-    return `VERIFIED UPLOAD FRAMING: UPPER_BODY. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is an UPPER-BODY image: from above the head down to the same crop line as the upload (waist or hips). Legs, trousers, skirts and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for an upper-body shot. Report framing as UPPER_BODY.${seen}${hands}`;
-  return `VERIFIED UPLOAD FRAMING: FULL_BODY. The output is a full-body image, head to footwear completely inside the frame, as in the upload. Report framing as FULL_BODY.${seen}${hands}`;
+/** The verified pocket fact from the upload, binding for the builder. */
+export function handsDirective(handsInPockets = false): string {
+  return handsInPockets
+    ? "VERIFIED HANDS: the upload shows a hand in a pocket, so a hand in a pocket is allowed in the output."
+    : "VERIFIED HANDS: the upload shows no hand in a pocket, so NO hand goes into a pocket in the output; hands stay out of pockets, relaxed and visible.";
 }
 
 /** JSON schema for the framing check (Google structured output). */
