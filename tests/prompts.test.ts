@@ -4,6 +4,7 @@ import {
   buildEditorialPrompt as buildEditorial,
   LIGHT_RULE,
   DETAIL_RULE,
+  BLEND_RULE,
   NEW_MODEL_RULE,
   RECENTER_SUFFIX,
 } from "../shared/prompts";
@@ -156,10 +157,12 @@ describe("Zaid creative direction", () => {
     expect(p).toContain("FRAMING LOCK: lower body only");
     expect(p).toContain(LIGHT_RULE);
     expect(p).toContain(DETAIL_RULE);
+    expect(p).toContain(BLEND_RULE);
+    expect(p).toContain("golden-hour sun");
     expect(p).not.toContain("HAIR:");
     expect(p).toContain("no hand in a pocket");
     expect(p).toContain(
-      "AVOID: blur, dim scene, murky light, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, hands in pockets",
+      "AVOID: blur, dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges, hands in pockets",
     );
     expect(buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", true, true)).toContain(
       "may rest in a pocket",

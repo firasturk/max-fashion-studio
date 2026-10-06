@@ -157,7 +157,11 @@ export const HAIR_RULE =
 
 /** Engine-facing light rule for Zaid creative direction. */
 export const LIGHT_RULE =
-  "LIGHT: bright but balanced. Well-lit daylight scene with open shadows and no blown-out highlights; no dim, murky, heavy-shadow or harsh high-contrast lighting. The model is evenly lit and the garment colours read true.";
+  "LIGHT: real sun, golden-hour sun (low, warm, long soft shadows) or midday sun (high, clean, short shadows) as the prompt names it; never overcast, dusk, night or artificial light. Bright but balanced: open shadows and no blown-out highlights; no dim, murky, heavy-shadow or harsh high-contrast lighting. The model is evenly lit and the garment colours read true.";
+
+/** Engine-facing integration rule for Zaid creative direction: the model belongs to the scene. */
+export const BLEND_RULE =
+  "INTEGRATION: the model is physically part of the scene, never a cutout or a pasted-on figure. The same sun direction, colour temperature and contrast on the model as on the background; feet planted on the ground with a true contact shadow and a cast shadow matching the scene's other shadows; matching perspective and camera height; identical grain, sharpness and colour grade on model and background; reflected light and ambient colour from the surroundings on skin and garment; natural edges with no halo or outline.";
 
 /** Engine-facing background detail rule for Zaid creative direction. */
 export const DETAIL_RULE =
@@ -204,7 +208,7 @@ export function buildEditorialPrompt(
   if (newModel) parts.push(NEW_MODEL_RULE);
   parts.push(framingRule(framing, handsInPockets));
   // Zaid creative direction: hair follows the direction; the light is bright but balanced.
-  if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE);
+  if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE, BLEND_RULE);
   else parts.push(HAIR_RULE);
   if (center) parts.push(CENTERING);
   if (edit)
@@ -231,7 +235,7 @@ export function buildEditorialPrompt(
   const avoid = [
     negative,
     relaxed
-      ? "dim scene, murky light, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background"
+      ? "dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges"
       : "wind-blown hair, flying hair strands, messy hair",
     handsInPockets ? "" : "hands in pockets",
   ]

@@ -59,8 +59,10 @@ describe("zaid creative direction", () => {
     const text = builderInstruction({ ...req, skill: "zaid", scene: plan.scene, reference: "b" });
     expect(text).toContain("REFERENCE FIRST");
     expect(text).toContain("Framing lock");
-    expect(text).toContain("LIGHT: the background");
+    expect(text).toContain("LIGHT: real sun");
     expect(text).toContain("BACKGROUND DETAIL");
+    expect(text).toContain("INTEGRATION");
+    expect(text).toContain("golden-hour sun");
     expect(text).toContain("at least 1500 words");
     expect(text).not.toContain("600-1100 words");
     expect(s.template).toContain("at least 1,500 words");
