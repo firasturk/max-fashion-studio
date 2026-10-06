@@ -41,7 +41,14 @@ import {
   usesBuilder,
 } from "@shared/config";
 import { estimateCost, formatUsd } from "@shared/pricing";
-import { outputExt, outputName, productKey, safeArchiveName, stemKey } from "@shared/naming";
+import {
+  numberOutputs,
+  outputExt,
+  outputName,
+  productKey,
+  safeArchiveName,
+  stemKey,
+} from "@shared/naming";
 import type {
   LookInfo,
   Batch,
@@ -462,7 +469,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         blob = await convertImage(blob, format, viewConfig.outputQuality || 90);
         ext = format;
       }
-      const name = outputName(src.name, t.card, viewConfig.mode, cardsPerSource(viewConfig), ext);
+      const name = outputName(src.name, outputNumbers().get(t) ?? 1, ext);
       saveBlob(blob, name.split("/").pop() ?? name);
     } catch (e) {
       toast.error((e as Error).message);
@@ -496,11 +503,20 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }
 
+  /** Every generated image's number within its product, over the whole batch, so names are stable. */
+  function outputNumbers(): Map<Task, number> {
+    const byId = new Map(sources.map((x) => [x.id, x]));
+    return numberOutputs(
+      ready,
+      (t) => byId.get(t.source)?.name ?? "",
+      (t) => t.card,
+    );
+  }
+
   /** ZIP entries for a list of results, named and converted the way the export does it. */
   function zipEntriesFor(list: Task[]): ZipEntry[] {
     const byId = new Map(sources.map((x) => [x.id, x]));
-    const mode = viewConfig.mode;
-    const total = cardsPerSource(viewConfig);
+    const numbers = outputNumbers();
     const format = viewConfig.output || "png";
     return list.map((t) => {
       const srcExt = outputExt(t.output);
@@ -509,7 +525,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           ? { format, quality: viewConfig.outputQuality || 90 }
           : undefined;
       return {
-        name: outputName(byId.get(t.source)!.name, t.card, mode, total, convert ? format : srcExt),
+        name: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, convert ? format : srcExt),
         url: outputUrl(t),
         convert,
       };
@@ -545,8 +561,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   async function downloadZip() {
     if (!batch || exporting) return;
-    const mode = viewConfig.mode;
-    const total = cardsPerSource(viewConfig);
     const chosen = ready.filter((t) => selection.size === 0 || selection.has(t.id));
     if (!chosen.length) {
       toast.error("No generated images to download yet.");
@@ -555,6 +569,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     setExporting(true);
     try {
       const byId = new Map(sources.map((s) => [s.id, s]));
+      const numbers = outputNumbers();
       const entries = zipEntriesFor(chosen);
       // Originals sit next to their AI images, in the same product folder, under their own name.
       const originalsIncluded = exportsOriginals(viewConfig);
@@ -565,7 +580,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         engine: engine.model,
         generated: chosen.map((t) => ({
           original: byId.get(t.source)?.name,
-          file: outputName(byId.get(t.source)!.name, t.card, mode, total, outputExt(t.output)),
+          file: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, outputExt(t.output)),
           status: t.status,
           prompt: t.prompt,
           qa: t.qa ? JSON.parse(t.qa) : null,
