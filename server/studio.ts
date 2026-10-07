@@ -1194,7 +1194,7 @@ studioRoutes.post("/sources/skill", async (c) => {
     // Prompts not yet generated are rewritten with the new skill on the next pass.
     await run(
       c.env.DB,
-      "UPDATE tasks SET brief = NULL, prompt = NULL WHERE source = ? AND batch = ? AND output IS NULL AND status NOT IN ('processing','finalizing')",
+      "UPDATE tasks SET brief = NULL, prompt = '' WHERE source = ? AND batch = ? AND output IS NULL AND status NOT IN ('processing','finalizing')",
       id,
       b.id,
     );
