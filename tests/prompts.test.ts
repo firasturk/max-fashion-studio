@@ -216,6 +216,16 @@ describe("new-model skill campaign", () => {
     expect(p).toContain(NEW_MODEL_RULE);
     expect(p).not.toContain(IDENTITY_RULE);
     expect(buildEditorial("Prompt body.", "blur")).toContain(IDENTITY_RULE);
+    expect(buildEditorial("Prompt body.", "blur")).toContain("TATTOOS:");
+    expect(buildEditorial("Prompt body.", "blur")).toContain("changed hairstyle");
+    expect(p).toContain("TATTOOS:");
+    expect(p).not.toContain("changed hairstyle");
+    const bp = buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "4" }, 1);
+    expect(bp).toContain(IDENTITY_RULE);
+    expect(bp).toContain("TATTOOS:");
+    expect(buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "2" }, 1)).not.toContain(
+      IDENTITY_RULE,
+    );
     expect(p).toContain("Do not reproduce the person");
     expect(buildEditorial("Prompt body.", "blur")).not.toContain("NEW MODEL");
   });
