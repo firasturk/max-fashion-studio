@@ -39,6 +39,7 @@ import {
   FRAMING_SCHEMA,
   parseFramingCheck,
   wordCount,
+  ZAID_MAX_WORDS,
   ZAID_MIN_WORDS,
   type FramingCheck,
 } from "./editorial";
@@ -947,7 +948,7 @@ async function ensureBrief(
   ) {
     const words = wordCount(brief.prompt);
     console.log(`[short prompt] task ${task.id}: ${words} words, rebuilding`);
-    req.expand = `YOUR PREVIOUS DRAFT WAS REJECTED: it was ${words} words, below the mandatory minimum of ${ZAID_MIN_WORDS}. Write it again, same facts and the same scene, at least ${ZAID_MIN_WORDS} words: expand every section with more concrete, specific sentences (each background element and its material, where the light lands on each one, every garment detail, the pose joint by joint). Do not pad with repetition.`;
+    req.expand = `YOUR PREVIOUS DRAFT WAS REJECTED: it was ${words} words, below the mandatory minimum of ${ZAID_MIN_WORDS}. Write it again, same facts and the same scene, ${ZAID_MIN_WORDS}-${ZAID_MAX_WORDS} words: expand every section with more concrete, specific sentences (each background element and its material, where the light lands on each one, every garment detail, the pose joint by joint). Do not pad with repetition.`;
     const longer = await build();
     if (wordCount(longer.prompt) > words) brief = longer;
   }
