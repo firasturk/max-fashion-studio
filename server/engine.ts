@@ -80,6 +80,8 @@ interface TaskRow {
   source: string;
   card: number;
   status: string;
+  /** Engine override for this image after a content checker refused it on the batch's engine. */
+  model: string | null;
   output: string | null;
   error: string | null;
   output_engine_url: string | null;
@@ -295,6 +297,11 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
       continue;
     }
     if (status.state === "failed") {
+      if (
+        isContentPolicyError(status.message) &&
+        (await retryAfterRefusal(env, taskConfig(config, task), task, status.message))
+      )
+        continue;
       if (status.retryable && task.attempts < MAX_AUTO_ATTEMPTS)
         await requeue(env, task, status.message);
       else await failTask(env, task, status.message, task.output);
@@ -466,15 +473,9 @@ async function settleFailedAttempt(
     ]).total + (task.edit || task.recenter ? 0.008 : 0);
   await run(env.DB, "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?", refund, task.id);
   const message = errorMessage(e, "Generation failed.");
-  // A content checker refusal gets one retry with a short, plain prompt (see promptFor).
-  const refused = isContentPolicyError(message) && !/content check/i.test(task.error ?? "");
-  if (refused && task.attempts < MAX_AUTO_ATTEMPTS)
-    await requeue(
-      env,
-      task,
-      `the content check refused the full prompt; trying a short plain one. ${message}`,
-    );
-  else if (isTransientEngineError(e) && task.attempts < MAX_AUTO_ATTEMPTS)
+  if (isContentPolicyError(message) && (await retryAfterRefusal(env, config, task, message)))
+    return;
+  if (isTransientEngineError(e) && task.attempts < MAX_AUTO_ATTEMPTS)
     await requeue(env, task, message);
   else await failTask(env, task, message, task.output);
   if (isFatalEngineError(e)) await pauseBatch(env, batch.id, message);
@@ -613,6 +614,12 @@ async function submitNext(
   const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
+    // An image moved to another engine after a refusal runs on that engine, with that engine's rules.
+    const cfg = taskConfig(config, task);
+    const tFal = isFalModel(cfg.model);
+    const tGoogle = isGoogleModel(cfg.model);
+    const tOpenai = isOpenAIModel(cfg.model);
+    if (deferSync && (tOpenai || (tGoogle && !cfg.economy))) continue;
     const token = uuid();
     const claimed = await run(
       env.DB,
@@ -624,18 +631,23 @@ async function submitNext(
     );
     if (!claimed) continue;
     const attemptCost =
-      estimateCost({ ...config, model: config.model || (await resolveEngineModel(env)) }, 1, [
-        task.card,
-      ]).total + (task.edit || task.recenter ? 0.008 : 0);
+      estimateCost({ ...cfg, model: cfg.model || (await resolveEngineModel(env)) }, 1, [task.card])
+        .total + (task.edit || task.recenter ? 0.008 : 0);
     await run(env.DB, "UPDATE tasks SET cost = cost + ? WHERE id = ?", attemptCost, task.id);
     try {
-      const requestId = client
-        ? await submitTask(env, client, batch, config, task)
-        : fal
-          ? await submitFalTask(env, batch, config, task)
-          : google && config.economy
-            ? await submitGoogleBackgroundTask(env, batch, config, task)
-            : await submitOpenAITask(env, batch, config, task, token, background);
+      const requestId = tFal
+        ? await submitFalTask(env, batch, cfg, task)
+        : tGoogle && cfg.economy
+          ? await submitGoogleBackgroundTask(env, batch, cfg, task)
+          : tOpenai || tGoogle
+            ? await submitOpenAITask(env, batch, cfg, task, token, background)
+            : await submitTask(
+                env,
+                client ?? (await makeClient(env, undefined, cfg.model)),
+                batch,
+                cfg,
+                task,
+              );
       await run(
         env.DB,
         "UPDATE tasks SET request_id = ?, updated = ? WHERE id = ? AND lease = ?",
@@ -648,13 +660,67 @@ async function submitNext(
       await settleFailedAttempt(
         env,
         batch,
-        config,
+        cfg,
         { ...task, status: "processing", attempts: task.attempts + 1 },
         e,
       );
       if (isFatalEngineError(e)) return;
     }
   }
+}
+
+/** The batch config with the image's own engine when a refusal moved it to another one. */
+function taskConfig(config: Config, task: TaskRow): Config {
+  return task.model ? { ...config, model: task.model } : config;
+}
+
+/**
+ * Another connected engine for a photo a content checker refused: Nano Banana Pro through Google,
+ * else through Higgsfield, else OpenAI. Null when nothing else is connected.
+ */
+async function contentFallbackModel(env: Env, current: string | undefined): Promise<string | null> {
+  const candidates: string[] = [];
+  if ((await resolveGoogleKey(env)).key) candidates.push("gemini-3-pro-image");
+  if (await engineConfigured(env)) candidates.push("nano-banana-pro");
+  if ((await resolveOpenAIKey(env)).key) candidates.push("gpt-image-1");
+  return candidates.find((m) => m !== current) ?? null;
+}
+
+/**
+ * A content checker refused the image: move it to another engine once, else send it once more
+ * with the short plain prompt, else fail it. True when a retry was queued.
+ */
+async function retryAfterRefusal(
+  env: Env,
+  config: Config,
+  task: TaskRow,
+  message: string,
+): Promise<boolean> {
+  if (task.attempts > MAX_AUTO_ATTEMPTS) return false;
+  if (!task.model) {
+    const fallback = await contentFallbackModel(env, config.model);
+    if (fallback) {
+      await run(env.DB, "UPDATE tasks SET model = ? WHERE id = ?", fallback, task.id);
+      console.log(
+        `[refused] task ${task.id}: ${config.model} refused the photo, moving to ${fallback}`,
+      );
+      await requeue(
+        env,
+        task,
+        `the content checker refused this photo on ${config.model ?? "the batch engine"}; trying ${fallback}. ${message}`,
+      );
+      return true;
+    }
+  }
+  if (!/content check/i.test(task.error ?? "")) {
+    await requeue(
+      env,
+      task,
+      `the content check refused the full prompt; trying a short plain one. ${message}`,
+    );
+    return true;
+  }
+  return false;
 }
 
 /** Upload the inference reference once per source and cache the engine URL. */
@@ -1367,6 +1433,11 @@ async function finalizeGoogleFlex(
     return;
   }
   if (status.state === "failed") {
+    if (
+      isContentPolicyError(status.message) &&
+      (await retryAfterRefusal(env, taskConfig(config, task), task, status.message))
+    )
+      return;
     if (status.retryable && task.attempts < MAX_AUTO_ATTEMPTS)
       await requeue(env, task, status.message);
     else await failTask(env, task, status.message, task.output);
@@ -1447,6 +1518,11 @@ async function finalizeFal(
     return;
   }
   if (status.state === "failed") {
+    if (
+      isContentPolicyError(status.message) &&
+      (await retryAfterRefusal(env, taskConfig(config, task), task, status.message))
+    )
+      return;
     if (status.retryable && task.attempts < MAX_AUTO_ATTEMPTS)
       await requeue(env, task, status.message);
     else await failTask(env, task, status.message, task.output);
