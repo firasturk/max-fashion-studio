@@ -19,3 +19,21 @@ describe("rate limits", () => {
     expect(isRateLimit(s)).toBe(false);
   });
 });
+
+describe("vendor wait times", () => {
+  it("reads Google and OpenAI retry hints and spots used-up daily quotas", async () => {
+    const { retryAfterMs, isDailyQuota } = await import("../server/errors");
+    expect(retryAfterMs(new Error("Rate limit reached. Please try again in 1.2s."))).toBe(2200);
+    expect(retryAfterMs(new Error("Google rate limit or quota: Please retry in 32.5s."))).toBe(
+      33500,
+    );
+    expect(retryAfterMs(new Error('{"retryDelay":"20s"}'))).toBe(21000);
+    expect(retryAfterMs(new Error("Too many requests"))).toBe(12000);
+    expect(
+      isDailyQuota(
+        new Error("Quota exceeded for metric: generate_content_free_tier_requests, limit: 0"),
+      ),
+    ).toBe(true);
+    expect(isDailyQuota(new Error("Rate limit reached on tokens per min"))).toBe(false);
+  });
+});

@@ -17,6 +17,7 @@ import {
   errorMessage,
   isFatalEngineError,
   isTransientEngineError,
+  isDailyQuota,
   isRateLimit,
   retryAfterMs,
 } from "./errors";
@@ -929,12 +930,29 @@ async function ensureBrief(
     );
   const preferOpenAI = isOpenAIModel(config.model) ? !!openai : !google;
   const build = async (): Promise<EditorialBrief> => {
-    if (preferOpenAI) return buildBriefWithOpenAI(openai!, req);
+    if (preferOpenAI) {
+      try {
+        return await buildBriefWithOpenAI(openai!, req);
+      } catch (e) {
+        // OpenAI throttled: Google writes this prompt instead of the batch waiting.
+        if (google && isRateLimit(e)) {
+          console.log(
+            `[builder] OpenAI rate limited, using Google: ${errorMessage(e).slice(0, 160)}`,
+          );
+          return buildBriefWithGoogle(google, req);
+        }
+        throw e;
+      }
+    }
     try {
       return await buildBriefWithGoogle(google!, req);
     } catch (e) {
-      // Gemini refuses some Cloudflare regions, and a drained prepaid balance; OpenAI can take over.
-      if (openai && googleUnavailable(e)) return buildBriefWithOpenAI(openai, req);
+      // Gemini refuses some Cloudflare regions, a drained prepaid balance, or throttles the key;
+      // OpenAI takes over for this prompt.
+      if (openai && (googleUnavailable(e) || isRateLimit(e))) {
+        console.log(`[builder] Google unavailable, using OpenAI: ${errorMessage(e).slice(0, 160)}`);
+        return buildBriefWithOpenAI(openai, req);
+      }
       throw e;
     }
   };
@@ -1002,12 +1020,25 @@ async function prepareBriefs(
         );
       } catch (e) {
         if (isRateLimit(e)) {
+          const detail = errorMessage(e);
+          console.log(`[builder] rate limited: ${detail.slice(0, 300)}`);
+          // A used-up daily or free-tier quota will not clear by waiting: stop and say so.
+          if (isDailyQuota(e)) {
+            const vendor = /google/i.test(detail) ? "Google" : "OpenAI";
+            await pauseBatch(
+              env,
+              batch.id,
+              `${vendor}'s prompt-builder quota for today is used up (${detail.slice(0, 160)}). Raise the quota or enable billing for that key, or connect the other provider in Connection, then resume.`,
+            );
+            return;
+          }
           // Stay in the queue and wait as long as the vendor asked; the next tick resumes.
-          builderPausedUntil = Math.max(builderPausedUntil, now() + retryAfterMs(e));
+          const wait = retryAfterMs(e);
+          builderPausedUntil = Math.max(builderPausedUntil, now() + wait);
           await run(
             env.DB,
             "UPDATE tasks SET error = ?, updated = ? WHERE id = ? AND status = 'queued'",
-            "Prompt builder is rate limited by the vendor; retrying automatically.",
+            `Prompt builder is rate limited by ${/google/i.test(detail) ? "Google" : "OpenAI"}; retrying in ${Math.round(wait / 1000)} s.`,
             now(),
             task.id,
           );

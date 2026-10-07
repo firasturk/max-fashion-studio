@@ -45,8 +45,19 @@ export function isRateLimit(e: unknown): boolean {
 
 /** How long a vendor asked us to wait, from "try again in 1.2s" / "in 850ms" / Retry-After seconds; default 12 s. */
 export function retryAfterMs(e: unknown): number {
-  const m = /try again in\s*(\d+(?:\.\d+)?)\s*(ms|s)/i.exec(errorMessage(e));
+  const text = errorMessage(e);
+  // OpenAI: "try again in 1.2s"; Google: "Please retry in 32.5s" or "retryDelay": "32s".
+  const m =
+    /(?:try again|retry) in\s*(\d+(?:\.\d+)?)\s*(ms|s)/i.exec(text) ??
+    /retryDelay"?\s*:\s*"?(\d+(?:\.\d+)?)\s*(s)/i.exec(text);
   if (!m) return 12_000;
   const n = Number(m[1]) * (m[2] === "ms" ? 1 : 1000);
   return Math.min(60_000, Math.max(2_000, Math.ceil(n) + 1_000));
+}
+
+/** A rate limit that will not clear within minutes: a daily or free-tier quota is used up. */
+export function isDailyQuota(e: unknown): boolean {
+  return /per[_ ]?day|daily|free[_ ]tier|free quota|quota exceeded|RESOURCE_EXHAUSTED.*(day|free)|limit: 0\b/i.test(
+    errorMessage(e),
+  );
 }
