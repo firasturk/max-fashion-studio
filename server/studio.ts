@@ -75,7 +75,7 @@ async function batchPayload(env: Env, b: BatchRow) {
   const [sources, tasks] = await Promise.all([
     all<Source>(
       env.DB,
-      "SELECT id, name, mime, size, role, created, skill, look FROM sources WHERE batch = ? ORDER BY name",
+      "SELECT id, name, mime, size, role, created, skill FROM sources WHERE batch = ? ORDER BY name",
       b.id,
     ),
     all<Task>(
@@ -1178,27 +1178,19 @@ studioRoutes.post("/revise", async (c) => {
 
 /** Zaid creative direction: run some photos of a saved batch with another skill. */
 studioRoutes.post("/sources/skill", async (c) => {
-  const { batch, ids, skill, look } = await body(
+  const { batch, ids, skill } = await body(
     c,
     z.object({
       batch: z.string(),
       ids: z.array(z.string()).min(1).max(500),
       skill: z.string().max(60).nullable(),
-      look: z.string().max(80).nullable().optional(),
     }),
   );
   const b = await ownedBatch(c.env, c.get("user"), batch);
   if (b.state === "running")
     throw new StudioError("Pause the batch before changing which skill a photo uses.", 409);
   for (const id of ids) {
-    await run(
-      c.env.DB,
-      "UPDATE sources SET skill = ?, look = ? WHERE id = ? AND batch = ?",
-      skill,
-      look ?? null,
-      id,
-      b.id,
-    );
+    await run(c.env.DB, "UPDATE sources SET skill = ? WHERE id = ? AND batch = ?", skill, id, b.id);
     // Prompts not yet generated are rewritten with the new skill on the next pass.
     await run(
       c.env.DB,

@@ -52,8 +52,6 @@ export interface Source {
   created: number;
   /** Skill this photo runs with inside a Zaid creative direction batch; null = the batch's skill. */
   skill?: string | null;
-  /** Saved look this photo follows (with its own skill); null = that skill's reference photos. */
-  look?: string | null;
 }
 
 export interface QA {
