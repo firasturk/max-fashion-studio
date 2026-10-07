@@ -75,7 +75,7 @@ async function batchPayload(env: Env, b: BatchRow) {
   const [sources, tasks] = await Promise.all([
     all<Source>(
       env.DB,
-      "SELECT id, name, mime, size, role, created FROM sources WHERE batch = ? ORDER BY name",
+      "SELECT id, name, mime, size, role, created, skill FROM sources WHERE batch = ? ORDER BY name",
       b.id,
     ),
     all<Task>(
@@ -271,9 +271,14 @@ studioRoutes.post("/looks", async (c) => {
     c,
     z.object({ task: z.string().max(80), name: z.string().trim().min(1).max(60) }),
   );
-  const t = await first<{ brief: string | null; batch: string; output: string | null }>(
+  const t = await first<{
+    brief: string | null;
+    batch: string;
+    source: string;
+    output: string | null;
+  }>(
     c.env.DB,
-    "SELECT t.brief, t.batch, t.output FROM tasks t JOIN batches b ON b.id = t.batch WHERE t.id = ? AND b.owner = ?",
+    "SELECT t.brief, t.batch, t.source, t.output FROM tasks t JOIN batches b ON b.id = t.batch WHERE t.id = ? AND b.owner = ?",
     task,
     c.get("user").id,
   );
@@ -285,7 +290,15 @@ studioRoutes.post("/looks", async (c) => {
   );
   const cfg = b ? (JSON.parse(b.config) as Config) : null;
   const brief = JSON.parse(t.brief) as EditorialBrief;
-  const skill = cfg?.mode === "7" ? cfg?.skill || "zaid" : cfg?.skill || "editorial";
+  const src = await first<{ skill: string | null }>(
+    c.env.DB,
+    "SELECT skill FROM sources WHERE id = ?",
+    t.source,
+  );
+  const skill =
+    cfg?.mode === "7"
+      ? src?.skill || cfg?.skill || "zaid"
+      : src?.skill || cfg?.skill || "editorial";
   const id = uuid();
   // Keep a copy of the result as the look's reminder image, so deleting the batch later does not lose it.
   let image: string | null = null;
@@ -1161,6 +1174,32 @@ studioRoutes.post("/revise", async (c) => {
     deferSync: true,
   });
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
+});
+
+/** Zaid creative direction: run some photos of a saved batch with another skill. */
+studioRoutes.post("/sources/skill", async (c) => {
+  const { batch, ids, skill } = await body(
+    c,
+    z.object({
+      batch: z.string(),
+      ids: z.array(z.string()).min(1).max(500),
+      skill: z.string().max(60).nullable(),
+    }),
+  );
+  const b = await ownedBatch(c.env, c.get("user"), batch);
+  if (b.state === "running")
+    throw new StudioError("Pause the batch before changing which skill a photo uses.", 409);
+  for (const id of ids) {
+    await run(c.env.DB, "UPDATE sources SET skill = ? WHERE id = ? AND batch = ?", skill, id, b.id);
+    // Prompts not yet generated are rewritten with the new skill on the next pass.
+    await run(
+      c.env.DB,
+      "UPDATE tasks SET brief = NULL, prompt = NULL WHERE source = ? AND batch = ? AND output IS NULL AND status NOT IN ('processing','finalizing')",
+      id,
+      b.id,
+    );
+  }
+  return c.json(await batchPayload(c.env, b));
 });
 
 studioRoutes.post("/approve", async (c) => {

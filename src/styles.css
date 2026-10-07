@@ -3609,3 +3609,16 @@ textarea:focus {
   background: var(--surface-2);
   vertical-align: middle;
 }
+
+/* Saved Zaid batch: send selected photos to another skill. */
+.selection-bar.skill-assign {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.selection-bar.skill-assign .selection-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.selection-bar.skill-assign .picker {
+  min-width: 220px;
+}

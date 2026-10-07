@@ -104,6 +104,8 @@ interface SourceRow {
   engine_url: string | null;
   /** Verified crop, stored after the first framing check: "LOWER_BODY|true|jeans, sneakers". */
   framing: string | null;
+  /** Per-photo skill inside a Zaid creative direction batch; null = the batch's skill. */
+  skill: string | null;
 }
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
@@ -840,8 +842,11 @@ async function ensureBrief(
   );
   const recentBriefs = recentRows.map((r) => JSON.parse(r.brief) as EditorialBrief);
   const recent = recentBriefs.map((b) => b.scene).filter(Boolean);
-  // Zaid creative direction: Zaid's own mood board unless the team picked another skill.
-  const skillId = config.mode === "7" ? config.skill || "zaid" : config.skill || "editorial";
+  // Zaid creative direction: the photo's own skill, else the batch's, else Zaid's own mood board.
+  const skillId =
+    config.mode === "7"
+      ? source.skill || config.skill || "zaid"
+      : source.skill || config.skill || "editorial";
   const library = await all<{ id: string }>(
     env.DB,
     "SELECT id FROM refs WHERE skill = ? ORDER BY created",

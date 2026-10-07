@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, ChevronDown, FolderOpen, Upload, X } from "lucide-react";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
-import type { Source } from "@shared/types";
+import type { SkillInfo, Source } from "@shared/types";
+import Picker from "./Picker";
 import { cardsPerSource, type Config } from "@shared/config";
 
 export interface Pending {
@@ -26,6 +27,9 @@ export default function SourcesTab({
   onRole,
   onRoles,
   onBatchName,
+  skills = [],
+  canAssignSkill = false,
+  onAssignSkill,
 }: {
   batchOpen: boolean;
   config: Config;
@@ -38,6 +42,10 @@ export default function SourcesTab({
   onRemove: (url: string) => void;
   onRole: (url: string, role: "lead" | "supporting") => void;
   onRoles: (urls: string[], role: "lead" | "supporting") => void;
+  /** Skills offered per photo in a saved Zaid creative direction batch. */
+  skills?: SkillInfo[];
+  canAssignSkill?: boolean;
+  onAssignSkill?: (ids: string[], skill: string | null) => Promise<void>;
   onBatchName: (name: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -69,6 +77,28 @@ export default function SourcesTab({
   const visiblePending = pending.slice(0, limit);
   const pendingGroups = groupBy(visiblePending, (p) => p.name);
   const sourceGroups = groupBy(sources.slice(0, limit), (s) => s.name);
+  // Saved batch, Zaid creative direction: pick photos and send them to another skill.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [assignTo, setAssignTo] = useState("zaid");
+  const [assigning, setAssigning] = useState(false);
+  const skillChoices = ["zaid", ...skills.map((s) => s.id)];
+  const skillTitle = (id: string | null | undefined) =>
+    !id || id === "zaid" ? "Zaid's mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+  async function assignPicked() {
+    if (!onAssignSkill || !picked.size) return;
+    setAssigning(true);
+    try {
+      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo);
+      toast.success(
+        `${picked.size} photo${picked.size === 1 ? "" : "s"} now use ${skillTitle(assignTo)}.`,
+      );
+      setPicked(new Set());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAssigning(false);
+    }
+  }
   const visibleSources = sources.slice(0, limit);
   const hiddenCount = batchOpen
     ? sources.length - visibleSources.length
@@ -228,6 +258,45 @@ export default function SourcesTab({
           </div>
         </div>
       )}
+      {batchOpen && canAssignSkill && (
+        <div className="selection-bar skill-assign">
+          <span>
+            <strong>{picked.size}</strong> of {sources.length} photos selected
+          </span>
+          <div className="selection-actions">
+            <button
+              className="text-button"
+              disabled={assigning || picked.size === sources.length}
+              onClick={() => setPicked(new Set(sources.map((s) => s.id)))}
+            >
+              Select all
+            </button>
+            <button
+              className="text-button"
+              disabled={assigning || picked.size === 0}
+              onClick={() => setPicked(new Set())}
+            >
+              Clear
+            </button>
+            <Picker
+              value={assignTo}
+              label="Skill for the selected photos"
+              disabled={assigning}
+              items={skillChoices}
+              render={skillTitle}
+              onChange={setAssignTo}
+            />
+            <button
+              type="button"
+              className="primary"
+              disabled={assigning || picked.size === 0}
+              onClick={() => void assignPicked()}
+            >
+              Use this skill
+            </button>
+          </div>
+        </div>
+      )}
       {batchOpen
         ? sourceGroups.map(([dir, list]) => (
             <section className="folder-group" key={dir}>
@@ -254,10 +323,32 @@ export default function SourcesTab({
                       <div className="photo-frame">
                         <img src={sourceUrl(s.id)} alt={s.name} loading="lazy" />
                         <span className="image-label">ORIGINAL</span>
+                        {canAssignSkill && (
+                          <label className="select-box" title="Select this photo">
+                            <input
+                              type="checkbox"
+                              checked={picked.has(s.id)}
+                              onChange={(e) =>
+                                setPicked((p) => {
+                                  const n = new Set(p);
+                                  if (e.target.checked) n.add(s.id);
+                                  else n.delete(s.id);
+                                  return n;
+                                })
+                              }
+                            />
+                            <span>
+                              <Check size={14} />
+                            </span>
+                          </label>
+                        )}
                       </div>
                       <div className="image-info">
                         <strong title={s.name}>{s.name.split("/").pop()}</strong>
-                        <span>{s.role === "supporting" ? "Kept original only" : "Generated"}</span>
+                        <span>
+                          {s.role === "supporting" ? "Kept original only" : "Generated"}
+                          {canAssignSkill && ` · ${skillTitle(s.skill)}`}
+                        </span>
                       </div>
                     </article>
                   ))}

@@ -50,6 +50,8 @@ export interface Source {
   size: number;
   role: "lead" | "supporting";
   created: number;
+  /** Skill this photo runs with inside a Zaid creative direction batch; null = the batch's skill. */
+  skill?: string | null;
 }
 
 export interface QA {

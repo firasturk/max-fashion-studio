@@ -916,6 +916,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                         setPending((a) => a.map((x) => (set.has(x.url) ? { ...x, role } : x)));
                       }}
                       onBatchName={setBatchName}
+                      skills={skills}
+                      canAssignSkill={
+                        !!batch && viewConfig.mode === "7" && batch.state !== "running"
+                      }
+                      onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
                     />
                   </TabsContent>
                   <TabsContent value="results">
