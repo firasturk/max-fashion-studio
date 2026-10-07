@@ -118,6 +118,9 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   if (c.mode !== "6" && !(c.mode === "1" && card === FABRIC_CARD)) {
     parts.push(framingRule());
     parts.push(HAIR_RULE);
+    // Approaches 2 and 3 change the model on purpose; the others keep the person exactly.
+    if (c.mode !== "2" && c.mode !== "3") parts.push(IDENTITY_RULE);
+    parts.push(TATTOO_RULE);
   }
   if (c.mode === "1" && card === FABRIC_CARD)
     parts.push(
@@ -157,7 +160,11 @@ export const HAIR_RULE =
 
 /** Engine-facing identity rule: the person in the reference photo is the model in the output. */
 export const IDENTITY_RULE =
-  "IDENTITY: the model is the same person as in the reference photo (image 1): the same face, facial features, skin tone, age, body and hair; no identity change, no beautifying, no different person. When the face is not visible in the reference photo, it is not visible in the output either.";
+  "IDENTITY (highest priority): the model is the same person as in the reference photo (image 1), reproduced exactly: identical face and facial structure (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones), identical skin tone, age and body; no identity change, no beautifying, no averaging, no different person. HAIRSTYLE: the same hairstyle as the reference photo, same length, colour, parting, texture and styling; do not restyle, cut, lengthen or recolour the hair. When the face is not visible in the reference photo, it is not visible in the output either.";
+
+/** Engine-facing rule for every approach: tattoos on the model never appear in the output. */
+export const TATTOO_RULE =
+  "TATTOOS: if the person in the reference photo has any tattoo, it is removed in the output; the skin there is clean and natural, with no tattoo, ink, marking or trace of it anywhere on the body.";
 
 /** Engine-facing light rule for Zaid creative direction. */
 export const LIGHT_RULE =
@@ -211,6 +218,7 @@ export function buildEditorialPrompt(
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
   else parts.push(IDENTITY_RULE);
+  parts.push(TATTOO_RULE);
   parts.push(framingRule(framing, handsInPockets));
   // Zaid creative direction: hair follows the direction; the light is bright but balanced.
   if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE, BLEND_RULE);
@@ -247,6 +255,10 @@ export function buildEditorialPrompt(
       ? "dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges"
       : "wind-blown hair, flying hair strands, messy hair",
     handsInPockets ? "" : "hands in pockets",
+    "tattoos, tattoo, body ink",
+    newModel
+      ? ""
+      : "different face, altered facial features, changed hairstyle, different hair length or colour",
   ]
     .filter(Boolean)
     .join(", ");
