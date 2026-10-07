@@ -3620,5 +3620,12 @@ textarea:focus {
   flex-wrap: wrap;
 }
 .selection-bar.skill-assign .picker {
-  min-width: 220px;
+  width: 240px;
+  height: 34px !important;
+  font-size: 13px !important;
+}
+.selection-bar.skill-assign .primary {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
 }
