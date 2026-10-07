@@ -3631,5 +3631,6 @@ textarea:focus {
 }
 .result-card .select-box {
   top: 14px;
-  left: 10px;
+  left: auto;
+  right: 10px;
 }
