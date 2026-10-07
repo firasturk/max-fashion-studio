@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, ChevronDown, FolderOpen, Upload, X } from "lucide-react";
 import { filesFromDrop, filesFromInput, type PickedFile } from "@/lib/files";
-import type { SkillInfo, Source } from "@shared/types";
+import type { LookInfo, SkillInfo, Source } from "@shared/types";
 import Picker from "./Picker";
 import { cardsPerSource, type Config } from "@shared/config";
 
@@ -28,6 +28,7 @@ export default function SourcesTab({
   onRoles,
   onBatchName,
   skills = [],
+  looks = [],
   canAssignSkill = false,
   onAssignSkill,
 }: {
@@ -44,8 +45,9 @@ export default function SourcesTab({
   onRoles: (urls: string[], role: "lead" | "supporting") => void;
   /** Skills offered per photo in a saved Zaid creative direction batch. */
   skills?: SkillInfo[];
+  looks?: LookInfo[];
   canAssignSkill?: boolean;
-  onAssignSkill?: (ids: string[], skill: string | null) => Promise<void>;
+  onAssignSkill?: (ids: string[], skill: string | null, look: string | null) => Promise<void>;
   onBatchName: (name: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -80,6 +82,10 @@ export default function SourcesTab({
   // Saved batch, Zaid creative direction: pick photos and send them to another skill.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [assignTo, setAssignTo] = useState("zaid");
+  const [assignLook, setAssignLook] = useState("");
+  const lookChoices = ["", ...looks.filter((l) => l.skill === assignTo).map((l) => l.id)];
+  const lookTitle = (id: string | null | undefined) =>
+    !id ? "Reference photos" : (looks.find((l) => l.id === id)?.name ?? "Saved look");
   const [assigning, setAssigning] = useState(false);
   const skillChoices = ["zaid", ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
@@ -88,7 +94,7 @@ export default function SourcesTab({
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);
     try {
-      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo);
+      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo, assignLook || null);
       toast.success(
         `${picked.size} photo${picked.size === 1 ? "" : "s"} now use ${skillTitle(assignTo)}.`,
       );
@@ -284,7 +290,18 @@ export default function SourcesTab({
               disabled={assigning}
               items={skillChoices}
               render={skillTitle}
-              onChange={setAssignTo}
+              onChange={(v) => {
+                setAssignTo(v);
+                setAssignLook("");
+              }}
+            />
+            <Picker
+              value={assignLook}
+              label="Direction for the selected photos"
+              disabled={assigning || lookChoices.length === 1}
+              items={lookChoices}
+              render={lookTitle}
+              onChange={setAssignLook}
             />
             <button
               type="button"
@@ -347,7 +364,8 @@ export default function SourcesTab({
                         <strong title={s.name}>{s.name.split("/").pop()}</strong>
                         <span>
                           {s.role === "supporting" ? "Kept original only" : "Generated"}
-                          {canAssignSkill && ` · ${skillTitle(s.skill)}`}
+                          {canAssignSkill &&
+                            ` · ${skillTitle(s.skill)}${s.skill && s.look ? ` · ${lookTitle(s.look)}` : ""}`}
                         </span>
                       </div>
                     </article>

@@ -106,6 +106,8 @@ interface SourceRow {
   framing: string | null;
   /** Per-photo skill inside a Zaid creative direction batch; null = the batch's skill. */
   skill: string | null;
+  /** Per-photo saved look, set together with the skill; null = that skill's reference photos. */
+  look: string | null;
 }
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
@@ -873,7 +875,9 @@ async function ensureBrief(
     handsInPockets: check.handsInPockets,
   };
   // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
-  const look = config.look
+  // A photo given its own skill follows its own look choice; the others follow the batch's.
+  const lookId = source.skill ? source.look : config.look;
+  const look = lookId
     ? await first<{
         name: string;
         prompt: string;
@@ -884,7 +888,7 @@ async function ensureBrief(
       }>(
         env.DB,
         "SELECT name, prompt, negative, scene, pose, light FROM looks WHERE id = ?",
-        config.look,
+        lookId,
       )
     : null;
   if (look) req.look = look;

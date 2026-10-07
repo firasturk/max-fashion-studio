@@ -14,7 +14,7 @@ import { productKey } from "@shared/naming";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { STATUS_LABEL } from "./constants";
-import type { SkillInfo, Source, Task } from "@shared/types";
+import type { LookInfo, SkillInfo, Source, Task } from "@shared/types";
 import Picker from "./Picker";
 import { toast } from "sonner";
 
@@ -45,6 +45,7 @@ export default function ResultsTab({
   onDownloadTask,
   onDownloadSet,
   skills = [],
+  looks = [],
   canAssignSkill = false,
   onAssignSkill,
 }: {
@@ -64,11 +65,16 @@ export default function ResultsTab({
   onDownloadSet?: (t: Task) => void;
   /** Zaid creative direction, before generation: send chosen photos to another skill. */
   skills?: SkillInfo[];
+  looks?: LookInfo[];
   canAssignSkill?: boolean;
-  onAssignSkill?: (sourceIds: string[], skill: string | null) => Promise<void>;
+  onAssignSkill?: (sourceIds: string[], skill: string | null, look: string | null) => Promise<void>;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [assignTo, setAssignTo] = useState("zaid");
+  const [assignLook, setAssignLook] = useState("");
+  const lookChoices = ["", ...looks.filter((l) => l.skill === assignTo).map((l) => l.id)];
+  const lookTitle = (id: string | null | undefined) =>
+    !id ? "Reference photos" : (looks.find((l) => l.id === id)?.name ?? "Saved look");
   const [assigning, setAssigning] = useState(false);
   const skillChoices = ["zaid", ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
@@ -77,7 +83,7 @@ export default function ResultsTab({
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);
     try {
-      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo);
+      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo, assignLook || null);
       toast.success(
         `${picked.size} photo${picked.size === 1 ? "" : "s"} now use ${skillTitle(assignTo)}.`,
       );
@@ -201,7 +207,18 @@ export default function ResultsTab({
               disabled={assigning}
               items={skillChoices}
               render={skillTitle}
-              onChange={setAssignTo}
+              onChange={(v) => {
+                setAssignTo(v);
+                setAssignLook("");
+              }}
+            />
+            <Picker
+              value={assignLook}
+              label="Direction for the selected photos"
+              disabled={assigning || lookChoices.length === 1}
+              items={lookChoices}
+              render={lookTitle}
+              onChange={setAssignLook}
             />
             <button
               type="button"
@@ -370,7 +387,9 @@ export default function ResultsTab({
                       : (STATUS_LABEL[t.status] ?? t.status)}
                   </i>
                   {" · "}
-                  {mode === "7" ? skillTitle(s?.skill) : cardLabel(mode, t.card)}
+                  {mode === "7"
+                    ? `${skillTitle(s?.skill)}${s?.skill && s.look ? ` · ${lookTitle(s.look)}` : ""}`
+                    : cardLabel(mode, t.card)}
                 </span>
                 {t.error && (
                   <span className={/…$/.test(t.error) ? "image-note" : "image-error"}>

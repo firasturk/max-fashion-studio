@@ -917,10 +917,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       }}
                       onBatchName={setBatchName}
                       skills={skills}
+                      looks={looks}
                       canAssignSkill={
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
-                      onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
+                      onAssignSkill={(ids, skill, look) =>
+                        action("sources/skill", { ids, skill, look })
+                      }
                     />
                   </TabsContent>
                   <TabsContent value="results">
@@ -946,10 +949,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onDownloadTask={(t) => void downloadOne(t)}
                       onDownloadSet={(t) => void downloadSet(t)}
                       skills={skills}
+                      looks={looks}
                       canAssignSkill={
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
-                      onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
+                      onAssignSkill={(ids, skill, look) =>
+                        action("sources/skill", { ids, skill, look })
+                      }
                     />
                   </TabsContent>
                 </Tabs>
