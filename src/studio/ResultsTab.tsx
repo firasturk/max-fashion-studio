@@ -14,7 +14,9 @@ import { productKey } from "@shared/naming";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { STATUS_LABEL } from "./constants";
-import type { Source, Task } from "@shared/types";
+import type { SkillInfo, Source, Task } from "@shared/types";
+import Picker from "./Picker";
+import { toast } from "sonner";
 
 function cardLabel(mode: string, card: number): string {
   if (mode === "1")
@@ -42,6 +44,9 @@ export default function ResultsTab({
   onRetryTask,
   onDownloadTask,
   onDownloadSet,
+  skills = [],
+  canAssignSkill = false,
+  onAssignSkill,
 }: {
   tasks: Task[];
   sources: Source[];
@@ -57,7 +62,32 @@ export default function ResultsTab({
   onRetryTask: (t: Task) => void;
   onDownloadTask?: (t: Task) => void;
   onDownloadSet?: (t: Task) => void;
+  /** Zaid creative direction, before generation: send chosen photos to another skill. */
+  skills?: SkillInfo[];
+  canAssignSkill?: boolean;
+  onAssignSkill?: (sourceIds: string[], skill: string | null) => Promise<void>;
 }) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [assignTo, setAssignTo] = useState("zaid");
+  const [assigning, setAssigning] = useState(false);
+  const skillChoices = ["zaid", ...skills.map((s) => s.id)];
+  const skillTitle = (id: string | null | undefined) =>
+    !id || id === "zaid" ? "Zaid's mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+  async function assignPicked() {
+    if (!onAssignSkill || !picked.size) return;
+    setAssigning(true);
+    try {
+      await onAssignSkill([...picked], assignTo === "zaid" ? null : assignTo);
+      toast.success(
+        `${picked.size} photo${picked.size === 1 ? "" : "s"} now use ${skillTitle(assignTo)}.`,
+      );
+      setPicked(new Set());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAssigning(false);
+    }
+  }
   const PAGE = 60;
   const [limit, setLimit] = useState(PAGE);
   const [filter, setFilter] = useState<
@@ -144,6 +174,46 @@ export default function ResultsTab({
           </button>
         )}
       </div>
+      {canAssignSkill && (
+        <div className="selection-bar skill-assign">
+          <span>
+            <strong>{picked.size}</strong> of {sources.length} photos selected · choose which skill
+            each photo uses before you generate
+          </span>
+          <div className="selection-actions">
+            <button
+              className="text-button"
+              disabled={assigning || picked.size === sources.length}
+              onClick={() => setPicked(new Set(sources.map((s) => s.id)))}
+            >
+              Select all
+            </button>
+            <button
+              className="text-button"
+              disabled={assigning || picked.size === 0}
+              onClick={() => setPicked(new Set())}
+            >
+              Clear
+            </button>
+            <Picker
+              value={assignTo}
+              label="Skill for the selected photos"
+              disabled={assigning}
+              items={skillChoices}
+              render={skillTitle}
+              onChange={setAssignTo}
+            />
+            <button
+              type="button"
+              className="primary"
+              disabled={assigning || picked.size === 0}
+              onClick={() => void assignPicked()}
+            >
+              Use this skill
+            </button>
+          </div>
+        </div>
+      )}
       <div className="filter-chips" role="tablist" aria-label="Filter results">
         {(
           [
@@ -188,6 +258,25 @@ export default function ResultsTab({
                 className={`status-bar ${t.status === "queued" && !running ? "waiting" : t.status}`}
                 aria-hidden="true"
               />
+              {canAssignSkill && s && (
+                <label className="select-box" title="Select this photo">
+                  <input
+                    type="checkbox"
+                    checked={picked.has(s.id)}
+                    onChange={(e) =>
+                      setPicked((p) => {
+                        const n = new Set(p);
+                        if (e.target.checked) n.add(s.id);
+                        else n.delete(s.id);
+                        return n;
+                      })
+                    }
+                  />
+                  <span>
+                    <Check size={14} />
+                  </span>
+                </label>
+              )}
               <button
                 className="photo-frame result-photo"
                 disabled={!t.output}
@@ -281,7 +370,7 @@ export default function ResultsTab({
                       : (STATUS_LABEL[t.status] ?? t.status)}
                   </i>
                   {" · "}
-                  {cardLabel(mode, t.card)}
+                  {mode === "7" ? skillTitle(s?.skill) : cardLabel(mode, t.card)}
                 </span>
                 {t.error && (
                   <span className={/…$/.test(t.error) ? "image-note" : "image-error"}>

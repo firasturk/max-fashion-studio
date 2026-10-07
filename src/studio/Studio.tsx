@@ -945,6 +945,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onRetryTask={(t) => void runAction("task/retry", { id: t.id })}
                       onDownloadTask={(t) => void downloadOne(t)}
                       onDownloadSet={(t) => void downloadSet(t)}
+                      skills={skills}
+                      canAssignSkill={
+                        !!batch && viewConfig.mode === "7" && batch.state !== "running"
+                      }
+                      onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
                     />
                   </TabsContent>
                 </Tabs>

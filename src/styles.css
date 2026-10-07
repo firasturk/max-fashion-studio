@@ -3629,3 +3629,7 @@ textarea:focus {
   padding: 0 14px;
   font-size: 13px;
 }
+.result-card .select-box {
+  top: 14px;
+  left: 10px;
+}
