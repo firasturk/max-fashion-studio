@@ -112,10 +112,12 @@ interface SourceRow {
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
 const FAL_PARALLEL = 24;
-const BUILDER_PARALLEL = 3; // vision calls carry base64 images; three at a time keeps memory comfortable // fal.ai queues on its side, so a batch can hand it many images at once
+const BUILDER_PARALLEL = 6; // prompts being written at once, across all ticks and the cron (reference copies are 1600 px)
+const WRITING = "Writing the prompt…";
+const WRITING_STALE_MS = 4 * 60 * 1000; // a prompt "being written" this long belongs to a cut-off invocation
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
-const FINALIZE_TIMEOUT_MS = 5 * 60 * 1000; // finalizing this long = the saving job was cut off
+const FINALIZE_TIMEOUT_MS = 2 * 60 * 1000; // finalizing this long = the saving job was cut off
 const GOOGLE_TIMEOUT_MS = 20 * 60 * 1000; // a standard-tier Google generation still pending after this = give up
 const MAX_AUTO_ATTEMPTS = 2; // one automatic retry for transient engine failures / off-centre
 
@@ -612,9 +614,12 @@ async function submitNext(
   // Synchronous engines hold a connection per image, so they are capped; fal.ai queues on its side.
   const slots = (fal ? FAL_PARALLEL : concurrency(env)) - (processing?.n ?? 0);
   if (slots <= 0) return;
-  let candidates = await eligibleQueued(env, batch, config, slots);
+  // Prompts are written ahead of submission: every set leader first, then the followers whose
+  // leader already has a prompt, so a follower only waits for the leader's image, not its text.
   if (SKILL_MODES.has(config.mode))
-    candidates = await prepareBriefs(env, batch, config, candidates);
+    await prepareBriefs(env, batch, config, await briefPool(env, batch));
+  let candidates = await eligibleQueued(env, batch, config, slots);
+  if (SKILL_MODES.has(config.mode)) candidates = candidates.filter((t) => !!t.brief);
   const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {
@@ -979,6 +984,35 @@ async function ensureBrief(
 }
 
 /**
+ * Queued tasks whose prompt is not written yet, in writing order: every set leader (the highest
+ * shot of each product), then the followers whose leader already has a prompt.
+ */
+async function briefPool(env: Env, batch: BatchRow): Promise<TaskRow[]> {
+  const rows = await all<TaskRow & { source_name: string; has_brief: number }>(
+    env.DB,
+    "SELECT t.*, s.name AS source_name, (t.brief IS NOT NULL) AS has_brief FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? ORDER BY s.name, t.card",
+    batch.id,
+  );
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = `${productKey(r.source_name)}#${r.card}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  const leaders: TaskRow[] = [];
+  const followers: TaskRow[] = [];
+  for (const g of groups.values()) {
+    const leader = [...g].sort((a, b) => shotNumber(b.source_name) - shotNumber(a.source_name))[0];
+    const groupHasBrief = g.some((r) => r.has_brief);
+    for (const r of g) {
+      if (r.status !== "queued" || r.has_brief) continue;
+      if (r.id === leader.id || g.length === 1) leaders.push(r);
+      else if (groupHasBrief) followers.push(r);
+    }
+  }
+  return [...leaders, ...followers];
+}
+
+/**
  * Skill campaigns: write the prompts for queued images first, a few at a time, before anything is
  * submitted. Each prompt is a 20-40 s vision call; keeping it out of the submission step means a
  * tick never holds a prompt and a generation in one go, and a lost tick costs nothing already written.
@@ -996,8 +1030,32 @@ async function prepareBriefs(
   if (!needs.length) return candidates;
   const ready = new Set(candidates.filter((t) => !!t.brief).map((t) => t.id));
   if (now() < builderPausedUntil) return candidates.filter((t) => ready.has(t.id));
+  // Several invocations (the held tick, the cron) run at once: each claims tasks up to a shared cap.
+  const inFlight = await first<{ n: number }>(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM tasks WHERE batch = ? AND status = 'queued' AND brief IS NULL AND error = ? AND updated > ?",
+    batch.id,
+    WRITING,
+    now() - WRITING_STALE_MS,
+  );
+  const room = BUILDER_PARALLEL - (inFlight?.n ?? 0);
+  if (room <= 0) return candidates.filter((t) => ready.has(t.id));
+  const claimed: TaskRow[] = [];
+  for (const task of needs) {
+    if (claimed.length >= room) break;
+    const ok = await run(
+      env.DB,
+      "UPDATE tasks SET error = ?, updated = ? WHERE id = ? AND status = 'queued' AND brief IS NULL AND (error IS NULL OR error != ? OR updated < ?)",
+      WRITING,
+      now(),
+      task.id,
+      WRITING,
+      now() - WRITING_STALE_MS,
+    );
+    if (ok) claimed.push(task);
+  }
   await Promise.allSettled(
-    needs.slice(0, BUILDER_PARALLEL).map(async (task) => {
+    claimed.map(async (task) => {
       const source = await first<SourceRow>(
         env.DB,
         "SELECT * FROM sources WHERE id = ?",
@@ -1005,12 +1063,6 @@ async function prepareBriefs(
       );
       if (!source) return;
       try {
-        await run(
-          env.DB,
-          "UPDATE tasks SET error = 'Writing the prompt…', updated = ? WHERE id = ? AND status = 'queued'",
-          now(),
-          task.id,
-        );
         await ensureBrief(env, batch, config, task, source);
         ready.add(task.id);
         await run(
@@ -1644,7 +1696,11 @@ async function setSibling(env: Env, id: string): Promise<TaskRow | null> {
   return t?.output ? t : null;
 }
 
-/** The already generated image of the same product (same card) whose scene this task must match. */
+/**
+ * The image of the same product (same card) whose scene this task must match: the one already
+ * generated if there is one, else the one whose prompt exists, so a follower's prompt can be
+ * written while the leader's image is still rendering.
+ */
 async function setLeader(
   env: Env,
   batch: BatchRow,
@@ -1654,7 +1710,7 @@ async function setLeader(
   const key = productKey(source.name);
   const rows = await all<TaskRow & { name: string }>(
     env.DB,
-    "SELECT t.*, s.name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.card = ? AND t.id != ? AND t.output IS NOT NULL AND t.brief IS NOT NULL ORDER BY s.name",
+    "SELECT t.*, s.name FROM tasks t JOIN sources s ON s.id = t.source WHERE t.batch = ? AND t.card = ? AND t.id != ? AND t.brief IS NOT NULL ORDER BY (t.output IS NOT NULL) DESC, s.name DESC",
     batch.id,
     task.card,
     task.id,
