@@ -610,8 +610,13 @@ export const SCENE_READ_INSTRUCTION =
 export function parseSceneNotes(text: string): string {
   const d = parseJsonAnswer<Record<string, unknown>>(text);
   if (!d) return "";
-  const v = (k: string) => String(d[k] ?? "").trim();
+  const v = (k: string) =>
+    String(d[k] ?? "")
+      .trim()
+      .replace(/\.+$/, "");
   if (!v("lightDirection") && !v("shadowDirection") && !v("standingSpot")) return "";
+  const noShadow =
+    /^(none|no shadows?|n\/a|-)?$/i.test(v("shadowDirection")) || /^none$/i.test(v("shadowLength"));
   const bits = [
     v("location") && `Location: ${v("location")}`,
     v("timeOfDay") && `time of day: ${v("timeOfDay")}`,
@@ -620,15 +625,19 @@ export function parseSceneNotes(text: string): string {
     v("lightHeight") && `at ${v("lightHeight")} height`,
     v("hardness") && `${v("hardness")}`,
     v("colourTemperature") && `${v("colourTemperature")} in colour`,
-    v("shadowDirection") && `Shadows on the ground fall ${v("shadowDirection")}`,
-    v("shadowLength") && `and are ${v("shadowLength")}`,
+    noShadow
+      ? "No cast shadows on the ground in this light, only a soft contact shadow under the feet"
+      : v("shadowDirection") && `Shadows on the ground fall ${v("shadowDirection")}`,
+    !noShadow && v("shadowLength") && `and are ${v("shadowLength")}`,
     v("groundSurface") && `Ground: ${v("groundSurface")}`,
     v("standingSpot") && `The model stands ${v("standingSpot")}`,
     v("cameraHeight") && `Camera: ${v("cameraHeight")}`,
     v("lens") && `${v("lens")} lens`,
     v("depth") && `Depth: ${v("depth")}`,
   ].filter(Boolean) as string[];
-  return bits.join("; ").replace(/;\s*(Shadows|Ground|The model|Camera|Depth)/g, ". $1") + ".";
+  return (
+    bits.join("; ").replace(/;\s*(Shadows|No cast|Ground|The model|Camera|Depth)/g, ". $1") + "."
+  );
 }
 
 /** JSON schema for the pose read (Google structured output). */
@@ -654,7 +663,10 @@ export const POSE_READ_INSTRUCTION =
 export function parsePoseNotes(text: string): string {
   const d = parseJsonAnswer<Record<string, unknown>>(text);
   if (!d) return "";
-  const v = (k: string) => String(d[k] ?? "").trim();
+  const v = (k: string) =>
+    String(d[k] ?? "")
+      .trim()
+      .replace(/\.+$/, "");
   if (!v("stance") && !v("arms") && !v("gaze")) return "";
   const bits = [
     v("stance") && `Stance: ${v("stance")}`,

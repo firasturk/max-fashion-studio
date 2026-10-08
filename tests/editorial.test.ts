@@ -245,7 +245,9 @@ describe("no prompt reference reads", () => {
     );
     expect(notes).toContain("Location: narrow old-town street");
     expect(notes).toContain("coming from the back-left of the camera");
-    expect(notes).toContain("Shadows on the ground fall toward the camera and to the right; and are long");
+    expect(notes).toContain(
+      "Shadows on the ground fall toward the camera and to the right; and are long",
+    );
     expect(notes).toContain("The model stands in the middle of the lane in front of the blue door");
     expect(notes).toContain("Camera: eye level; normal lens");
     expect(notes.endsWith(".")).toBe(true);
@@ -271,5 +273,18 @@ describe("no prompt reference reads", () => {
     );
     expect(parsePoseNotes("not json")).toBe("");
     expect(parseSceneNotes("{}")).toBe("");
+    const overcast = parseSceneNotes(
+      JSON.stringify({
+        lightDirection: "front",
+        shadowDirection: "none",
+        shadowLength: "none",
+        standingSpot: "by the gate",
+        depth: "gate in front, meadow behind.",
+      }),
+    );
+    expect(overcast).toContain("No cast shadows on the ground in this light");
+    expect(overcast).not.toContain("fall none");
+    expect(overcast.endsWith("meadow behind.")).toBe(true);
+    expect(overcast).not.toContain("..");
   });
 });
