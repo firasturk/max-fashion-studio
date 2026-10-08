@@ -37,7 +37,7 @@ app.use("/api/*", async (c, next) => {
   await next();
   c.header("Cache-Control", c.res.headers.get("Cache-Control") ?? "no-store");
   // The build the page's scripts belong to: the client reloads when it changes under it.
-  c.header("X-Build", BUILD_ID);
+  c.res.headers.set("X-Build", BUILD_ID);
 });
 
 app.route("/api/auth", authRoutes);
@@ -97,6 +97,7 @@ app.get("*", (c) => {
 app.notFound((c) => c.json({ error: "Not found." }, 404));
 
 app.onError((e, c) => {
+  c.header("X-Build", BUILD_ID);
   if (e instanceof StudioError) return c.json({ error: e.message }, e.status as 400);
   console.error("[studio]", e instanceof Error ? e.stack || e.message : e);
   return c.json({ error: "Studio request failed. Retry shortly." }, 500);
