@@ -112,7 +112,7 @@ interface SourceRow {
 
 const SUBMIT_TIMEOUT_MS = 3 * 60 * 1000; // processing without a request id for this long = lost (page reload, dropped tick)
 const FAL_PARALLEL = 24;
-const BUILDER_PARALLEL = 6; // prompts being written at once, across all ticks and the cron (reference copies are 1600 px)
+const BUILDER_PARALLEL = 8; // prompts being written at once, across all ticks and the cron (reference copies are 1600 px)
 const WRITING = "Writing the prompt…";
 const WRITING_STALE_MS = 4 * 60 * 1000; // a prompt "being written" this long belongs to a cut-off invocation
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up

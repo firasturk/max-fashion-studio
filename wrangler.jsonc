@@ -35,6 +35,7 @@
     },
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "max-fashion-studio" }],
+  "limits": { "cpu_ms": 300000 },
   "vars": {
     "HIGGSFIELD_MODEL": "nano-banana-pro",
     "HIGGSFIELD_BASE_URL": "https://api.higgsfield.ai",
