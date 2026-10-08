@@ -738,7 +738,7 @@ export default function CreativePanel({
 
       <Section
         title="Export & checks"
-        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : ` ${config.outputQuality}%`} · ProductID_0_N`}
+        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : config.outputSize === "quality" ? ` ${config.outputQuality}%` : " · 1 to 1.9 MB"} · ProductID_0_N`}
         defaultOpen={false}
       >
         {config.mode !== "4" && config.mode !== "6" && (
@@ -776,17 +776,38 @@ export default function CreativePanel({
             />
           </div>
           <div>
-            <label className="field-label">Quality</label>
+            <label className="field-label">Size per image</label>
             <Picker
-              label="Export quality"
-              value={String(config.outputQuality)}
+              label="Size per image"
+              value={config.outputSize ?? "fit"}
               disabled={locked || config.output === "png"}
-              items={["100", "95", "90", "85", "80", "75"]}
-              render={(v) => `${v}%`}
-              onChange={(v) => onChange({ outputQuality: Number(v) })}
+              items={["fit", "quality"]}
+              render={(v) => (v === "fit" ? "1 to 1.9 MB" : "By quality")}
+              onChange={(v) => onChange({ outputSize: v as Config["outputSize"] })}
             />
           </div>
         </div>
+        {config.output !== "png" && config.outputSize !== "fit" && (
+          <div className="two-fields">
+            <div>
+              <label className="field-label">Quality</label>
+              <Picker
+                label="Export quality"
+                value={String(config.outputQuality)}
+                disabled={locked}
+                items={["100", "95", "90", "85", "80", "75"]}
+                render={(v) => `${v}%`}
+                onChange={(v) => onChange({ outputQuality: Number(v) })}
+              />
+            </div>
+          </div>
+        )}
+        {config.output === "png" && (
+          <p className="prompt-tip">
+            PNG keeps the engine's file as is, usually 5 to 10 MB. Choose JPG or WebP to fit each
+            image to 1 to 1.9 MB.
+          </p>
+        )}
 
         <div className="export-rule">
           <FileImage size={18} />

@@ -25,6 +25,8 @@ export const configSchema = z.object({
   /** Export format for the ZIP; PNG keeps the engine bytes, JPG/WebP are converted in the browser at export. */
   output: z.enum(OUTPUT_FORMATS).default("png"),
   outputQuality: z.number().int().min(50).max(100).default(90),
+  /** Each JPG/WebP export fitted to 1-1.9 MB, or encoded at outputQuality. */
+  outputSize: z.enum(["fit", "quality"]).default("fit"),
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
   economy: z.boolean().default(false),
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */

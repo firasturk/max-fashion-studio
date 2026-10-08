@@ -44,6 +44,8 @@ export interface Config {
   /** Export format for the ZIP; PNG keeps the engine bytes, JPG/WebP are converted in the browser at export. */
   output: OutputFormat;
   outputQuality: number;
+  /** "fit": each JPG/WebP export is re-encoded to land between 1 and 1.9 MB; "quality": use outputQuality as is. */
+  outputSize: "fit" | "quality";
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
   economy: boolean;
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
@@ -111,6 +113,7 @@ export const DEFAULT_CONFIG: Config = {
   economy: false,
   output: "png",
   outputQuality: 90,
+  outputSize: "fit",
   colors: "pure white, warm beige, light grey",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,

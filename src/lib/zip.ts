@@ -4,7 +4,40 @@ export interface ZipEntry {
   name: string;
   url: string;
   /** Convert the fetched image to this format before adding it (originals are never converted). */
-  convert?: { format: "jpg" | "webp"; quality: number };
+  convert?: { format: "jpg" | "webp"; quality: number; fit?: boolean };
+}
+
+/** Export size window: every fitted JPG/WebP lands between these, when the image allows it. */
+export const FIT_MIN = 1_000_000;
+export const FIT_MAX = 1_900_000;
+
+/**
+ * Re-encodes until the file is inside the 1-1.9 MB window: lower quality while too big, raise it
+ * while too small, in steps of 5 between 50 and 100. A small image that stays under 1 MB even at
+ * quality 100 is kept at 100; a huge one that stays over 1.9 MB at 50 is kept at 50.
+ */
+export async function fitImage(
+  blob: Blob,
+  format: "jpg" | "webp",
+  startQuality: number,
+): Promise<Blob> {
+  let q = Math.min(100, Math.max(50, Math.round(startQuality / 5) * 5));
+  let out = await convertImage(blob, format, q);
+  if (out.size > FIT_MAX) {
+    while (out.size > FIT_MAX && q > 50) {
+      q -= 5;
+      out = await convertImage(blob, format, q);
+    }
+    return out;
+  }
+  let best = out;
+  while (best.size < FIT_MIN && q < 100) {
+    q += 5;
+    const next = await convertImage(blob, format, q);
+    if (next.size > FIT_MAX) break;
+    best = next;
+  }
+  return best;
 }
 
 /** Re-encodes an image blob in the browser. */
@@ -70,11 +103,9 @@ export async function buildZip(entries: ZipEntry[], manifest: unknown): Promise<
     const item = new ZipPassThrough(entry.name);
     zip.add(item);
     if (entry.convert) {
-      const converted = await convertImage(
-        await r.blob(),
-        entry.convert.format,
-        entry.convert.quality,
-      );
+      const converted = entry.convert.fit
+        ? await fitImage(await r.blob(), entry.convert.format, entry.convert.quality)
+        : await convertImage(await r.blob(), entry.convert.format, entry.convert.quality);
       item.push(new Uint8Array(await converted.arrayBuffer()), true);
       continue;
     }

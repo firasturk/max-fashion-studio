@@ -31,7 +31,7 @@ import { useTheme } from "@/theme";
 import { loadLastBatch, loadSavedConfig, saveConfig, saveLastBatch } from "./persist";
 import { makeReference } from "@/lib/image";
 import { folderCount, isCampaignShot } from "@shared/paths";
-import { buildZip, convertImage, saveBlob, type ZipEntry } from "@/lib/zip";
+import { buildZip, convertImage, saveBlob, type ZipEntry, fitImage } from "@/lib/zip";
 import {
   DEFAULT_PROMPT,
   cardsPerSource,
@@ -466,8 +466,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const srcExt = outputExt(t.output);
       let blob = await (await fetch(outputUrl(t))).blob();
       let ext = srcExt;
-      if (format !== "png" && srcExt !== format) {
-        blob = await convertImage(blob, format, viewConfig.outputQuality || 90);
+      const fit = viewConfig.outputSize !== "quality";
+      if (format !== "png" && (fit || srcExt !== format)) {
+        blob = fit
+          ? await fitImage(blob, format, viewConfig.outputQuality || 90)
+          : await convertImage(blob, format, viewConfig.outputQuality || 90);
         ext = format;
       }
       const name = outputName(src.name, outputNumbers().get(t) ?? 1, ext);
@@ -521,9 +524,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     const format = viewConfig.output || "png";
     return list.map((t) => {
       const srcExt = outputExt(t.output);
+      const fit = viewConfig.outputSize !== "quality";
       const convert =
-        format !== "png" && srcExt !== format
-          ? { format, quality: viewConfig.outputQuality || 90 }
+        format !== "png" && (fit || srcExt !== format)
+          ? { format, quality: viewConfig.outputQuality || 90, fit }
           : undefined;
       return {
         name: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, convert ? format : srcExt),
