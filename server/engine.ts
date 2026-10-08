@@ -1262,7 +1262,8 @@ export async function runReferenceRead(
   let text = "";
   try {
     if (google) text = await askVisionGoogle(google, instruction, [image], schema);
-    else if (openai) text = await askVisionOpenAI(openai, instruction, [image], fetch, "gpt-4.1-mini");
+    else if (openai)
+      text = await askVisionOpenAI(openai, instruction, [image], fetch, "gpt-4.1-mini");
   } catch (e) {
     if (openai && google && googleUnavailable(e))
       text = await askVisionOpenAI(openai, instruction, [image], fetch, "gpt-4.1-mini");
@@ -1528,8 +1529,10 @@ async function submitTask(
   }
   if (isNoPrompt(config.mode)) {
     const plan = await noPromptPlan(env, batch, task, source);
+    // The location photo goes first: the engine then adds the model into that photograph instead
+    // of swapping the background behind a cutout of the model photo.
     if (plan.bg) {
-      imageUrls.push(await referenceEngineUrl(env, client, plan.bg));
+      imageUrls.unshift(await referenceEngineUrl(env, client, plan.bg));
       roles.background = true;
     }
     if (plan.pose) {
@@ -1638,8 +1641,9 @@ async function submitOpenAITask(
   }
   if (isNoPrompt(config.mode)) {
     const plan = await noPromptPlan(env, batch, task, source);
+    // Location photo first (see submitTask).
     if (plan.bg) {
-      images.push(await referenceBytes(env, plan.bg));
+      images.unshift(await referenceBytes(env, plan.bg));
       roles.background = true;
     }
     if (plan.pose) {
@@ -2037,9 +2041,14 @@ async function collectReferenceKeys(
       if (!id) continue;
       const ref = await first<{ key: string }>(env.DB, "SELECT key FROM refs WHERE id = ?", id);
       if (!ref) throw new StudioError("A No prompt library photo is missing.", 500);
-      keys.push(ref.key);
-      if (id === plan.bg) roles.background = true;
-      else roles.pose = true;
+      // Location photo first (see submitTask).
+      if (id === plan.bg) {
+        keys.unshift(ref.key);
+        roles.background = true;
+      } else {
+        keys.push(ref.key);
+        roles.pose = true;
+      }
     }
   }
   const edit = task.edit?.trim() ?? "";

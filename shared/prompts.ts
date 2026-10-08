@@ -196,29 +196,42 @@ export function buildNoPromptPrompt(
   edit = "",
   notes: { scene?: string; pose?: string } = {},
 ): string {
-  let idx = 2;
-  const parts = [
-    "Editorial fashion photograph of the model from image 1, photographed on location by a professional fashion photographer. Image 1 is the model and the outfit: every garment, the footwear and any accessory stay exactly as worn, nothing added, removed or restyled.",
-    EDITORIAL_STYLE_RULE,
-    IDENTITY_RULE,
-    TATTOO_RULE,
-  ];
+  // With a background the location photo is image 1 and the model photo image 2, so the engine
+  // adds the person into the photograph instead of cutting the person out of the model photo.
+  const model = images.background ? 2 : 1;
+  let idx = model + 1;
+  const parts: string[] = [];
   if (images.background) {
     parts.push(
-      `Image ${idx++} is the BACKGROUND: place the model inside exactly this location, keeping its architecture, surfaces, depth, props, time of day and weather as they are; add nothing and remove nothing from it. LIGHT: the light source, its direction and height, its hardness, the colour temperature and the overall exposure come from this background photo; the model is lit by that same light, with matching contrast, grain and colour grade, reflected light and ambient colour from the surroundings on skin and garment, so the model and the background read as one photograph taken in one moment. Never a cutout or pasted-on look.`,
+      `Image 1 is a photograph of a LOCATION. Image ${model} is a MODEL wearing an OUTFIT. Make the photograph that a professional fashion photographer would have taken if the model from image ${model} had been standing in the location of image 1 at the moment image 1 was taken: one single editorial fashion photograph, shot in one exposure, with one light, one camera and one colour grade for the person and the place. Every garment, the footwear and any accessory from image ${model} stay exactly as worn, nothing added, removed or restyled.`,
+      `LOCATION: keep the place of image 1 recognisably the same: its architecture, surfaces, materials, props, time of day, weather and light. The scene may be re-framed and re-rendered around the model so that the model's crop fills the frame naturally; the camera stays at the height and distance a photographer would use for that crop. Add nothing that is not in the location and remove nothing from it.`,
+      RELIGHT_RULE,
     );
-    if (notes.scene) parts.push(`SCENE READ (facts taken from the background photo): ${notes.scene}`);
-    parts.push(SHADOW_RULE, SCALE_RULE);
-  }
+    if (notes.scene) parts.push(`SCENE READ (facts taken from the location photo): ${notes.scene}`);
+    parts.push(
+      /no cast shadows/i.test(notes.scene ?? "") ? SOFT_SHADOW_RULE : SHADOW_RULE,
+      SCALE_RULE,
+    );
+  } else
+    parts.push(
+      "Editorial fashion photograph of the model from image 1, photographed on location by a professional fashion photographer. Image 1 is the model and the outfit: every garment, the footwear and any accessory stay exactly as worn, nothing added, removed or restyled.",
+    );
+  parts.push(EDITORIAL_STYLE_RULE, identityFor(model), TATTOO_RULE);
   if (images.pose) {
     parts.push(
-      `Image ${idx++} is the POSE reference: copy only the body pose from it: stance, weight distribution, torso angle, each arm and hand, leg positions, head angle and the direction of the gaze. Never copy its clothing, face, hair, body shape, accessories or background; the person in the output is the person from image 1 in the outfit from image 1.`,
+      `Image ${idx++} is the POSE reference: copy only the body pose from it: stance, weight distribution, torso angle, each arm and hand, leg positions, head angle and the direction of the gaze. Never copy its clothing, face, hair, body shape, accessories or background; the person in the output is the person from image ${model} in the outfit from image ${model}.`,
     );
     if (notes.pose) parts.push(`POSE READ (facts taken from the pose photo): ${notes.pose}`);
-  } else parts.push("POSE: keep the model's pose as in image 1, natural and relaxed.");
-  if (!backView && framing !== "LOWER_BODY") parts.push(EYES_RULE);
-  parts.push(framingRule(framing, handsInPockets));
-  if (backView) parts.push(BACK_VIEW_RULE);
+  } else parts.push(`POSE: keep the model's pose as in image ${model}, natural and relaxed.`);
+  if (!backView && framing !== "LOWER_BODY") parts.push(eyesFor(model));
+  parts.push(
+    framingRule(framing, handsInPockets).replace(
+      /reference photo/g,
+      `model photo (image ${model})`,
+    ),
+  );
+  if (backView)
+    parts.push(BACK_VIEW_RULE.replace("The reference photo", `The model photo (image ${model})`));
   parts.push(CENTERING);
   if (edit)
     parts.push(
@@ -226,22 +239,38 @@ export function buildNoPromptPrompt(
     );
   if (images.revision) parts.push("The LAST image is the existing result to revise.");
   parts.push(
-    `AVOID: ${["different face, altered facial features, changed hairstyle, different hair length or colour", "crossed eyes, asymmetric eyes, misaligned pupils, glassy or blank eyes, eyes looking in two directions", "tattoos, tattoo, body ink", "cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges", "wrong shadow direction, shadow falling toward the light, double shadows, a shadow from a second light source", "wrong scale, model too large or too small for the spot, model not on the ground plane", "studio look, flat studio lighting, over-smoothed plastic skin, HDR glow", "clothing or accessories from the pose photo, a second person", handsInPockets ? "" : "hands in pockets"].filter(Boolean).join(", ")}`,
+    `AVOID: ${["different face, altered facial features, changed hairstyle, different hair length or colour", "crossed eyes, asymmetric eyes, misaligned pupils, glassy or blank eyes, eyes looking in two directions", "tattoos, tattoo, body ink", "cutout look, pasted-on model, collage, photo montage, floating feet, missing contact shadow, mismatched lighting, halo edges, the studio lighting of the model photo kept", "wrong shadow direction, shadow falling toward the light, double shadows, a shadow from a second light source", "wrong scale, model too large or too small for the spot, model not on the ground plane", "studio look, flat studio lighting, over-smoothed plastic skin, HDR glow", "clothing or accessories from the pose photo, a second person", handsInPockets ? "" : "hands in pockets"].filter(Boolean).join(", ")}`,
   );
   return parts.join("\n\n");
 }
+
+function identityFor(model: number): string {
+  return IDENTITY_RULE.replace("(image 1)", `(image ${model})`);
+}
+
+function eyesFor(model: number): string {
+  return EYES_RULE.replace("as in image 1", `as in image ${model}`);
+}
+
+/** Engine-facing re-light rule for the No prompt approach: the model photo's studio light is discarded. */
+export const RELIGHT_RULE =
+  "RE-LIGHT: the model photo was taken in a studio under flat, even, shadowless light against a plain backdrop. That light does not exist in the output. Discard it completely and light the person and the garment only with the light of the location: the same source, direction, height, hardness and colour temperature as everything else in the scene, with real highlights and shadows on the face, the skin, the hair and the fabric, reflected light and ambient colour from the surroundings, the same exposure, contrast, grain and colour grade as the location. Keep the garment's true colour and print under that light. The person must look photographed in that place, never lifted from another photo.";
 
 /** Engine-facing editorial look for the No prompt approach. */
 export const EDITORIAL_STYLE_RULE =
   "STYLE: a high-end editorial fashion photograph, not a catalogue cutout: shot on location with a full-frame camera and a 50-85 mm lens at a natural working distance, true-to-life skin texture, fabric weave and fibres, natural depth of field with the location still readable, honest colour and contrast as the scene gives them; no HDR glow, no over-smoothed skin, no studio flash, no stock-photo flatness.";
 
-/** Engine-facing shadow rule for the No prompt approach. */
+/** Engine-facing shadow rule for the No prompt approach (a scene with visible cast shadows). */
 export const SHADOW_RULE =
-  "SHADOWS: the model casts exactly one shadow on the ground, in the same direction, length, softness and darkness as the shadows already present in the background photo; it starts at the feet or at the point of contact, lies flat on the ground surface and follows the ground's perspective. A soft contact shadow sits under the soles. The body's own shadows (under the chin, under the arms, inside folds, the far side of the face and garments) all follow the same light direction. No shadow falls toward the light, no second shadow, no missing shadow, no shadow from a light that is not in the scene.";
+  "SHADOWS: the model casts exactly one shadow on the ground, in the same direction, length, softness and darkness as the shadows already present in the location photo; it starts at the feet or at the point of contact, lies flat on the ground surface and follows the ground's perspective. A soft contact shadow sits under the soles. The body's own shadows (under the chin, under the arms, inside folds, the far side of the face and garments) all follow the same light direction. No shadow falls toward the light, no second shadow, no missing shadow, no shadow from a light that is not in the scene.";
+
+/** Engine-facing shadow rule for the No prompt approach (overcast or open shade: no hard cast shadow). */
+export const SOFT_SHADOW_RULE =
+  "SHADOWS: the location has soft, diffuse light with no hard cast shadows, so the model has no hard shadow either: only a soft, dark contact shadow directly under the soles and between the feet, fading out within a short distance, exactly like the soft shadows under the objects already in the location photo. The body's own shading is soft and gentle, slightly darker under the chin, under the arms and inside folds, with the top of the head and shoulders a little brighter from the sky. No hard-edged shadow, no shadow from a sun that is not in the scene, no floating feet.";
 
 /** Engine-facing scale and perspective rule for the No prompt approach. */
 export const SCALE_RULE =
-  "SCALE AND PERSPECTIVE: the model stands on the ground at the standing spot in the background photo, drawn at the right size for that distance from the camera; the background photo's camera height, lens perspective, horizon and vanishing lines apply to the model too, so feet, hips and head sit where a person that size would in that spot. Elements in front of that spot overlap the model naturally; elements behind stay behind. The model is in the scene's space, not in front of a picture of it.";
+  "SCALE AND PERSPECTIVE: the model stands on the ground at the standing spot in the location photo, drawn at the right size for that distance from the camera; the location photo's camera height, lens perspective, horizon and vanishing lines apply to the model too, so feet, hips and head sit where a person that size would in that spot. Elements in front of that spot overlap the model naturally; elements behind stay behind. The model is in the scene's space, not in front of a picture of it.";
 
 /** Engine-facing eyes rule for the No prompt approach. */
 export const EYES_RULE =

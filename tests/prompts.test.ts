@@ -220,9 +220,16 @@ describe("no prompt approach", () => {
   it("builds the fixed prompt from the background and pose photos", async () => {
     const { buildNoPromptPrompt } = await import("../shared/prompts");
     const p = buildNoPromptPrompt("LOWER_BODY", false, false, { background: true, pose: true });
-    expect(p).toContain("Image 2 is the BACKGROUND");
+    expect(p).toContain("Image 1 is a photograph of a LOCATION. Image 2 is a MODEL");
     expect(p).toContain("Image 3 is the POSE reference");
-    expect(p).toContain(IDENTITY_RULE);
+    expect(p).toContain("same person as in the reference photo (image 2)");
+    expect(p).toContain("RE-LIGHT:");
+    expect(p).toContain("model photo (image 2)");
+    // Without a background the model photo is image 1 and the pose image 2.
+    const alone = buildNoPromptPrompt("FULL_BODY", false, false, { pose: true });
+    expect(alone).toContain(IDENTITY_RULE);
+    expect(alone).toContain("Image 2 is the POSE reference");
+    expect(alone).not.toContain("RE-LIGHT:");
     expect(p).toContain("lower body only");
     expect(p).toContain("AVOID:");
     expect(buildNoPromptPrompt("FULL_BODY", true, true, { background: true })).toContain(
@@ -232,30 +239,40 @@ describe("no prompt approach", () => {
   });
 
   it("tells the engine what the photos show and how shadows, scale and eyes must behave", async () => {
-    const { buildNoPromptPrompt, EYES_RULE, SHADOW_RULE, SCALE_RULE, EDITORIAL_STYLE_RULE } =
-      await import("../shared/prompts");
-    const p = buildNoPromptPrompt(
-      "FULL_BODY",
-      false,
-      false,
-      { background: true, pose: true },
-      "",
-      { scene: "Location: old town street; shadows fall to the left.", pose: "Stance: walking." },
+    const {
+      buildNoPromptPrompt,
+      EYES_RULE,
+      SHADOW_RULE,
+      SOFT_SHADOW_RULE,
+      SCALE_RULE,
+      EDITORIAL_STYLE_RULE,
+    } = await import("../shared/prompts");
+    const p = buildNoPromptPrompt("FULL_BODY", false, false, { background: true, pose: true }, "", {
+      scene: "Location: old town street; shadows fall to the left.",
+      pose: "Stance: walking.",
+    });
+    expect(p).toContain(
+      "SCENE READ (facts taken from the location photo): Location: old town street",
     );
-    expect(p).toContain("SCENE READ (facts taken from the background photo): Location: old town street");
     expect(p).toContain("POSE READ (facts taken from the pose photo): Stance: walking.");
     expect(p).toContain(EDITORIAL_STYLE_RULE);
     expect(p).toContain(SHADOW_RULE);
     expect(p).toContain(SCALE_RULE);
-    expect(p).toContain(EYES_RULE);
+    expect(p).toContain(EYES_RULE.replace("as in image 1", "as in image 2"));
     expect(p).toContain("wrong shadow direction");
+    // Overcast or open shade: the soft-shadow variant instead of a cast shadow.
+    const soft = buildNoPromptPrompt("FULL_BODY", false, false, { background: true }, "", {
+      scene: "No cast shadows on the ground in this light, only a soft contact shadow.",
+    });
+    expect(soft).toContain(SOFT_SHADOW_RULE);
+    expect(soft).not.toContain(SHADOW_RULE);
     expect(p).toContain("crossed eyes");
     // No face in a lower-body crop or a back view: no eyes rule.
     expect(buildNoPromptPrompt("LOWER_BODY", false, false, { background: true })).not.toContain(
-      EYES_RULE,
+      "EYES:",
     );
     expect(buildNoPromptPrompt("FULL_BODY", false, true, { background: true })).not.toContain(
-      EYES_RULE,
+      "EYES:",
     );
     // Without a read, no empty SCENE READ line.
     expect(buildNoPromptPrompt("FULL_BODY", false, false, { background: true })).not.toContain(

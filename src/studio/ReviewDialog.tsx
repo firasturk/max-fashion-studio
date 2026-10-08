@@ -23,6 +23,10 @@ import CompareSlider from "./CompareSlider";
 /** One-click revision instructions; each appends to the edit box. */
 const REVISION_PRESETS: { label: string; text: string }[] = [
   {
+    label: "Blend with scene",
+    text: "Re-light the model with the scene's own light: same direction, hardness and colour as the surroundings, real highlights and shadows on skin, hair and fabric, one ground shadow matching the scene's shadows plus a soft contact shadow under the feet, the same grain and colour grade as the background, no cutout edges. Keep the face, hair, outfit, pose and framing exactly.",
+  },
+  {
     label: "Fix hands",
     text: "Fix the hands and fingers: five natural fingers per hand, correct anatomy, no distortion.",
   },
