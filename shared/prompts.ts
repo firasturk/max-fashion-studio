@@ -182,13 +182,6 @@ export const DETAIL_RULE =
 export const BACK_VIEW_RULE =
   "BACK VIEW: the reference photo shows the model from behind. Keep exactly this back view: the model faces away from the camera, no face is shown, the back of the hairstyle and the back of every garment are what is seen; never turn the model around, never add a face or a profile.";
 
-/**
- * Nano Banana (Google) reads the lighting section loosely and tends to flatten it; both Nano
- * Banana 2.1 and Nano Banana Pro get the same explicit instruction so their light matches.
- */
-export const NANO_BANANA_NOTE =
-  "ENGINE NOTE: render the lighting exactly as the LIGHT section states it: the named light source (sun or window or studio), its direction, height, hardness, shadow length and colour temperature are binding. Do not replace it with flat, even or neutral lighting, do not soften a hard sun into overcast, do not change the time of day. Keep the same light on the model and on the background.";
-
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string, handsInPockets = false): string {
   const hands = handsInPockets

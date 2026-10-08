@@ -25,7 +25,6 @@ import {
   buildPrompt,
   buildCompactPrompt,
   buildEditorialPrompt,
-  NANO_BANANA_NOTE,
   RECENTER_SUFFIX,
   type PromptImages,
 } from "@shared/prompts";
@@ -1253,8 +1252,6 @@ async function promptFor(
           config.mode === "7",
           backView,
         );
-    // Nano Banana 2.1 and Nano Banana Pro read the light loosely; both get the same explicit note.
-    if (isGoogleModel(taskConfig(config, task).model)) prompt += `\n\n${NANO_BANANA_NOTE}`;
     if (child) prompt = sanitizeChildPrompt(prompt);
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);
