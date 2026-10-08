@@ -20,7 +20,9 @@ interface Rate {
 
 const RATES: Record<string, Rate> = {
   "gemini-3-pro-image": { "1K": 0.134, "2K": 0.134, "4K": 0.24, economy: 0.5 },
-  "gemini-3.1-flash-image": { "1K": 0.067, "2K": 0.067, "4K": 0.12, economy: 0.5 },
+  // Nano Banana 2.1 (released 6 Oct 2026): $30 per million image tokens; 1,120 / 1,680 / 3,780 tokens per image.
+  "gemini-nano-banana-2.1": { "1K": 0.0336, "2K": 0.0504, "4K": 0.113, economy: 0.5 },
+  "gemini-3.1-flash-image": { "1K": 0.067, "2K": 0.101, "4K": 0.151, economy: 0.5 },
   "gemini-2.5-flash-image": { "1K": 0.039, "2K": 0.039, "4K": 0.039, economy: 0.5 },
   "gpt-image-2.5-sunburst": { "1K": 0.0132, "2K": 0.0527, "4K": 0.0937, perReference: 0.008 },
   "gpt-image-2.5-flare": { "1K": 0.0132, "2K": 0.0527, "4K": 0.0937, perReference: 0.008 },

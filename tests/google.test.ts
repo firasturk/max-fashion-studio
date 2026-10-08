@@ -6,6 +6,7 @@ const KEY = "AIzaSyTestKey_0123456789abcdefghijk";
 describe("Google image client", () => {
   it("detects Nano Banana slugs", () => {
     expect(isGoogleModel("gemini-3-pro-image")).toBe(true);
+    expect(isGoogleModel("gemini-nano-banana-2.1")).toBe(true);
     expect(isGoogleModel("nano-banana-pro")).toBe(false);
   });
 

@@ -8,6 +8,7 @@ import type { ImageBytes } from "./openai";
 
 export const GOOGLE_MODELS: { slug: string; name: string }[] = [
   { slug: "gemini-3-pro-image", name: "Nano Banana Pro (Google)" },
+  { slug: "gemini-nano-banana-2.1", name: "Nano Banana 2.1 (Google)" },
   { slug: "gemini-3.1-flash-image", name: "Nano Banana 2 (Google)" },
   { slug: "gemini-2.5-flash-image", name: "Nano Banana (Google)" },
 ];

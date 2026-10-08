@@ -515,6 +515,7 @@ export default function ConnectionDialog({
               <option value="flux-2-max" />
               <option value="qwen-image-edit" />
               <option value="gemini-3-pro-image" />
+              <option value="gemini-nano-banana-2.1" />
               <option value="gemini-3.1-flash-image" />
               <option value="gpt-image-2.5-sunburst" />
               <option value="gpt-image-2.5-flare" />
