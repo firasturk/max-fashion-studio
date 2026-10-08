@@ -413,19 +413,8 @@ async function storeResultBytes(
   }
 
   const wantsCenter = centeringApplies(config, task.card);
-  const offCentre = wantsCenter && qa.automated && qa.found && !qa.centered;
-  if (offCentre && task.attempts < MAX_AUTO_ATTEMPTS && !task.edit) {
-    // Keep this result visible, but queue exactly one centering retry.
-    await run(
-      env.DB,
-      "UPDATE tasks SET status = 'queued', qa = ?, recenter = 1, updated = ? WHERE id = ? AND status = 'review' AND output = ?",
-      JSON.stringify(qa),
-      now(),
-      task.id,
-      key,
-    );
-    return;
-  }
+  // An off-centre result is flagged for review, never regenerated on its own: each image is
+  // generated once, and a second pass only happens when the team asks for a revision.
 
   const status = qa.automated
     ? qa.productConcern || qa.sameFace === false || (wantsCenter && !qa.centered)
