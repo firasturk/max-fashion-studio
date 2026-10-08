@@ -1135,9 +1135,9 @@ interface NoPromptPlan {
 
 /**
  * Picks the background and the pose for a No prompt image and stores the choice on the task.
- * Backgrounds rotate by product (both shots of a product share one; the N-th product takes the
- * N-th photo, wrapping), so a batch spreads over the whole library without repeats until every
- * background is used. The pose comes from the photos whose framing matches the upload's.
+ * The background is a random photo from the library, never the same one twice until every photo
+ * has been used once in the batch. The pose comes from the photos whose framing matches the
+ * upload's, chosen the same way.
  */
 async function noPromptPlan(
   env: Env,
@@ -1174,17 +1174,26 @@ async function noPromptPlan(
       : poses.filter((p) => p.framing === fallback).length > 0
         ? poses.filter((p) => p.framing === fallback)
         : poses;
-  const names = await all<{ name: string }>(
+  // Random choice, spread evenly: a photo is picked at random among the ones used least so far
+  // in this batch, so nothing repeats until the whole library has been used once.
+  const used = new Map<string, number>();
+  for (const row of await all<{ brief: string }>(
     env.DB,
-    "SELECT name FROM sources WHERE batch = ? ORDER BY name",
+    "SELECT brief FROM tasks WHERE batch = ? AND id != ? AND brief LIKE '{\"np\":true%'",
     batch.id,
-  );
-  const products = [...new Set(names.map((n) => productKey(n.name)))];
-  const idx = Math.max(0, products.indexOf(productKey(source.name)));
+    task.id,
+  )) {
+    try {
+      const other = JSON.parse(row.brief) as Partial<NoPromptPlan>;
+      for (const id of [other.bg, other.pose]) if (id) used.set(id, (used.get(id) ?? 0) + 1);
+    } catch {
+      // an unreadable plan counts for nothing
+    }
+  }
   const plan: NoPromptPlan = {
     np: true,
-    bg: backgrounds[(idx + task.card - 1) % backgrounds.length].id,
-    pose: pool.length ? pool[(idx + task.card - 1) % pool.length].id : null,
+    bg: pickLeastUsed(backgrounds, used),
+    pose: pool.length ? pickLeastUsed(pool, used) : null,
     framing: check.framing,
     handsInPockets: check.handsInPockets,
     backView: check.backView,
@@ -1195,6 +1204,13 @@ async function noPromptPlan(
   task.brief = JSON.stringify(plan);
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", task.brief, task.id);
   return plan;
+}
+
+/** A random item among those used the fewest times. */
+function pickLeastUsed(items: { id: string }[], used: Map<string, number>): string {
+  const min = Math.min(...items.map((i) => used.get(i.id) ?? 0));
+  const pool = items.filter((i) => (used.get(i.id) ?? 0) === min);
+  return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
 /**
