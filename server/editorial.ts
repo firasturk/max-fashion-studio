@@ -563,3 +563,122 @@ export async function buildBriefWithOpenAI(
     await askVisionOpenAI(key, builderInstruction(req), imageParts(req), fetchImpl, model),
   );
 }
+
+/* ───────────── No prompt approach: reading the background and pose photos ───────────── */
+
+/** JSON schema for the background read (Google structured output). */
+export const SCENE_SCHEMA = {
+  type: "object",
+  properties: {
+    location: { type: "string" },
+    timeOfDay: { type: "string" },
+    lightSource: { type: "string" },
+    lightDirection: { type: "string" },
+    lightHeight: { type: "string" },
+    hardness: { type: "string" },
+    colourTemperature: { type: "string" },
+    shadowDirection: { type: "string" },
+    shadowLength: { type: "string" },
+    groundSurface: { type: "string" },
+    standingSpot: { type: "string" },
+    cameraHeight: { type: "string" },
+    lens: { type: "string" },
+    depth: { type: "string" },
+  },
+  required: [
+    "location",
+    "timeOfDay",
+    "lightSource",
+    "lightDirection",
+    "lightHeight",
+    "hardness",
+    "colourTemperature",
+    "shadowDirection",
+    "shadowLength",
+    "groundSurface",
+    "standingSpot",
+    "cameraHeight",
+    "lens",
+    "depth",
+  ],
+};
+
+export const SCENE_READ_INSTRUCTION =
+  "You are a photographer's assistant reading a location photo that a fashion model will later be photographed in. Answer with JSON only, each value a short concrete phrase, decided from what is visible in the photo. location: what the place is (street, rooftop, beach, interior...) in a few words. timeOfDay: morning, midday, golden hour, blue hour, night or overcast day. lightSource: the main light (direct sun, overcast sky, open shade, window light, artificial lamps...). lightDirection: where the main light comes from relative to the camera (front, front-left, left, back-left, behind, back-right, right, front-right). lightHeight: low, mid or high. hardness: hard with crisp shadow edges, or soft with diffuse edges. colourTemperature: warm golden, neutral, cool blue or mixed. shadowDirection: which way the shadows on the ground fall in the picture (toward the camera, away from the camera, to the left, to the right, diagonal...). shadowLength: none, short, medium or long. groundSurface: the surface a person would stand on (asphalt, cobblestone, sand, wooden deck, tiles...). standingSpot: the one spot in the picture where a model would naturally stand so the composition works, described by what is around it (e.g. 'on the pavement in front of the arched doorway, left of the lamp post'). cameraHeight: eye level, low (below the waist) or high (above the head). lens: wide, normal or telephoto, judged from the perspective. depth: the foreground, midground and background layers in one short sentence. Keys: location, timeOfDay, lightSource, lightDirection, lightHeight, hardness, colourTemperature, shadowDirection, shadowLength, groundSurface, standingSpot, cameraHeight, lens, depth.";
+
+/** Turn the background read into the sentences the engine gets. Unknown or empty answers give "". */
+export function parseSceneNotes(text: string): string {
+  const d = parseJsonAnswer<Record<string, unknown>>(text);
+  if (!d) return "";
+  const v = (k: string) => String(d[k] ?? "").trim();
+  if (!v("lightDirection") && !v("shadowDirection") && !v("standingSpot")) return "";
+  const bits = [
+    v("location") && `Location: ${v("location")}`,
+    v("timeOfDay") && `time of day: ${v("timeOfDay")}`,
+    v("lightSource") && `main light: ${v("lightSource")}`,
+    v("lightDirection") && `coming from the ${v("lightDirection")} of the camera`,
+    v("lightHeight") && `at ${v("lightHeight")} height`,
+    v("hardness") && `${v("hardness")}`,
+    v("colourTemperature") && `${v("colourTemperature")} in colour`,
+    v("shadowDirection") && `Shadows on the ground fall ${v("shadowDirection")}`,
+    v("shadowLength") && `and are ${v("shadowLength")}`,
+    v("groundSurface") && `Ground: ${v("groundSurface")}`,
+    v("standingSpot") && `The model stands ${v("standingSpot")}`,
+    v("cameraHeight") && `Camera: ${v("cameraHeight")}`,
+    v("lens") && `${v("lens")} lens`,
+    v("depth") && `Depth: ${v("depth")}`,
+  ].filter(Boolean) as string[];
+  return bits.join("; ").replace(/;\s*(Shadows|Ground|The model|Camera|Depth)/g, ". $1") + ".";
+}
+
+/** JSON schema for the pose read (Google structured output). */
+export const POSE_SCHEMA = {
+  type: "object",
+  properties: {
+    stance: { type: "string" },
+    weight: { type: "string" },
+    torso: { type: "string" },
+    arms: { type: "string" },
+    hands: { type: "string" },
+    head: { type: "string" },
+    gaze: { type: "string" },
+    expression: { type: "string" },
+  },
+  required: ["stance", "weight", "torso", "arms", "hands", "head", "gaze", "expression"],
+};
+
+export const POSE_READ_INSTRUCTION =
+  "Describe only the body pose of the person in the attached photo, for another photographer to recreate with a different model. Answer with JSON only, each value one short concrete phrase. stance: legs and feet (standing, walking, leaning, feet apart, one foot forward, crossed...). weight: which leg carries the weight and how the hips sit. torso: angle of the torso to the camera (square, turned three-quarter left/right, profile) and whether it is upright or leaning. arms: what each arm does. hands: what each hand does and where it is (relaxed at the side, on the hip, touching the collar, in a pocket...). head: head angle (straight, turned, tilted, chin up or down). gaze: where the eyes look (into the camera lens, off to the left, off to the right, down, into the distance). expression: neutral, soft smile, serious, laughing. Never describe clothing, hair, face, body shape or the background. Keys: stance, weight, torso, arms, hands, head, gaze, expression.";
+
+/** Turn the pose read into the sentences the engine gets. Unknown or empty answers give "". */
+export function parsePoseNotes(text: string): string {
+  const d = parseJsonAnswer<Record<string, unknown>>(text);
+  if (!d) return "";
+  const v = (k: string) => String(d[k] ?? "").trim();
+  if (!v("stance") && !v("arms") && !v("gaze")) return "";
+  const bits = [
+    v("stance") && `Stance: ${v("stance")}`,
+    v("weight") && `weight: ${v("weight")}`,
+    v("torso") && `torso: ${v("torso")}`,
+    v("arms") && `arms: ${v("arms")}`,
+    v("hands") && `hands: ${v("hands")}`,
+    v("head") && `head: ${v("head")}`,
+    v("gaze") && `gaze: ${v("gaze")}`,
+    v("expression") && `expression: ${v("expression")}`,
+  ].filter(Boolean) as string[];
+  return bits.join("; ") + ".";
+}
+
+function parseJsonAnswer<T>(text: string): T | null {
+  try {
+    const cleaned = text
+      .trim()
+      .replace(/^```(?:json)?/i, "")
+      .replace(/```$/, "")
+      .trim();
+    const d = JSON.parse(cleaned) as unknown;
+    return d && typeof d === "object" ? (d as T) : null;
+  } catch {
+    return null;
+  }
+}

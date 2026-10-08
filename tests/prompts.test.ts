@@ -230,6 +230,38 @@ describe("no prompt approach", () => {
     );
     expect(buildNoPromptPrompt("FULL_BODY", false, false, {})).toContain("keep the model's pose");
   });
+
+  it("tells the engine what the photos show and how shadows, scale and eyes must behave", async () => {
+    const { buildNoPromptPrompt, EYES_RULE, SHADOW_RULE, SCALE_RULE, EDITORIAL_STYLE_RULE } =
+      await import("../shared/prompts");
+    const p = buildNoPromptPrompt(
+      "FULL_BODY",
+      false,
+      false,
+      { background: true, pose: true },
+      "",
+      { scene: "Location: old town street; shadows fall to the left.", pose: "Stance: walking." },
+    );
+    expect(p).toContain("SCENE READ (facts taken from the background photo): Location: old town street");
+    expect(p).toContain("POSE READ (facts taken from the pose photo): Stance: walking.");
+    expect(p).toContain(EDITORIAL_STYLE_RULE);
+    expect(p).toContain(SHADOW_RULE);
+    expect(p).toContain(SCALE_RULE);
+    expect(p).toContain(EYES_RULE);
+    expect(p).toContain("wrong shadow direction");
+    expect(p).toContain("crossed eyes");
+    // No face in a lower-body crop or a back view: no eyes rule.
+    expect(buildNoPromptPrompt("LOWER_BODY", false, false, { background: true })).not.toContain(
+      EYES_RULE,
+    );
+    expect(buildNoPromptPrompt("FULL_BODY", false, true, { background: true })).not.toContain(
+      EYES_RULE,
+    );
+    // Without a read, no empty SCENE READ line.
+    expect(buildNoPromptPrompt("FULL_BODY", false, false, { background: true })).not.toContain(
+      "SCENE READ",
+    );
+  });
 });
 
 describe("new-model skill campaign", () => {

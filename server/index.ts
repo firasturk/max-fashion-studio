@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type { Env } from "./env";
-import { StudioError } from "./errors";
+import { StudioError, errorMessage } from "./errors";
 import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
 import { verifyObjectToken } from "./signed";
 import { adminRoutes, cleanupOldBatches } from "./admin";
-import { advanceBatch, activeBatchIds } from "./engine";
+import { advanceBatch, activeBatchIds, readPendingReferences } from "./engine";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
 
@@ -107,6 +107,9 @@ export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
+    ctx.waitUntil(
+      readPendingReferences(env).catch((e) => console.error("[refs]", errorMessage(e))),
+    );
     const ids = await activeBatchIds(env);
     for (const id of ids)
       ctx.waitUntil(advanceBatch(env, id).catch((e) => console.error("[cron]", id, e)));

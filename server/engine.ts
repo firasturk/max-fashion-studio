@@ -40,6 +40,12 @@ import {
   FRAMING_CHECK_INSTRUCTION,
   FRAMING_SCHEMA,
   parseFramingCheck,
+  SCENE_READ_INSTRUCTION,
+  SCENE_SCHEMA,
+  parseSceneNotes,
+  POSE_READ_INSTRUCTION,
+  POSE_SCHEMA,
+  parsePoseNotes,
   type Framing,
   wordCount,
   ZAID_MAX_WORDS,
@@ -1121,6 +1127,10 @@ interface NoPromptPlan {
   framing: Framing;
   handsInPockets: boolean;
   backView: boolean;
+  /** What the vision model read from the background photo: light, shadows, camera, standing spot. */
+  scene?: string;
+  /** What the vision model read from the pose photo: stance, hands, head, gaze. */
+  poseNotes?: string;
 }
 
 /**
@@ -1179,9 +1189,86 @@ async function noPromptPlan(
     handsInPockets: check.handsInPockets,
     backView: check.backView,
   };
+  // The reads are cached on the reference rows, so only the first batch after an upload pays for them.
+  if (plan.bg) plan.scene = await referenceNotes(env, plan.bg, "scene");
+  if (plan.pose) plan.poseNotes = await referenceNotes(env, plan.pose, "pose");
   task.brief = JSON.stringify(plan);
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", task.brief, task.id);
   return plan;
+}
+
+/**
+ * The vision read of a No prompt reference: for a background, the light, shadows, camera and the
+ * spot the model stands on; for a pose, stance, hands, head and gaze. Cached in refs.notes.
+ */
+export async function referenceNotes(
+  env: Env,
+  id: string,
+  kind: "scene" | "pose",
+): Promise<string | undefined> {
+  const row = await first<{ notes: string | null }>(
+    env.DB,
+    "SELECT notes FROM refs WHERE id = ?",
+    id,
+  );
+  if (row?.notes) return row.notes;
+  try {
+    const notes = await runReferenceRead(env, await referenceBytes(env, id), kind);
+    if (notes) await run(env.DB, "UPDATE refs SET notes = ? WHERE id = ?", notes, id);
+    return notes || undefined;
+  } catch (e) {
+    console.error(`[no prompt] ${kind} read failed`, errorMessage(e));
+    return undefined;
+  }
+}
+
+/**
+ * Cron warm-up: reads a few No prompt references that have no notes yet (photos added before the
+ * reads existed, or whose read failed at upload), so a batch never waits for them.
+ */
+export async function readPendingReferences(env: Env, limit = 4): Promise<number> {
+  const rows = await all<{ id: string; skill: string }>(
+    env.DB,
+    "SELECT id, skill FROM refs WHERE skill IN (?, ?) AND notes IS NULL ORDER BY created LIMIT ?",
+    NP_BACKGROUNDS,
+    NP_POSES,
+    limit,
+  );
+  if (!rows.length) return 0;
+  const google = (await resolveGoogleKey(env)).key;
+  const openai = (await resolveOpenAIKey(env)).key;
+  if (!google && !openai) return 0;
+  let done = 0;
+  await Promise.all(
+    rows.map(async (r) => {
+      const notes = await referenceNotes(env, r.id, r.skill === NP_POSES ? "pose" : "scene");
+      if (notes) done++;
+    }),
+  );
+  return done;
+}
+
+/** Runs the scene or pose read on an image and returns the sentences for the engine ("" if unreadable). */
+export async function runReferenceRead(
+  env: Env,
+  image: ImageBytes,
+  kind: "scene" | "pose",
+): Promise<string> {
+  const instruction = kind === "scene" ? SCENE_READ_INSTRUCTION : POSE_READ_INSTRUCTION;
+  const schema = kind === "scene" ? SCENE_SCHEMA : POSE_SCHEMA;
+  const parse = kind === "scene" ? parseSceneNotes : parsePoseNotes;
+  const google = (await resolveGoogleKey(env)).key;
+  const openai = (await resolveOpenAIKey(env)).key;
+  let text = "";
+  try {
+    if (google) text = await askVisionGoogle(google, instruction, [image], schema);
+    else if (openai) text = await askVisionOpenAI(openai, instruction, [image], fetch, "gpt-4.1-mini");
+  } catch (e) {
+    if (openai && google && googleUnavailable(e))
+      text = await askVisionOpenAI(openai, instruction, [image], fetch, "gpt-4.1-mini");
+    else throw e;
+  }
+  return parse(text);
 }
 
 /** The framing check on any image (uploads, and pose photos when they are added to the library). */
@@ -1335,6 +1422,7 @@ async function promptFor(
       plan?.backView ?? false,
       roles,
       edit,
+      { scene: plan?.scene, pose: plan?.poseNotes },
     );
   } else if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);

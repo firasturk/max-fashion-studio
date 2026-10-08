@@ -12,6 +12,7 @@ import {
   makeGoogleClient,
   makeOpenAIClient,
   runFramingCheck,
+  runReferenceRead,
 } from "./engine";
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
@@ -45,6 +46,7 @@ import {
   type Config,
   validateConfig,
   NP_POSES,
+  NP_BACKGROUNDS,
 } from "@shared/config";
 import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
@@ -538,22 +540,35 @@ studioRoutes.post("/references", async (c) => {
     await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: f.type } });
     // A pose photo is classified once (full, three-quarter, upper or lower body) so an upload only
     // ever borrows a pose with the same framing.
+    // Backgrounds and poses are read once as well (light, shadows, camera, standing spot; stance,
+    // hands, gaze) so every batch can tell the engine in words what the photo shows.
     let framing: string | null = null;
+    let notes: string | null = null;
+    const image = { bytes, mime: f.type };
     if (skill === NP_POSES) {
       try {
-        framing = (await runFramingCheck(c.env, { bytes, mime: f.type })).framing;
+        framing = (await runFramingCheck(c.env, image)).framing;
       } catch (e) {
         console.error("[references] pose check failed", errorMessage(e));
       }
     }
+    if (skill === NP_POSES || skill === NP_BACKGROUNDS) {
+      try {
+        notes =
+          (await runReferenceRead(c.env, image, skill === NP_POSES ? "pose" : "scene")) || null;
+      } catch (e) {
+        console.error("[references] read failed", errorMessage(e));
+      }
+    }
     await run(
       c.env.DB,
-      "INSERT INTO refs (id, skill, key, name, framing, created) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO refs (id, skill, key, name, framing, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
       id,
       skill,
       key,
       f.name.slice(0, 120),
       framing,
+      notes,
       now(),
     );
     added.push(id);

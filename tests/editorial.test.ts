@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   framingDirective,
   parseFramingCheck,
+  parseSceneNotes,
+  parsePoseNotes,
   buildBriefWithGoogle,
   buildBriefWithOpenAI,
   builderInstruction,
@@ -218,5 +220,56 @@ describe("verified framing", () => {
     expect(d).toContain("HANDS IN FRAME");
     expect(d).toContain("no hand in a pocket");
     expect(framingDirective("FULL_BODY", "coat", true)).toContain("pocket");
+  });
+});
+
+describe("no prompt reference reads", () => {
+  it("turns the background read into sentences for the engine", () => {
+    const notes = parseSceneNotes(
+      JSON.stringify({
+        location: "narrow old-town street",
+        timeOfDay: "golden hour",
+        lightSource: "direct sun",
+        lightDirection: "back-left",
+        lightHeight: "low",
+        hardness: "hard with crisp shadow edges",
+        colourTemperature: "warm golden",
+        shadowDirection: "toward the camera and to the right",
+        shadowLength: "long",
+        groundSurface: "cobblestone",
+        standingSpot: "in the middle of the lane in front of the blue door",
+        cameraHeight: "eye level",
+        lens: "normal",
+        depth: "cobbles in front, facades mid, archway behind",
+      }),
+    );
+    expect(notes).toContain("Location: narrow old-town street");
+    expect(notes).toContain("coming from the back-left of the camera");
+    expect(notes).toContain("Shadows on the ground fall toward the camera and to the right; and are long");
+    expect(notes).toContain("The model stands in the middle of the lane in front of the blue door");
+    expect(notes).toContain("Camera: eye level; normal lens");
+    expect(notes.endsWith(".")).toBe(true);
+  });
+
+  it("turns the pose read into sentences and gives nothing for an unreadable answer", () => {
+    const notes = parsePoseNotes(
+      "```json\n" +
+        JSON.stringify({
+          stance: "walking, one foot forward",
+          weight: "on the back leg",
+          torso: "turned three-quarter left, upright",
+          arms: "swinging naturally",
+          hands: "relaxed, open",
+          head: "turned slightly left",
+          gaze: "into the camera lens",
+          expression: "soft smile",
+        }) +
+        "\n```",
+    );
+    expect(notes).toBe(
+      "Stance: walking, one foot forward; weight: on the back leg; torso: turned three-quarter left, upright; arms: swinging naturally; hands: relaxed, open; head: turned slightly left; gaze: into the camera lens; expression: soft smile.",
+    );
+    expect(parsePoseNotes("not json")).toBe("");
+    expect(parseSceneNotes("{}")).toBe("");
   });
 });
