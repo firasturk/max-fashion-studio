@@ -256,7 +256,17 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
           attempts: task.attempts,
           lastStage: task.error,
         });
-        // An interrupted submission costs nothing, so it gets more automatic tries than an engine failure.
+        // An interrupted submission costs nothing: the attempt's estimate is taken back, and it
+        // gets more automatic tries than an engine failure.
+        const estimate =
+          estimateCost(taskConfig(config, task), 1, [task.card]).total +
+          (task.edit || task.recenter ? 0.008 : 0);
+        await run(
+          env.DB,
+          "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?",
+          estimate,
+          task.id,
+        );
         if (task.attempts <= MAX_AUTO_ATTEMPTS + 2)
           await requeue(env, task, "submission was interrupted, starting again");
         else
