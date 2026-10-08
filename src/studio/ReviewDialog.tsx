@@ -56,6 +56,35 @@ const REVISION_PRESETS: { label: string; text: string }[] = [
   },
 ];
 
+interface StoredBrief {
+  scene?: string;
+  pose?: string;
+  light?: string;
+  faceMode?: string;
+  subject?: string;
+}
+
+interface StoredPlan {
+  np: true;
+  framing?: string;
+  handsInPockets?: boolean;
+  backView?: boolean;
+  scene?: string;
+  poseNotes?: string;
+}
+
+/** The task's stored brief: a skill brief, a No prompt plan, or nothing when absent or unreadable. */
+function parseBrief(raw: string | null | undefined): StoredBrief | StoredPlan | null {
+  if (!raw) return null;
+  try {
+    const d = JSON.parse(raw) as unknown;
+    if (!d || typeof d !== "object") return null;
+    return d as StoredBrief | StoredPlan;
+  } catch {
+    return null;
+  }
+}
+
 export default function ReviewDialog({
   task,
   source,
@@ -92,15 +121,11 @@ export default function ReviewDialog({
   const [edit, setEdit] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
   const qa = task?.qa ? (JSON.parse(task.qa) as QA) : null;
-  const brief = task?.brief
-    ? (JSON.parse(task.brief) as {
-        scene: string;
-        pose: string;
-        light: string;
-        faceMode: string;
-        subject: string;
-      })
-    : null;
+  // The stored brief is a written skill brief in the skill approaches, or the No prompt plan
+  // (background, pose, framing). Anything unreadable is simply not shown.
+  const stored = parseBrief(task?.brief);
+  const brief = stored && !("np" in stored) ? stored : null;
+  const plan = stored && "np" in stored ? stored : null;
   const fabric = task?.card === 6;
   const inFlight = !!task && (task.status === "processing" || task.status === "queued");
 
@@ -234,11 +259,24 @@ export default function ReviewDialog({
                 {qa.notes && <span className="qa-notes-inline">{qa.notes}</span>}
               </div>
             )}
+            {plan && (
+              <div className="brief-box">
+                <strong>No prompt plan</strong>
+                <span>
+                  Framing: {(plan.framing ?? "full body").replace("_", " ").toLowerCase()}
+                  {plan.backView ? " · back view" : ""}
+                  {plan.handsInPockets ? " · hands in pockets" : ""}
+                </span>
+                {plan.scene && <span>Scene: {plan.scene}</span>}
+                {plan.poseNotes && <span>Pose: {plan.poseNotes}</span>}
+              </div>
+            )}
             {brief && (
               <div className="brief-box">
                 <strong>Skill brief</strong>
                 <span>
-                  {brief.subject} · {brief.faceMode.replace("_", " ").toLowerCase()}
+                  {brief.subject}
+                  {brief.faceMode ? ` · ${brief.faceMode.replace("_", " ").toLowerCase()}` : ""}
                 </span>
                 <span>Scene: {brief.scene}</span>
                 <span>Pose: {brief.pose}</span>
