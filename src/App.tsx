@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { get } from "./api";
+import { get, setNewBuildHandler } from "./api";
+import { toast } from "sonner";
 import type { User } from "@shared/types";
 import AuthScreen from "./auth/AuthScreen";
 import Studio from "./studio/Studio";
@@ -8,6 +9,14 @@ import BootScreen from "./studio/BootScreen";
 type Session = { user: User | null; registrationOpen: boolean };
 
 export default function App() {
+  useEffect(() => {
+    setNewBuildHandler(() =>
+      toast.info("The app was updated. Reload when convenient to keep everything working.", {
+        duration: Infinity,
+        action: { label: "Reload", onClick: () => window.location.reload() },
+      }),
+    );
+  }, []);
   const [session, setSession] = useState<Session | null | "loading">("loading");
 
   useEffect(() => {

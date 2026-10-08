@@ -3634,3 +3634,26 @@ textarea:focus {
   left: auto;
   right: 10px;
 }
+
+/* Recovery screen shown instead of a blank page when a screen fails to load or render. */
+.crash-screen {
+  max-width: 520px;
+  margin: 18vh auto 0;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--foreground);
+}
+.crash-screen h1 {
+  font-size: 1.35rem;
+  margin-bottom: 10px;
+}
+.crash-screen p {
+  color: var(--ink-500);
+  margin-bottom: 18px;
+}
+.crash-screen pre {
+  margin-top: 20px;
+  font-size: 11px;
+  color: var(--ink-400);
+  white-space: pre-wrap;
+}

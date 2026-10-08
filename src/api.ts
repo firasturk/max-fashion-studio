@@ -8,7 +8,26 @@ export class ApiError extends Error {
   }
 }
 
+let build: string | null = null;
+let announced = false;
+/** Called once when the server reports a newer build than the one this page was loaded from. */
+export let onNewBuild: (() => void) | null = null;
+export function setNewBuildHandler(fn: () => void): void {
+  onNewBuild = fn;
+}
+
+function watchBuild(r: Response): void {
+  const b = r.headers.get("X-Build");
+  if (!b) return;
+  if (build === null) build = b;
+  else if (b !== build && !announced) {
+    announced = true;
+    onNewBuild?.();
+  }
+}
+
 async function parse<T>(r: Response): Promise<T> {
+  watchBuild(r);
   const data = (await r.json().catch(() => ({}))) as { error?: string } & T;
   if (!r.ok) throw new ApiError(data.error || `Request failed (${r.status})`, r.status);
   return data;

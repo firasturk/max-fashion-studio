@@ -3,13 +3,18 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import "./styles.css";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
+import { markLoadedCleanly } from "./lib/lazy";
 import { initTheme } from "./theme";
 
 initTheme();
+markLoadedCleanly();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Toaster richColors position="bottom-right" />
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

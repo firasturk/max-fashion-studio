@@ -1,4 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazyScreen } from "@/lib/lazy";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Download,
@@ -60,9 +61,9 @@ import type {
   Task,
   User,
 } from "@shared/types";
-const AdminView = lazy(() => import("./AdminView"));
+const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
-const BatchesView = lazy(() => import("./BatchesView"));
+const BatchesView = lazyScreen(() => import("./BatchesView"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
@@ -71,9 +72,9 @@ import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
-const ReviewDialog = lazy(() => import("./ReviewDialog"));
+const ReviewDialog = lazyScreen(() => import("./ReviewDialog"));
 import type { EngineInfo } from "./ConnectionDialog";
-const ConnectionDialog = lazy(() => import("./ConnectionDialog"));
+const ConnectionDialog = lazyScreen(() => import("./ConnectionDialog"));
 
 export default function Studio({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const [config, setConfig] = useState<Config>(loadSavedConfig);

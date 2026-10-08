@@ -12,6 +12,17 @@ import { serveStatic } from "./static";
 
 type Variables = { user: User };
 
+import { ASSETS } from "./generated/assets";
+
+/** Changes with every deploy: the hashed script names are unique to a build. */
+const BUILD_ID = Object.keys(ASSETS)
+  .filter((k) => k.endsWith(".js"))
+  .sort()
+  .join("|")
+  .split("")
+  .reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
+  .toString(36);
+
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Same-origin guard for state-changing requests. Browsers always send Origin on cross-origin POSTs.
@@ -25,6 +36,8 @@ app.use("/api/*", async (c, next) => {
   }
   await next();
   c.header("Cache-Control", c.res.headers.get("Cache-Control") ?? "no-store");
+  // The build the page's scripts belong to: the client reloads when it changes under it.
+  c.header("X-Build", BUILD_ID);
 });
 
 app.route("/api/auth", authRoutes);

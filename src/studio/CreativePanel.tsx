@@ -1,3 +1,4 @@
+import { lazyScreen } from "@/lib/lazy";
 import {
   Bookmark,
   Check,
@@ -9,14 +10,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { del, get, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
-const SkillDialog = lazy(() => import("./SkillDialog"));
+const SkillDialog = lazyScreen(() => import("./SkillDialog"));
 import { ChevronDown, Plus, Star } from "lucide-react";
-const ReferenceLibrary = lazy(() => import("./ReferenceLibrary"));
+const ReferenceLibrary = lazyScreen(() => import("./ReferenceLibrary"));
 import {
   DEFAULT_PROMPT,
   SCENES,
