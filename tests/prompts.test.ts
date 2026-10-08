@@ -216,6 +216,22 @@ describe("compact retry prompt", () => {
   });
 });
 
+describe("no prompt approach", () => {
+  it("builds the fixed prompt from the background and pose photos", async () => {
+    const { buildNoPromptPrompt } = await import("../shared/prompts");
+    const p = buildNoPromptPrompt("LOWER_BODY", false, false, { background: true, pose: true });
+    expect(p).toContain("Image 2 is the BACKGROUND");
+    expect(p).toContain("Image 3 is the POSE reference");
+    expect(p).toContain(IDENTITY_RULE);
+    expect(p).toContain("lower body only");
+    expect(p).toContain("AVOID:");
+    expect(buildNoPromptPrompt("FULL_BODY", true, true, { background: true })).toContain(
+      "BACK VIEW",
+    );
+    expect(buildNoPromptPrompt("FULL_BODY", false, false, {})).toContain("keep the model's pose");
+  });
+});
+
 describe("new-model skill campaign", () => {
   it("tells the engine to replace the person and keep only what is worn", () => {
     const p = buildEditorial("Prompt body.", "blur", "", {}, true);

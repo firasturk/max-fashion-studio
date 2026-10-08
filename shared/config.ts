@@ -1,4 +1,4 @@
-export const MODES = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
+export const MODES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 export const MARKETS = ["auto", "arab", "european", "mixed"] as const;
 export const INPUT_TYPES = ["model", "mannequin", "flatlay"] as const;
 export const RATIOS = ["2:3", "3:4", "4:5", "1:1"] as const;
@@ -16,8 +16,16 @@ export function usesBuilder(mode: string): boolean {
 }
 /** Approaches that take product folders: only the _01/_02 shots are kept and each product runs as a set. */
 export function usesProductSets(mode: string): boolean {
-  return usesBuilder(mode);
+  return usesBuilder(mode) || isNoPrompt(mode);
 }
+/** No prompt: a background photo and a pose photo from the libraries replace the written prompt. */
+export const NO_PROMPT_MODE = "9";
+export function isNoPrompt(mode: string): boolean {
+  return mode === NO_PROMPT_MODE;
+}
+/** Reference-library ids of the No prompt approach. */
+export const NP_BACKGROUNDS = "np-bg";
+export const NP_POSES = "np-pose";
 /** The person in the upload is replaced by an AI-generated model; only what is worn is kept. */
 export function newModelMode(mode: string): boolean {
   return mode === "8";

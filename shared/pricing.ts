@@ -55,6 +55,7 @@ export function referencesFor(c: Config, card: number, revision = false): number
   let n = 1;
   if (c.mode === "1" && card > 1 && card < FABRIC_CARD) n += card > 2 ? 2 : 1;
   if (c.mode === "7") n += 1;
+  if (c.mode === "9") n += 2; // background photo + pose photo
   if (revision) n += 1;
   return n;
 }

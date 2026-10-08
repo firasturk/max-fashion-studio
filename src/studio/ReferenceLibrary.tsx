@@ -8,7 +8,16 @@ interface Reference {
   id: string;
   name: string | null;
   created: number;
+  /** Pose photos: the framing they are used for. */
+  framing?: string | null;
 }
+
+const FRAMING_LABEL: Record<string, string> = {
+  FULL_BODY: "Full body",
+  THREE_QUARTER: "¾ body",
+  UPPER_BODY: "Upper body",
+  LOWER_BODY: "Lower body",
+};
 
 /**
  * Inspiration photos for one skill. Each generation borrows background, pose and lighting from
@@ -119,6 +128,9 @@ export default function ReferenceLibrary({
               >
                 <X size={12} />
               </button>
+              {r.framing && (
+                <span className="ref-tag">{FRAMING_LABEL[r.framing] ?? r.framing}</span>
+              )}
             </figure>
           ))}
         </div>

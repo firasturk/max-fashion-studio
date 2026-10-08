@@ -799,9 +799,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       : ""
                     : mode === "7"
                       ? zaidDirection
-                      : usesBuilder(c.mode)
-                        ? DEFAULT_PROMPT
-                        : c.prompt,
+                      : mode === "9"
+                        ? ""
+                        : usesBuilder(c.mode) || !c.prompt
+                          ? DEFAULT_PROMPT
+                          : c.prompt,
                 }))
               }
             />

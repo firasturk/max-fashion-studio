@@ -9,6 +9,7 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "7": "Fashion imagery written per image by the prompt builder following Zaid's creative direction. The outfit is the hero and is never changed.",
   "8": "Premium fashion editorial built by the prompt builder from the attached photo, worn by a new AI-generated model. Only the outfit, footwear, accessories and bags come from the photo; the person is replaced entirely.",
   "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
+  "9": "No prompt: the model from the attached photo is placed in the attached background photo and takes the pose of the attached pose photo; the fixed rules do the rest.",
   "4": "Replace ONLY the background of the existing real model photograph. Preserve the model's face, body, pose, hair, hands, framing and every visible garment detail pixel for pixel. Do not redesign, recolour, retouch or move the model or garment. Match lighting and perspective of the new background to the subject.",
 };
 
@@ -58,6 +59,10 @@ export interface PromptImages {
   mood?: boolean;
   /** true when an already generated image of the same product set is attached after the reference */
   set?: boolean;
+  /** No prompt: a background photo is attached as the next image */
+  background?: boolean;
+  /** No prompt: a pose photo is attached after the background */
+  pose?: boolean;
 }
 
 /** Scene for a given card, cycling through the scene list. */
@@ -177,6 +182,47 @@ export const BLEND_RULE =
 /** Engine-facing background detail rule for Zaid creative direction. */
 export const DETAIL_RULE =
   "BACKGROUND DETAIL: render the whole background in full, crisp, high-resolution detail: architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces and distant layers all sharply defined and rich. Only a gentle, natural depth of field that keeps the entire setting readable; never an empty, plain, smeared, washed-out or heavily blurred background.";
+
+/**
+ * No prompt approach: the engine gets the model photo, a background photo and a pose photo, and a
+ * short fixed prompt instead of a written one. Light, shadows and colour come from the background
+ * photo; the stance comes from the pose photo; everything about the person from image 1.
+ */
+export function buildNoPromptPrompt(
+  framing: string | undefined,
+  handsInPockets: boolean,
+  backView: boolean,
+  images: PromptImages,
+  edit = "",
+): string {
+  let idx = 2;
+  const parts = [
+    "Catalogue lifestyle photograph of the model from image 1, photographed on location. Image 1 is the model and the outfit: every garment, the footwear and any accessory stay exactly as worn, nothing added, removed or restyled.",
+    IDENTITY_RULE,
+    TATTOO_RULE,
+  ];
+  if (images.background)
+    parts.push(
+      `Image ${idx++} is the BACKGROUND: place the model inside exactly this location, keeping its architecture, surfaces, depth, props, time of day and weather as they are; add nothing and remove nothing from it. LIGHT: the light source, its direction and height, its hardness, the shadow direction and length, the colour temperature and the overall exposure come from this background photo; the model must be lit by that same light with matching shadows on the ground and on the body, matching contrast, grain and colour grade, so the model and the background read as one photograph. Never a cutout or pasted-on look.`,
+    );
+  if (images.pose)
+    parts.push(
+      `Image ${idx++} is the POSE reference: copy only the body pose from it: stance, weight distribution, torso angle, each arm and hand, leg positions and head angle. Never copy its clothing, face, hair, body shape, accessories or background; the person in the output is the person from image 1 in the outfit from image 1.`,
+    );
+  else parts.push("POSE: keep the model's pose as in image 1, natural and relaxed.");
+  parts.push(framingRule(framing, handsInPockets));
+  if (backView) parts.push(BACK_VIEW_RULE);
+  parts.push(CENTERING);
+  if (edit)
+    parts.push(
+      `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
+    );
+  if (images.revision) parts.push("The LAST image is the existing result to revise.");
+  parts.push(
+    `AVOID: ${["different face, altered facial features, changed hairstyle, different hair length or colour", "tattoos, tattoo, body ink", "cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges", "clothing or accessories from the pose photo, a second person", handsInPockets ? "" : "hands in pockets"].filter(Boolean).join(", ")}`,
+  );
+  return parts.join("\n\n");
+}
 
 /** Engine-facing back-view rule: a model photographed from behind stays photographed from behind. */
 export const BACK_VIEW_RULE =

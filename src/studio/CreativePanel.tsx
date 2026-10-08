@@ -661,56 +661,76 @@ export default function CreativePanel({
         </>
       )}
 
-      <div className="field-row">
-        <label className="field-label" htmlFor="prompt">
-          {config.mode === "4"
-            ? "Background direction"
-            : config.mode === "6"
-              ? "Extra instructions (optional)"
-              : isSkillCampaign(config.mode)
-                ? "Extra requests for this skill (optional)"
-                : config.mode === "7"
-                  ? "Extra direction for this batch (optional)"
-                  : "Background & lifestyle prompt"}
-        </label>
-        {config.mode === "7" ? (
-          <span className="field-row-actions">
-            <button
-              className="text-button"
-              disabled={locked || savingDirection || !config.prompt.trim()}
-              onClick={() => void saveDirection()}
-            >
-              {savingDirection ? "Saving…" : "Save as default"}
-            </button>
-            <button
-              className="text-button"
-              disabled={locked}
-              onClick={() => onChange({ prompt: defaultDirection })}
-            >
-              Reset
-            </button>
-          </span>
-        ) : (
-          <button
-            className="text-button"
+      {config.mode === "9" && (
+        <>
+          <div className="prompt-tip">
+            No prompt is written. Each image takes a background from the library below and a pose
+            with the same framing as the upload. Both shots of a product share one background.
+            Backgrounds should be clean plates without people, 2K or larger; poses work best as one
+            person on a plain background.
+          </div>
+          <Suspense fallback={null}>
+            <ReferenceLibrary skill="np-bg" title="Backgrounds" />
+          </Suspense>
+          <Suspense fallback={null}>
+            <ReferenceLibrary skill="np-pose" title="Poses (full, ¾, upper or lower body)" />
+          </Suspense>
+        </>
+      )}
+      {config.mode !== "9" && (
+        <>
+          <div className="field-row">
+            <label className="field-label" htmlFor="prompt">
+              {config.mode === "4"
+                ? "Background direction"
+                : config.mode === "6"
+                  ? "Extra instructions (optional)"
+                  : isSkillCampaign(config.mode)
+                    ? "Extra requests for this skill (optional)"
+                    : config.mode === "7"
+                      ? "Extra direction for this batch (optional)"
+                      : "Background & lifestyle prompt"}
+            </label>
+            {config.mode === "7" ? (
+              <span className="field-row-actions">
+                <button
+                  className="text-button"
+                  disabled={locked || savingDirection || !config.prompt.trim()}
+                  onClick={() => void saveDirection()}
+                >
+                  {savingDirection ? "Saving…" : "Save as default"}
+                </button>
+                <button
+                  className="text-button"
+                  disabled={locked}
+                  onClick={() => onChange({ prompt: defaultDirection })}
+                >
+                  Reset
+                </button>
+              </span>
+            ) : (
+              <button
+                className="text-button"
+                disabled={locked}
+                onClick={() => onChange({ prompt: DEFAULT_PROMPT })}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          <textarea
+            id="prompt"
+            className="prompt"
+            value={config.prompt}
             disabled={locked}
-            onClick={() => onChange({ prompt: DEFAULT_PROMPT })}
-          >
-            Reset
-          </button>
-        )}
-      </div>
-      <textarea
-        id="prompt"
-        className="prompt"
-        value={config.prompt}
-        disabled={locked}
-        onChange={(e) => onChange({ prompt: e.target.value })}
-      />
-      {!isSkillCampaign(config.mode) && config.mode !== "6" && config.mode !== "7" && (
-        <div className="prompt-tip">
-          Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
-        </div>
+            onChange={(e) => onChange({ prompt: e.target.value })}
+          />
+          {!isSkillCampaign(config.mode) && config.mode !== "6" && config.mode !== "7" && (
+            <div className="prompt-tip">
+              Each image also gets one of the built-in scenes: {SCENES.slice(0, 2).join(" ")} …
+            </div>
+          )}
+        </>
       )}
 
       <div className="two-fields">

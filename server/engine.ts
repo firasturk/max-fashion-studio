@@ -25,6 +25,7 @@ import {
   buildPrompt,
   buildCompactPrompt,
   buildEditorialPrompt,
+  buildNoPromptPrompt,
   RECENTER_SUFFIX,
   type PromptImages,
 } from "@shared/prompts";
@@ -39,12 +40,13 @@ import {
   FRAMING_CHECK_INSTRUCTION,
   FRAMING_SCHEMA,
   parseFramingCheck,
+  type Framing,
   wordCount,
   ZAID_MAX_WORDS,
   ZAID_MIN_WORDS,
   type FramingCheck,
 } from "./editorial";
-import { FABRIC_CARD, type Config } from "@shared/config";
+import { FABRIC_CARD, isNoPrompt, NP_BACKGROUNDS, NP_POSES, type Config } from "@shared/config";
 import type { QA } from "@shared/types";
 import {
   getSetting,
@@ -1111,6 +1113,107 @@ async function prepareBriefs(
   return candidates.filter((t) => ready.has(t.id));
 }
 
+/** What one No prompt image is built from; stored on the task so retries reuse the same choice. */
+interface NoPromptPlan {
+  np: true;
+  bg: string | null;
+  pose: string | null;
+  framing: Framing;
+  handsInPockets: boolean;
+  backView: boolean;
+}
+
+/**
+ * Picks the background and the pose for a No prompt image and stores the choice on the task.
+ * Backgrounds rotate by product (both shots of a product share one; the N-th product takes the
+ * N-th photo, wrapping), so a batch spreads over the whole library without repeats until every
+ * background is used. The pose comes from the photos whose framing matches the upload's.
+ */
+async function noPromptPlan(
+  env: Env,
+  batch: BatchRow,
+  task: TaskRow,
+  source: SourceRow,
+): Promise<NoPromptPlan> {
+  if (task.brief) {
+    const stored = JSON.parse(task.brief) as Partial<NoPromptPlan>;
+    if (stored.np) return stored as NoPromptPlan;
+  }
+  const check = await uploadFraming(env, source, await sourceBytes(env, source));
+  const backgrounds = await all<{ id: string }>(
+    env.DB,
+    "SELECT id FROM refs WHERE skill = ? ORDER BY created",
+    NP_BACKGROUNDS,
+  );
+  if (!backgrounds.length)
+    throw new StudioError(
+      "The No prompt approach needs background photos: add them in the Backgrounds library first.",
+      428,
+      true,
+    );
+  const poses = await all<{ id: string; framing: string | null }>(
+    env.DB,
+    "SELECT id, framing FROM refs WHERE skill = ? ORDER BY created",
+    NP_POSES,
+  );
+  const wanted = check.framing;
+  const fallback = wanted === "THREE_QUARTER" ? "FULL_BODY" : wanted;
+  const pool =
+    poses.filter((p) => p.framing === wanted).length > 0
+      ? poses.filter((p) => p.framing === wanted)
+      : poses.filter((p) => p.framing === fallback).length > 0
+        ? poses.filter((p) => p.framing === fallback)
+        : poses;
+  const names = await all<{ name: string }>(
+    env.DB,
+    "SELECT name FROM sources WHERE batch = ? ORDER BY name",
+    batch.id,
+  );
+  const products = [...new Set(names.map((n) => productKey(n.name)))];
+  const idx = Math.max(0, products.indexOf(productKey(source.name)));
+  const plan: NoPromptPlan = {
+    np: true,
+    bg: backgrounds[(idx + task.card - 1) % backgrounds.length].id,
+    pose: pool.length ? pool[(idx + task.card - 1) % pool.length].id : null,
+    framing: check.framing,
+    handsInPockets: check.handsInPockets,
+    backView: check.backView,
+  };
+  task.brief = JSON.stringify(plan);
+  await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", task.brief, task.id);
+  return plan;
+}
+
+/** The framing check on any image (uploads, and pose photos when they are added to the library). */
+export async function runFramingCheck(env: Env, image: ImageBytes): Promise<FramingCheck> {
+  const google = (await resolveGoogleKey(env)).key;
+  const openai = (await resolveOpenAIKey(env)).key;
+  let text = "";
+  try {
+    if (google)
+      text = await askVisionGoogle(google, FRAMING_CHECK_INSTRUCTION, [image], FRAMING_SCHEMA);
+    else if (openai)
+      text = await askVisionOpenAI(
+        openai,
+        FRAMING_CHECK_INSTRUCTION,
+        [image],
+        fetch,
+        "gpt-4.1-mini",
+      );
+  } catch (e) {
+    if (openai && google && googleUnavailable(e))
+      text = await askVisionOpenAI(
+        openai,
+        FRAMING_CHECK_INSTRUCTION,
+        [image],
+        fetch,
+        "gpt-4.1-mini",
+      );
+    else throw e;
+  }
+  return parseFramingCheck(text);
+}
+
 /**
  * The verified crop of an upload (FULL_BODY / UPPER_BODY / LOWER_BODY), from a small dedicated
  * vision call, cached on the source row. Runs before any prompt is written.
@@ -1223,7 +1326,17 @@ async function promptFor(
   roles: PromptImages,
 ): Promise<string> {
   let prompt: string;
-  if (SKILL_MODES.has(config.mode)) {
+  if (isNoPrompt(config.mode)) {
+    // The plan (background, pose, verified framing) was stored on the task when the images were gathered.
+    const plan = task.brief ? (JSON.parse(task.brief) as NoPromptPlan) : null;
+    prompt = buildNoPromptPrompt(
+      plan?.framing,
+      plan?.handsInPockets ?? false,
+      plan?.backView ?? false,
+      roles,
+      edit,
+    );
+  } else if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
     const stored = source.framing?.split("|") ?? [];
     const pockets = stored[2] === "true";
@@ -1278,6 +1391,8 @@ async function submitTask(
     revision: false,
     mood: false,
     set: false,
+    background: false,
+    pose: false,
   };
 
   if (config.mode === "3" && config.identity) {
@@ -1321,6 +1436,17 @@ async function submitTask(
     if (sibling) {
       imageUrls.push(await outputEngineUrl(env, client, sibling));
       roles.set = true;
+    }
+  }
+  if (isNoPrompt(config.mode)) {
+    const plan = await noPromptPlan(env, batch, task, source);
+    if (plan.bg) {
+      imageUrls.push(await referenceEngineUrl(env, client, plan.bg));
+      roles.background = true;
+    }
+    if (plan.pose) {
+      imageUrls.push(await referenceEngineUrl(env, client, plan.pose));
+      roles.pose = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -1379,6 +1505,8 @@ async function submitOpenAITask(
     revision: false,
     mood: false,
     set: false,
+    background: false,
+    pose: false,
   };
 
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
@@ -1418,6 +1546,17 @@ async function submitOpenAITask(
     if (sibling) {
       images.push(await outputBytes(env, sibling));
       roles.set = true;
+    }
+  }
+  if (isNoPrompt(config.mode)) {
+    const plan = await noPromptPlan(env, batch, task, source);
+    if (plan.bg) {
+      images.push(await referenceBytes(env, plan.bg));
+      roles.background = true;
+    }
+    if (plan.pose) {
+      images.push(await referenceBytes(env, plan.pose));
+      roles.pose = true;
     }
   }
   const edit = task.edit?.trim() ?? "";
@@ -1756,6 +1895,8 @@ async function collectReferenceKeys(
     revision: false,
     mood: false,
     set: false,
+    background: false,
+    pose: false,
   };
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<{ output: string | null }>(
@@ -1800,6 +1941,17 @@ async function collectReferenceKeys(
     if (sibling?.output) {
       keys.push(sibling.output);
       roles.set = true;
+    }
+  }
+  if (isNoPrompt(config.mode)) {
+    const plan = await noPromptPlan(env, batch, task, source);
+    for (const id of [plan.bg, plan.pose]) {
+      if (!id) continue;
+      const ref = await first<{ key: string }>(env.DB, "SELECT key FROM refs WHERE id = ?", id);
+      if (!ref) throw new StudioError("A No prompt library photo is missing.", 500);
+      keys.push(ref.key);
+      if (id === plan.bg) roles.background = true;
+      else roles.pose = true;
     }
   }
   const edit = task.edit?.trim() ?? "";

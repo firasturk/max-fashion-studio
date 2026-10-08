@@ -3657,3 +3657,17 @@ textarea:focus {
   color: var(--ink-400);
   white-space: pre-wrap;
 }
+
+/* Framing tag on a pose photo in the No prompt library. */
+.ref-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.6);
+  pointer-events: none;
+}

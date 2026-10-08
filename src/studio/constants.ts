@@ -7,11 +7,12 @@ import {
   UserRound,
   UserRoundPen,
   Wand2,
+  Images,
   type LucideIcon,
 } from "lucide-react";
 
 export interface ModeInfo {
-  id: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8";
+  id: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
   title: string;
   caption: string;
   icon: LucideIcon;
@@ -92,6 +93,16 @@ export const NEW_MODEL_MODE: ModeInfo = {
     "Identical to Skill campaign (same skills, reference libraries and extra requests), except the person is replaced: only the outfit, footwear, accessories and bags come from your photo. The face, hair and body are an entirely new AI-generated model.",
 };
 MODES.push(NEW_MODEL_MODE);
+
+export const NO_PROMPT_MODE_INFO: ModeInfo = {
+  id: "9",
+  title: "No prompt",
+  caption: "Backgrounds + poses · no prompt builder",
+  icon: Images,
+  detail:
+    "Fastest approach: no prompt is written. Each image takes one photo from your Backgrounds library and one pose from your Poses library (matched to the upload's framing: full, three-quarter, upper or lower body). The engine keeps the model, face, hair and outfit from your photo, places the model in the background and lights the model by the background's own light.",
+};
+MODES.push(NO_PROMPT_MODE_INFO);
 
 export const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",

@@ -11,6 +11,7 @@ import {
   makeFalClient,
   makeGoogleClient,
   makeOpenAIClient,
+  runFramingCheck,
 } from "./engine";
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
@@ -37,7 +38,14 @@ import {
   HERO_KEYS,
   heroStamp,
 } from "./settings";
-import { MODES, cardsPerSource, createsTasks, type Config, validateConfig } from "@shared/config";
+import {
+  MODES,
+  cardsPerSource,
+  createsTasks,
+  type Config,
+  validateConfig,
+  NP_POSES,
+} from "@shared/config";
 import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
@@ -503,9 +511,14 @@ const skillRef = z.object({ skill: z.string().regex(/^[a-z0-9-]{1,40}$/) });
 
 studioRoutes.get("/references", async (c) => {
   const { skill } = skillRef.parse({ skill: c.req.query("skill") ?? "" });
-  const items = await all<{ id: string; name: string | null; created: number }>(
+  const items = await all<{
+    id: string;
+    name: string | null;
+    created: number;
+    framing: string | null;
+  }>(
     c.env.DB,
-    "SELECT id, name, created FROM refs WHERE skill = ? ORDER BY created",
+    "SELECT id, name, created, framing FROM refs WHERE skill = ? ORDER BY created",
     skill,
   );
   return c.json({ references: items });
@@ -521,14 +534,26 @@ studioRoutes.post("/references", async (c) => {
     const f = checkImage(raw, MAX_REFERENCE_UPLOAD, "Reference");
     const id = uuid();
     const key = `refs/${skill}/${id}`;
-    await c.env.BUCKET.put(key, f.stream(), { httpMetadata: { contentType: f.type } });
+    const bytes = await f.arrayBuffer();
+    await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: f.type } });
+    // A pose photo is classified once (full, three-quarter, upper or lower body) so an upload only
+    // ever borrows a pose with the same framing.
+    let framing: string | null = null;
+    if (skill === NP_POSES) {
+      try {
+        framing = (await runFramingCheck(c.env, { bytes, mime: f.type })).framing;
+      } catch (e) {
+        console.error("[references] pose check failed", errorMessage(e));
+      }
+    }
     await run(
       c.env.DB,
-      "INSERT INTO refs (id, skill, key, name, created) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO refs (id, skill, key, name, framing, created) VALUES (?, ?, ?, ?, ?, ?)",
       id,
       skill,
       key,
       f.name.slice(0, 120),
+      framing,
       now(),
     );
     added.push(id);
