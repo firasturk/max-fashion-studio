@@ -139,8 +139,8 @@ const SCHEMA = {
 };
 
 /** Zaid creative direction prompts are long-form: this many words at least. */
-export const ZAID_MIN_WORDS = 1200;
-export const ZAID_MAX_WORDS = 1400;
+export const ZAID_MIN_WORDS = 800;
+export const ZAID_MAX_WORDS = 1000;
 
 export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;

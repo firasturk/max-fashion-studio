@@ -51,8 +51,10 @@ export function useBatch() {
     if (!id) return;
     // The tick drives generation and the server holds it open until the images it started are
     // saved (up to a minute or two), so a separate light refresh keeps the view current meanwhile.
+    // A hidden tab keeps driving the batch: browsers slow a hidden tab's timer to about once a
+    // minute, and the server holds each tick for minutes of work, so generation carries on.
     const tick = async () => {
-      if (ticking.current || document.hidden) return;
+      if (ticking.current) return;
       ticking.current = true;
       try {
         apply(id, await post<BatchResponse>("/api/studio/tick", { batch: id }));
@@ -64,6 +66,11 @@ export function useBatch() {
     };
     void tick();
     const timer = setInterval(tick, TICK_MS);
+    // Coming back to the tab fires a tick at once instead of waiting for the slowed timer.
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     const refresher = setInterval(async () => {
       if (!ticking.current || document.hidden) return;
       try {
@@ -75,6 +82,7 @@ export function useBatch() {
     return () => {
       clearInterval(timer);
       clearInterval(refresher);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [active, apply, view.batch?.id]);
 

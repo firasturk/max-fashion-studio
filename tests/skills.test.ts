@@ -83,9 +83,9 @@ describe("zaid creative direction", () => {
     expect(text).toContain("(11) IDENTITY");
     expect(text).toContain("(12) TATTOOS");
     expect(text).toContain("golden-hour sun");
-    expect(text).toContain("1200-1400 words");
+    expect(text).toContain("800-1000 words");
     expect(text).not.toContain("600-1100 words");
-    expect(s.template).toContain("1,200-1,400 words");
+    expect(s.template).toContain("800-1,000 words");
     expect(
       builderInstruction({ ...req, skill: "zaid", expand: "YOUR PREVIOUS DRAFT WAS REJECTED" }),
     ).toContain("YOUR PREVIOUS DRAFT WAS REJECTED");
