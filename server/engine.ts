@@ -25,6 +25,7 @@ import {
   buildPrompt,
   buildCompactPrompt,
   buildEditorialPrompt,
+  NANO_BANANA_NOTE,
   RECENTER_SUFFIX,
   type PromptImages,
 } from "@shared/prompts";
@@ -878,6 +879,7 @@ async function ensureBrief(
     uploadFraming: check.framing,
     visibleGarments: check.garments,
     handsInPockets: check.handsInPockets,
+    backView: check.backView,
   };
   // A saved look leads instead of the reference photos: same scene, pose and light, no mood photo.
   const look = config.look
@@ -1121,15 +1123,28 @@ async function uploadFraming(
   image: ImageBytes,
 ): Promise<FramingCheck> {
   if (source.framing) {
-    const [framing, face, third, ...rest] = source.framing.split("|");
-    // Current form: framing|face|pockets|garments. Rows from before the pockets flag have three parts.
-    const hasPockets = third === "true" || third === "false";
-    if (framing === "FULL_BODY" || framing === "UPPER_BODY" || framing === "LOWER_BODY")
+    const [framing, face, third, fourth, ...rest] = source.framing.split("|");
+    // Current form: framing|face|pockets|back|garments. Older rows lack the back flag, or the
+    // pockets flag too; a flag is always "true"/"false", garments never are.
+    const isFlag = (v: string | undefined) => v === "true" || v === "false";
+    const hasPockets = isFlag(third);
+    const hasBack = hasPockets && isFlag(fourth);
+    if (
+      framing === "FULL_BODY" ||
+      framing === "THREE_QUARTER" ||
+      framing === "UPPER_BODY" ||
+      framing === "LOWER_BODY"
+    )
       return {
         framing,
         faceVisible: face === "true",
         handsInPockets: hasPockets ? third === "true" : false,
-        garments: hasPockets ? rest.join("|") : [third, ...rest].filter(Boolean).join("|"),
+        backView: hasBack ? fourth === "true" : false,
+        garments: hasBack
+          ? rest.join("|")
+          : hasPockets
+            ? [fourth, ...rest].filter(Boolean).join("|")
+            : [third, fourth, ...rest].filter(Boolean).join("|"),
       };
   }
   const google = (await resolveGoogleKey(env)).key;
@@ -1161,7 +1176,7 @@ async function uploadFraming(
   await run(
     env.DB,
     "UPDATE sources SET framing = ? WHERE id = ?",
-    `${result.framing}|${result.faceVisible}|${result.handsInPockets}|${result.garments}`,
+    `${result.framing}|${result.faceVisible}|${result.handsInPockets}|${result.backView}|${result.garments}`,
     source.id,
   );
   return result;
@@ -1212,7 +1227,9 @@ async function promptFor(
   let prompt: string;
   if (SKILL_MODES.has(config.mode)) {
     const brief = await ensureBrief(env, batch, config, task, source);
-    const pockets = source.framing?.split("|")[2] === "true";
+    const stored = source.framing?.split("|") ?? [];
+    const pockets = stored[2] === "true";
+    const backView = stored[3] === "true";
     const child = isChildSubject(brief.subject, config.skill);
     // After a content checker refused the full prompt, the retry sends a short plain one.
     const compact = /content check/i.test(task.error ?? "");
@@ -1234,7 +1251,10 @@ async function promptFor(
           brief.framing,
           pockets,
           config.mode === "7",
+          backView,
         );
+    // Nano Banana 2.1 and Nano Banana Pro read the light loosely; both get the same explicit note.
+    if (isGoogleModel(taskConfig(config, task).model)) prompt += `\n\n${NANO_BANANA_NOTE}`;
     if (child) prompt = sanitizeChildPrompt(prompt);
   } else {
     prompt = buildPrompt(config, task.card, edit, roles);

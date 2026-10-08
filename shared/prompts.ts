@@ -178,6 +178,17 @@ export const BLEND_RULE =
 export const DETAIL_RULE =
   "BACKGROUND DETAIL: render the whole background in full, crisp, high-resolution detail: architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces and distant layers all sharply defined and rich. Only a gentle, natural depth of field that keeps the entire setting readable; never an empty, plain, smeared, washed-out or heavily blurred background.";
 
+/** Engine-facing back-view rule: a model photographed from behind stays photographed from behind. */
+export const BACK_VIEW_RULE =
+  "BACK VIEW: the reference photo shows the model from behind. Keep exactly this back view: the model faces away from the camera, no face is shown, the back of the hairstyle and the back of every garment are what is seen; never turn the model around, never add a face or a profile.";
+
+/**
+ * Nano Banana (Google) reads the lighting section loosely and tends to flatten it; both Nano
+ * Banana 2.1 and Nano Banana Pro get the same explicit instruction so their light matches.
+ */
+export const NANO_BANANA_NOTE =
+  "ENGINE NOTE: render the lighting exactly as the LIGHT section states it: the named light source (sun or window or studio), its direction, height, hardness, shadow length and colour temperature are binding. Do not replace it with flat, even or neutral lighting, do not soften a hard sun into overcast, do not change the time of day. Keep the same light on the model and on the background.";
+
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string, handsInPockets = false): string {
   const hands = handsInPockets
@@ -191,6 +202,11 @@ export function framingRule(framing?: string, handsInPockets = false): string {
   if (framing === "LOWER_BODY")
     return (
       "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. The hands are visible inside the frame, relaxed and natural, in a position that fits the scene and the body's movement; never cropped out or raised above the crop line." +
+      hands
+    );
+  if (framing === "THREE_QUARTER")
+    return (
+      "FRAMING LOCK: three-quarter body, from above the head down to the same line as the reference photo (between mid-thigh and just below the knees). Do not show or invent feet or footwear; nothing outside the reference crop exists in this image." +
       hands
     );
   if (framing === "FULL_BODY")
@@ -214,12 +230,14 @@ export function buildEditorialPrompt(
   framing?: string,
   handsInPockets = false,
   relaxed = false,
+  backView = false,
 ): string {
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
   else parts.push(IDENTITY_RULE);
   parts.push(TATTOO_RULE);
   parts.push(framingRule(framing, handsInPockets));
+  if (backView) parts.push(BACK_VIEW_RULE);
   // Zaid creative direction: hair follows the direction; the light is bright but balanced.
   if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE, BLEND_RULE);
   else parts.push(HAIR_RULE);
@@ -236,7 +254,7 @@ export function buildEditorialPrompt(
   let idx = 2;
   if (images.mood)
     roles.push(
-      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, an upper-body crop stays upper-body, a lower-body crop stays lower-body).${
+      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, three-quarter stays three-quarter, an upper-body crop stays upper-body, a lower-body crop stays lower-body, a back view stays a back view).${
         relaxed && framing === "FULL_BODY"
           ? " For this full-body image reproduce the reference's camera angle, camera height, tilt and distance exactly as the prompt describes them."
           : ""

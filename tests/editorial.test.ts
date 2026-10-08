@@ -182,8 +182,16 @@ describe("verified framing", () => {
       framing: "LOWER_BODY",
       faceVisible: false,
       handsInPockets: false,
+      backView: false,
       garments: "black trousers, sneakers",
     });
+    const tq = parseFramingCheck(
+      '{"framing":"UPPER_BODY","headVisible":true,"kneesVisible":true,"feetVisible":false,"backView":true,"faceVisible":false,"handsInPockets":false,"garments":"knit dress"}',
+    );
+    expect(tq.framing).toBe("THREE_QUARTER");
+    expect(tq.backView).toBe(true);
+    expect(framingDirective("THREE_QUARTER", "knit dress", false, true)).toContain("BACK VIEW");
+    expect(framingDirective("THREE_QUARTER", "knit dress")).toContain("THREE-QUARTER image");
     expect(parseFramingCheck("nonsense").framing).toBe("FULL_BODY");
     // What is inside the picture overrides the label: no head but feet is lower body.
     expect(

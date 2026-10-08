@@ -148,6 +148,12 @@ describe("framing lock", () => {
       "may rest in a pocket",
     );
     expect(buildEditorial("P.", "", "", {}, false, true, "FULL_BODY")).toContain("no added shoes");
+    expect(buildEditorial("P.", "", "", {}, false, true, "THREE_QUARTER")).toContain(
+      "three-quarter body",
+    );
+    expect(
+      buildEditorial("P.", "", "", {}, false, true, "UPPER_BODY", false, false, true),
+    ).toContain("BACK VIEW");
     expect(buildEditorial("P.", "")).toContain("FRAMING LOCK");
   });
 });

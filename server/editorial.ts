@@ -20,13 +20,13 @@ export interface EditorialBrief {
   negative: string;
   /** Id of the reference-library photo attached to this run, if any. */
   mood?: string;
-  /** FULL_BODY | UPPER_BODY | LOWER_BODY, read from the upload and locked for the output. */
+  /** FULL_BODY | THREE_QUARTER | UPPER_BODY | LOWER_BODY, read from the upload and locked for the output. */
   framing?: string;
   /** Task id of the already generated image of the same product set this one is matched to. */
   setOf?: string;
 }
 
-export type Framing = "FULL_BODY" | "UPPER_BODY" | "LOWER_BODY";
+export type Framing = "FULL_BODY" | "THREE_QUARTER" | "UPPER_BODY" | "LOWER_BODY";
 
 export interface EditorialRequest {
   /** Zaid creative direction: Zaid's prompt structure, examples and rules around the chosen skill. */
@@ -39,6 +39,8 @@ export interface EditorialRequest {
   visibleGarments?: string;
   /** Verified: the upload shows a hand in a pocket. Only then may the output. */
   handsInPockets?: boolean;
+  /** Verified: the upload shows the model from behind; the output keeps the back view. */
+  backView?: boolean;
   /** Second attempt note when the first draft was too short (Zaid creative direction). */
   expand?: string;
   /** A saved prompt that leads this run: its scene, pose, light and style are reused as written. */
@@ -202,12 +204,12 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `EXTRA REQUESTS FROM THE USER for this batch (apply them to the prompt; they override the skill's direction and library but never the fixed rules): ${req.preference}`
       : "No extra requests from the user.",
     relaxed
-      ? "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) OUTFIT: everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented; (2) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload stays upper body and ends at the same line with no legs or footwear drawn, a lower-body upload stays lower body and starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible; (3) a reference image contributes only setting, pose and stance, lighting and camera angle; (4) never copy hats, bags, sunglasses, jewellery or props from a reference; (5) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible; (11) IDENTITY: when the model is kept, the face and facial structure are reproduced exactly as in image 1 (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones, skin tone, age), and the hairstyle is kept exactly (length, colour, parting, texture, styling); write this explicitly in the FACE & HAIR section and never describe a different or idealised face or a restyled hair; (12) TATTOOS: any tattoo visible on the person in image 1 is removed in the output; state in the prompt that the skin is clean with no tattoo or ink, and add tattoos to the AVOID list; (6) LIGHT: real sun, either golden-hour sun (low, warm, long soft shadows) or midday sun (high, clean, short shadows), chosen per image and named in the prompt; never overcast, dusk, night or artificial light; the scene is bright but balanced, with open shadows and no blown-out highlights, no dim, murky, heavy-shadow or high-contrast scenes; the model is lit evenly and the garment colours read true; (9) INTEGRATION: the model is a real part of the scene, not a cutout: the same sun direction, colour temperature and contrast on the model as on the background, feet planted on the ground with a true contact shadow and a cast shadow that matches the scene's shadows, matching perspective and camera height, the same grain, sharpness and colour grade on model and background, reflected light and ambient colour from the surroundings on skin and garment, and described in the prompt; (10) CAMERA ANGLE: for a FULL_BODY upload the camera angle, camera height, tilt, lens feel and distance are taken from the attached reference photo (image 2) and described explicitly in the CAMERA section (low angle from knee height, eye level, slightly high, three-quarter view, wide with environment, tight full body); the library's angles are meant to vary across the set, so never default to a straight eye-level frontal view; for an UPPER_BODY or LOWER_BODY upload the camera stays on the crop and only the reference's angle direction is borrowed; (7) BACKGROUND DETAIL: the background is rendered in full, crisp detail, every element named and described in the prompt (architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces, distant layers), sharply defined and rich, with only a gentle natural depth of field that keeps the whole setting readable; never an empty, plain, smeared, washed-out or heavily blurred background; (8) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section."
-      : "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented, no shoes, bags, hats, jewellery or extra layers that are not visible in image 1; (2) a reference image contributes only setting, pose and stance, lighting and camera angle; (3) never copy hats, bags, sunglasses, jewellery or props from a reference; (4) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload ends at the same line with no legs or footwear drawn, a lower-body upload starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible; (5) catalogue-safe wording only; (8) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible, and in a lower-body image the hands are visible in the frame, in a natural position that fits the scene and the body's movement (resting beside the thighs, lightly touching the garment, mid-stride), never cropped out, never raised out of frame; (11) IDENTITY: when the model is kept, the face and facial structure are reproduced exactly as in image 1 (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones, skin tone, age), and the hairstyle is kept exactly (length, colour, parting, texture, styling); write this explicitly in the FACE & HAIR section and never describe a different or idealised face or a restyled hair; (12) TATTOOS: any tattoo visible on the person in image 1 is removed in the output; state in the prompt that the skin is clean with no tattoo or ink, and add tattoos to the AVOID list; (7) HAIR: when the model is kept, the same hairstyle, length and colour as image 1; in every case the hair is neat and settled, no wind-blown, flying, floating or stray strands, no hair across the face, and the AVOID block lists wind-blown hair, flying hair strands and messy hair; (6) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
+      ? "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) OUTFIT: everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented; (2) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload stays upper body and ends at the same line with no legs or footwear drawn, a lower-body upload stays lower body and starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible, a three-quarter upload (head to around the knees) stays three-quarter and ends at the same line with no feet drawn, and a back-view upload stays a back view with the model facing away and no face shown; (3) a reference image contributes only setting, pose and stance, lighting and camera angle; (4) never copy hats, bags, sunglasses, jewellery or props from a reference; (5) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible; (11) IDENTITY: when the model is kept, the face and facial structure are reproduced exactly as in image 1 (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones, skin tone, age), and the hairstyle is kept exactly (length, colour, parting, texture, styling); write this explicitly in the FACE & HAIR section and never describe a different or idealised face or a restyled hair; (12) TATTOOS: any tattoo visible on the person in image 1 is removed in the output; state in the prompt that the skin is clean with no tattoo or ink, and add tattoos to the AVOID list; (6) LIGHT: real sun, either golden-hour sun (low, warm, long soft shadows) or midday sun (high, clean, short shadows), chosen per image and named in the prompt; never overcast, dusk, night or artificial light; the scene is bright but balanced, with open shadows and no blown-out highlights, no dim, murky, heavy-shadow or high-contrast scenes; the model is lit evenly and the garment colours read true; (9) INTEGRATION: the model is a real part of the scene, not a cutout: the same sun direction, colour temperature and contrast on the model as on the background, feet planted on the ground with a true contact shadow and a cast shadow that matches the scene's shadows, matching perspective and camera height, the same grain, sharpness and colour grade on model and background, reflected light and ambient colour from the surroundings on skin and garment, and described in the prompt; (10) CAMERA ANGLE: for a FULL_BODY upload the camera angle, camera height, tilt, lens feel and distance are taken from the attached reference photo (image 2) and described explicitly in the CAMERA section (low angle from knee height, eye level, slightly high, three-quarter view, wide with environment, tight full body); the library's angles are meant to vary across the set, so never default to a straight eye-level frontal view; for an UPPER_BODY or LOWER_BODY upload the camera stays on the crop and only the reference's angle direction is borrowed; (7) BACKGROUND DETAIL: the background is rendered in full, crisp detail, every element named and described in the prompt (architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces, distant layers), sharply defined and rich, with only a gentle natural depth of field that keeps the whole setting readable; never an empty, plain, smeared, washed-out or heavily blurred background; (8) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section."
+      : "Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): (1) everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented, no shoes, bags, hats, jewellery or extra layers that are not visible in image 1; (2) a reference image contributes only setting, pose and stance, lighting and camera angle; (3) never copy hats, bags, sunglasses, jewellery or props from a reference; (4) FRAMING LOCK: the output crop equals the upload crop, an upper-body upload ends at the same line with no legs or footwear drawn, a lower-body upload starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible, a three-quarter upload (head to around the knees) stays three-quarter and ends at the same line with no feet drawn, and a back-view upload stays a back view with the model facing away and no face shown; (5) catalogue-safe wording only; (8) HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible, and in a lower-body image the hands are visible in the frame, in a natural position that fits the scene and the body's movement (resting beside the thighs, lightly touching the garment, mid-stride), never cropped out, never raised out of frame; (11) IDENTITY: when the model is kept, the face and facial structure are reproduced exactly as in image 1 (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones, skin tone, age), and the hairstyle is kept exactly (length, colour, parting, texture, styling); write this explicitly in the FACE & HAIR section and never describe a different or idealised face or a restyled hair; (12) TATTOOS: any tattoo visible on the person in image 1 is removed in the output; state in the prompt that the skin is clean with no tattoo or ink, and add tattoos to the AVOID list; (7) HAIR: when the model is kept, the same hairstyle, length and colour as image 1; in every case the hair is neat and settled, no wind-blown, flying, floating or stray strands, no hair across the face, and the AVOID block lists wind-blown hair, flying hair strands and messy hair; (6) COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
     `Aspect ratio: ${req.aspectRatio} vertical.`,
     req.uploadFraming
-      ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets)
-      : "Framing lock: read the upload's framing (FULL_BODY, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
+      ? framingDirective(req.uploadFraming, req.visibleGarments, req.handsInPockets, req.backView)
+      : "Framing lock: read the upload's framing (FULL_BODY, THREE_QUARTER, UPPER_BODY or LOWER_BODY) and keep it in the output with roughly the same crop line; report it in the JSON as framing.",
     "CHILDREN: when the subject is a child, the prompt stays at 500-800 words whatever other length rule says, and it never describes the child's skin, body, physique, muscles, limbs, proportions or anything physical beyond the clothes: describe the outfit, a simple happy natural pose in plain words (standing, walking, sitting on a step), the scene and the light only.",
     "Safe wording: catalogue language only; never describe bodies as attractive or sensual; children only as happy child models with an age band, no makeup, no adult poses.",
     "Intimates rule (underwear, lingerie, bras, briefs, sleepwear, swimwear): this is retail catalogue photography for a family department store. Describe the garments in plain product terms (bra, briefs, camisole), keep the pose calm and upright with relaxed arms and a neutral expression, choose a bright indoor or studio-like scene (bedroom with daylight, dressing room, hotel room, clean studio) rather than a street, and use no suggestive, sensual or body-focused language anywhere in the prompt. Phrase the opening as 'catalogue photograph of a model wearing the supplied two-piece set'.",
@@ -215,7 +217,7 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, English, all template sections). LENGTH: the prompt field must be ${ZAID_MIN_WORDS}-${ZAID_MAX_WORDS} words, never under ${ZAID_MIN_WORDS} and not over ${ZAID_MAX_WORDS}. Develop every section with several concrete sentences: name and describe each background element, surface and material, the exact light on each of them, every garment detail, and the pose joint by joint. A prompt under ${ZAID_MIN_WORDS} words is rejected.`
       : "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
     req.expand,
-    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, UPPER_BODY or LOWER_BODY).",
+    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, THREE_QUARTER, UPPER_BODY or LOWER_BODY).",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -382,40 +384,59 @@ export function framingDirective(
   framing: Framing,
   garments?: string,
   handsInPockets = false,
+  backView = false,
 ): string {
   const seen = garments ? ` Verified items worn in the upload: ${garments}.` : "";
+  const view = backView
+    ? " BACK VIEW: the upload shows the model from behind. The output keeps exactly this back view: the model faces away from the camera, the face is not shown and not described, the back of the hairstyle and the back of every garment are what is seen; never turn the model around, never add a face or a profile."
+    : "";
   const hands = handsInPockets
     ? " HANDS: the upload shows a hand in a pocket, so a hand in a pocket is allowed."
     : " HANDS: the upload shows no hand in a pocket, so NO hand goes into a pocket in the output; hands stay out of pockets, relaxed and visible.";
   if (framing === "LOWER_BODY")
-    return `VERIFIED UPLOAD FRAMING: LOWER_BODY (waist down). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a LOWER-BODY image: it starts at the same crop line as the upload (waist or hips) and ends below the footwear. The head, face, hair and shoulders are NOT in the image at all. Do not describe a face, hair, expression, gaze, a top garment or anything above the crop line; the only upper garment that may be mentioned is the sliver visible at the top edge of the upload, exactly as shown. Pose and scene are written for a lower-body shot: legs, stance, footwear, ground surface and the lower part of the setting. HANDS IN FRAME: the hands are visible inside the lower-body crop, relaxed and natural, in a position that fits the setting and the movement (resting beside the thighs, brushing the garment, swinging mid-step); never cropped out of the frame and never raised above the crop line. Report framing as LOWER_BODY.${seen}${hands}`;
+    return `VERIFIED UPLOAD FRAMING: LOWER_BODY (waist down). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a LOWER-BODY image: it starts at the same crop line as the upload (waist or hips) and ends below the footwear. The head, face, hair and shoulders are NOT in the image at all. Do not describe a face, hair, expression, gaze, a top garment or anything above the crop line; the only upper garment that may be mentioned is the sliver visible at the top edge of the upload, exactly as shown. Pose and scene are written for a lower-body shot: legs, stance, footwear, ground surface and the lower part of the setting. HANDS IN FRAME: the hands are visible inside the lower-body crop, relaxed and natural, in a position that fits the setting and the movement (resting beside the thighs, brushing the garment, swinging mid-step); never cropped out of the frame and never raised above the crop line. Report framing as LOWER_BODY.${seen}${hands}${view}`;
   if (framing === "UPPER_BODY")
-    return `VERIFIED UPLOAD FRAMING: UPPER_BODY. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is an UPPER-BODY image: from above the head down to the same crop line as the upload (waist or hips). Legs, trousers, skirts and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for an upper-body shot. Report framing as UPPER_BODY.${seen}${hands}`;
-  return `VERIFIED UPLOAD FRAMING: FULL_BODY. The output is a full-body image, head to footwear completely inside the frame, as in the upload. Report framing as FULL_BODY.${seen}${hands}`;
+    return `VERIFIED UPLOAD FRAMING: UPPER_BODY. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is an UPPER-BODY image: from above the head down to the same crop line as the upload (waist or hips). Legs, trousers, skirts and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for an upper-body shot. Report framing as UPPER_BODY.${seen}${hands}${view}`;
+  if (framing === "THREE_QUARTER")
+    return `VERIFIED UPLOAD FRAMING: THREE_QUARTER. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a THREE-QUARTER image: from above the head down to the same crop line as the upload, between mid-thigh and just below the knees. Feet and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for a three-quarter shot. Report framing as THREE_QUARTER.${seen}${hands}${view}`;
+  return `VERIFIED UPLOAD FRAMING: FULL_BODY. The output is a full-body image, head to footwear completely inside the frame, as in the upload. Report framing as FULL_BODY.${seen}${hands}${view}`;
 }
 
 /** JSON schema for the framing check (Google structured output). */
 export const FRAMING_SCHEMA = {
   type: "object",
   properties: {
-    framing: { type: "string", enum: ["FULL_BODY", "UPPER_BODY", "LOWER_BODY"] },
+    framing: { type: "string", enum: ["FULL_BODY", "THREE_QUARTER", "UPPER_BODY", "LOWER_BODY"] },
     headVisible: { type: "boolean" },
+    kneesVisible: { type: "boolean" },
     feetVisible: { type: "boolean" },
+    backView: { type: "boolean" },
     faceVisible: { type: "boolean" },
     handsInPockets: { type: "boolean" },
     garments: { type: "string" },
   },
-  required: ["framing", "headVisible", "feetVisible", "faceVisible", "handsInPockets", "garments"],
+  required: [
+    "framing",
+    "headVisible",
+    "kneesVisible",
+    "feetVisible",
+    "backView",
+    "faceVisible",
+    "handsInPockets",
+    "garments",
+  ],
 };
 
 export const FRAMING_CHECK_INSTRUCTION =
-  "Look at the attached product photo and answer with JSON only. headVisible: true only if the head (face or back of the head) is inside the picture. feetVisible: true only if the feet, shoes or ankles are inside the picture. framing follows from those two facts: FULL_BODY when head and feet are both inside; UPPER_BODY when the head is inside and the picture ends at the waist or hips with no legs below the hips; LOWER_BODY when the head is NOT inside and the picture shows legs and/or footwear from the waist, hips or chest down, even if a sliver of a top is visible at the top edge. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, headVisible, feetVisible, faceVisible, handsInPockets, garments.";
+  "Look at the attached product photo and answer with JSON only. headVisible: true only if the head (face or back of the head) is inside the picture. kneesVisible: true only if the knees are inside the picture. feetVisible: true only if the feet, shoes or ankles are inside the picture. backView: true only if the person is seen from behind (back of the head, back of the garments, no face). framing follows from those facts: FULL_BODY when head and feet are both inside; THREE_QUARTER when the head is inside, the feet are NOT inside, and the picture ends between mid-thigh and just below the knees; UPPER_BODY when the head is inside and the picture ends at the waist or hips with no legs below the hips; LOWER_BODY when the head is NOT inside and the picture shows legs and/or footwear from the waist, hips or chest down, even if a sliver of a top is visible at the top edge. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, headVisible, kneesVisible, feetVisible, backView, faceVisible, handsInPockets, garments.";
 
 /** Parse the framing check's answer; unknown answers are treated as full body. */
 export interface FramingCheck {
   framing: Framing;
   faceVisible: boolean;
   handsInPockets: boolean;
+  /** The upload shows the person from behind; the output keeps that back view. */
+  backView: boolean;
   garments: string;
 }
 
@@ -429,28 +450,44 @@ export function parseFramingCheck(text: string): FramingCheck {
     const d = JSON.parse(cleaned) as {
       framing?: string;
       headVisible?: boolean;
+      kneesVisible?: boolean;
       feetVisible?: boolean;
+      backView?: boolean;
       faceVisible?: boolean;
       handsInPockets?: boolean;
       garments?: string;
     };
     let framing: Framing =
-      d.framing === "UPPER_BODY" || d.framing === "LOWER_BODY" ? d.framing : "FULL_BODY";
+      d.framing === "UPPER_BODY" || d.framing === "LOWER_BODY" || d.framing === "THREE_QUARTER"
+        ? d.framing
+        : "FULL_BODY";
     // What is inside the picture decides, not the label: no head but feet is a lower-body crop,
-    // head but no feet an upper-body crop, both a full body.
+    // head and feet a full body, head and knees but no feet a three-quarter crop, head alone an
+    // upper-body crop.
     if (typeof d.headVisible === "boolean" && typeof d.feetVisible === "boolean") {
       if (!d.headVisible && d.feetVisible) framing = "LOWER_BODY";
-      else if (d.headVisible && !d.feetVisible) framing = "UPPER_BODY";
       else if (d.headVisible && d.feetVisible) framing = "FULL_BODY";
+      else if (d.headVisible && !d.feetVisible)
+        framing =
+          d.kneesVisible === true || (d.kneesVisible === undefined && framing === "THREE_QUARTER")
+            ? "THREE_QUARTER"
+            : "UPPER_BODY";
     }
     return {
       framing,
       faceVisible: !!d.faceVisible,
       handsInPockets: !!d.handsInPockets,
+      backView: !!d.backView,
       garments: (d.garments ?? "").slice(0, 300),
     };
   } catch {
-    return { framing: "FULL_BODY", faceVisible: false, handsInPockets: false, garments: "" };
+    return {
+      framing: "FULL_BODY",
+      faceVisible: false,
+      handsInPockets: false,
+      backView: false,
+      garments: "",
+    };
   }
 }
 
