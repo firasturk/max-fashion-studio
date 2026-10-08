@@ -607,8 +607,11 @@ studioRoutes.get("/engine/models", async (c) => {
   if (!refresh) {
     const cached = await getSetting(c.env, MODELS_CACHE);
     if (cached) {
-      const parsed = JSON.parse(cached) as { at: number; models: unknown[] };
-      if (now() - parsed.at < 60 * 60 * 1000)
+      const parsed = JSON.parse(cached) as { at: number; models: { slug: string }[] };
+      // A cache from before a model was added to the lists is stale, whatever its age.
+      const known = new Set(parsed.models.map((m) => m.slug));
+      const complete = GOOGLE_MODELS.every((m) => known.has(m.slug));
+      if (complete && now() - parsed.at < 60 * 60 * 1000)
         return c.json({ models: parsed.models, cached: true });
     }
   }
