@@ -898,8 +898,9 @@ export default function CreativePanel({
         )}
         {config.output === "png" && (
           <p className="prompt-tip">
-            PNG keeps the engine's file as is, usually 5 to 10 MB. Choose JPG or WebP to fit each
-            image to 1 to 1.9 MB.
+            PNG keeps the engine's file as is, usually 5 to 10 MB, and cannot be made smaller
+            without lowering the resolution. Choose JPG or WebP: each image is then fitted to 1 to
+            1.9 MB at the full resolution.
           </p>
         )}
 

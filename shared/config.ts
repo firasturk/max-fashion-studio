@@ -119,7 +119,7 @@ export const DEFAULT_CONFIG: Config = {
   market: "auto",
   skill: "editorial",
   economy: false,
-  output: "png",
+  output: "jpg",
   outputQuality: 90,
   outputSize: "fit",
   colors: "pure white, warm beige, light grey",

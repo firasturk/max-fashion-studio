@@ -10,21 +10,24 @@ export interface ZipEntry {
 /** Export size window: every fitted JPG/WebP lands between these, when the image allows it. */
 export const FIT_MIN = 1_000_000;
 export const FIT_MAX = 1_900_000;
+/** Lowest JPG/WebP quality the fit may reach; resolution is never reduced. */
+export const FIT_FLOOR = 35;
 
 /**
  * Re-encodes until the file is inside the 1-1.9 MB window: lower quality while too big, raise it
- * while too small, in steps of 5 between 50 and 100. A small image that stays under 1 MB even at
- * quality 100 is kept at 100; a huge one that stays over 1.9 MB at 50 is kept at 50.
+ * while too small, in steps of 5 between 35 and 100. A small image that stays under 1 MB even at
+ * quality 100 is kept at 100; a huge one that stays over 1.9 MB at 35 is kept at 35. The pixel
+ * size never changes.
  */
 export async function fitImage(
   blob: Blob,
   format: "jpg" | "webp",
   startQuality: number,
 ): Promise<Blob> {
-  let q = Math.min(100, Math.max(50, Math.round(startQuality / 5) * 5));
+  let q = Math.min(100, Math.max(FIT_FLOOR, Math.round(startQuality / 5) * 5));
   let out = await convertImage(blob, format, q);
   if (out.size > FIT_MAX) {
-    while (out.size > FIT_MAX && q > 50) {
+    while (out.size > FIT_MAX && q > FIT_FLOOR) {
       q -= 5;
       out = await convertImage(blob, format, q);
     }
@@ -76,7 +79,7 @@ const MAX_ARCHIVE = 512 * 1024 * 1024;
  * Streams each file into an uncompressed ZIP (images are already compressed).
  * The archive is assembled in memory, so exports are capped at 512 MB; split large batches by selection.
  */
-export async function buildZip(entries: ZipEntry[], manifest: unknown): Promise<Blob> {
+export async function buildZip(entries: ZipEntry[]): Promise<Blob> {
   const chunks: Uint8Array[] = [];
   let total = 0;
   let finish!: () => void;
@@ -117,9 +120,6 @@ export async function buildZip(entries: ZipEntry[], manifest: unknown): Promise<
     }
     item.push(new Uint8Array(), true);
   }
-  const m = new ZipPassThrough("manifest.json");
-  zip.add(m);
-  m.push(new TextEncoder().encode(JSON.stringify(manifest, null, 2)), true);
   zip.end();
   await done;
   return new Blob(chunks as BlobPart[], { type: "application/zip" });

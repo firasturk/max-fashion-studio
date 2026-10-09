@@ -557,8 +557,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       // The set's originals go in beside the AI images, in the same folder.
       const originals = sources.filter((s) => productKey(s.name) === key);
       for (const s of originals) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
-      const manifest = { set: key, files: members.map((x) => byId.get(x.source)?.name) };
-      saveBlob(await buildZip(entries, manifest), `${safeArchiveName(folder)}-AI.zip`);
+      saveBlob(await buildZip(entries), `${safeArchiveName(folder)}-AI.zip`);
       toast.success(`${members.length + originals.length} files of ${key} downloaded.`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -576,26 +575,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
     setExporting(true);
     try {
-      const byId = new Map(sources.map((s) => [s.id, s]));
-      const numbers = outputNumbers();
       const entries = zipEntriesFor(chosen);
       // Originals sit next to their AI images, in the same product folder, under their own name.
       const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
         for (const s of sources) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
-      const manifest = {
-        batch: batch.name,
-        engine: engine.model,
-        generated: chosen.map((t) => ({
-          original: byId.get(t.source)?.name,
-          file: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, outputExt(t.output)),
-          status: t.status,
-          prompt: t.prompt,
-          qa: t.qa ? JSON.parse(t.qa) : null,
-        })),
-        originalsIncluded,
-      };
-      saveBlob(await buildZip(entries, manifest), `${safeArchiveName(batch.name)}-AI.zip`);
+      saveBlob(await buildZip(entries), `${safeArchiveName(batch.name)}-AI.zip`);
       toast.success(`${chosen.length} results exported.`);
     } catch (e) {
       toast.error((e as Error).message);
