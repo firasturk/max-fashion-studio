@@ -44,6 +44,12 @@ export const DEFAULT_DIRECTION_RULES: DirectionRule[] = [
     enabled: true,
   },
   {
+    key: "pose",
+    title: "Pose: one coherent pose, not the upload's",
+    text: "POSE: write one coherent pose that is different from the upload's stance, as one body in one moment: state explicitly where the left arm, the right arm, each hand, the left leg and the right leg are, how the weight sits and where the head looks; never give the same limb two positions, never a hand both in a pocket and elsewhere, never a stepping foot and a planted foot for the same leg; say in the prompt that the upload's own stance is not kept.",
+    enabled: true,
+  },
+  {
     key: "catalogue",
     title: "Catalogue-safe wording",
     text: "Catalogue-safe wording only.",

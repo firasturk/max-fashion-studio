@@ -12,6 +12,8 @@ import {
   DETAIL_RULE,
   BLEND_RULE,
   GRAIN_RULE,
+  POSE_RULE,
+  ANATOMY_RULE,
 } from "../shared/prompts";
 
 describe("creative direction fixed rules", () => {
@@ -19,7 +21,8 @@ describe("creative direction fixed rules", () => {
     const text = composeFixedRules(DEFAULT_DIRECTION_RULES);
     expect(text.startsWith("Fixed rules for every prompt")).toBe(true);
     expect(text).toContain("(1) OUTFIT:");
-    expect(text).toContain("(14) COMPOSITION:");
+    expect(text).toContain("(15) COMPOSITION:");
+    expect(text).toContain("POSE: write one coherent pose");
     expect(text).toContain("FILM GRAIN:");
     expect(text).toContain("Catalogue-safe wording only");
     const fewer = composeFixedRules([
@@ -78,6 +81,14 @@ describe("creative direction fixed rules", () => {
     expect(full).toContain(DETAIL_RULE);
     expect(full).toContain(BLEND_RULE);
     expect(full).toContain(GRAIN_RULE);
+    expect(full).toContain(POSE_RULE);
+    expect(full).toContain(ANATOMY_RULE);
+    expect(
+      buildEditorialPrompt("Body.", "", "", { set: true }, false, true, "FULL_BODY", false, true),
+    ).toContain("the pose is the one written in the prompt, which differs from the sibling's pose");
+    expect(
+      buildEditorialPrompt("Body.", "", "", { mood: true }, false, true, "FULL_BODY", false, true),
+    ).toContain("its stance was already turned into the written pose above");
     expect(full).toContain("hands in pockets");
     const off = buildEditorialPrompt(
       "Body.",

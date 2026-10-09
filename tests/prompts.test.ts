@@ -184,7 +184,7 @@ describe("Zaid creative direction", () => {
     expect(p).not.toContain("HAIR:");
     expect(p).toContain("no hand in a pocket");
     expect(p).toContain(
-      "AVOID: blur, dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges, digital noise, coarse clumpy grain, grain-free plastic-smooth digital look, vintage filter, oversharpened, hands in pockets",
+      "AVOID: blur, dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges, digital noise, coarse clumpy grain, grain-free plastic-smooth digital look, vintage filter, oversharpened, hands in pockets, extra limb, third arm",
     );
     expect(buildEditorial("P.", "blur", "", {}, false, true, "LOWER_BODY", true, true)).toContain(
       "may rest in a pocket",
@@ -212,6 +212,7 @@ describe("compact retry prompt", () => {
     expect(p).toContain(IDENTITY_RULE);
     expect(p).toContain("upper body only");
     expect(p).toContain("AVOID: blur, hands in pockets");
+    expect(p).toContain("no extra limb");
     expect(p.split(/\s+/).length).toBeLessThan(260);
   });
 });

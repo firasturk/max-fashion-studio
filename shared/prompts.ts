@@ -276,6 +276,14 @@ export const SCALE_RULE =
 export const EYES_RULE =
   "EYES: both eyes exactly as in image 1: the same shape, colour, size, spacing, eyelids and brows. Both eyes open, sharp and in focus, with the same catchlight from the scene's light in each; the pupils aligned and looking in the same direction, following the gaze described in the pose; a natural, alive expression. Never crossed, wall-eyed, asymmetric, enlarged, glassy, blank or looking in two directions.";
 
+/** Engine-facing pose rule for the builder approaches: the written pose, never image 1's stance. */
+export const POSE_RULE =
+  "POSE: the stance, the position of each arm, hand, leg and foot, the weight and the head direction are ONLY the ones written in the prompt above. Image 1 gives the person, the hair and the outfit, not the pose: do not keep image 1's stance, arm positions or hand positions, and never mix image 1's pose with the written one. The written pose is one body in one moment.";
+
+/** Engine-facing anatomy rule: one person, the right number of limbs, nothing left over from another pose. */
+export const ANATOMY_RULE =
+  "ANATOMY: exactly one person with one head, two arms, two hands with five fingers each, two legs and two feet, every one of them belonging to the single written pose. No extra arm, hand, leg or foot, no duplicated limb, no limb or shoe left over from another pose, no hand that is both in a pocket and elsewhere, no foot that is both planted and stepping.";
+
 /** Engine-facing back-view rule: a model photographed from behind stays photographed from behind. */
 export const BACK_VIEW_RULE =
   "BACK VIEW: the reference photo shows the model from behind. Keep exactly this back view: the model faces away from the camera, no face is shown, the back of the hairstyle and the back of every garment are what is seen; never turn the model around, never add a face or a profile.";
@@ -283,7 +291,7 @@ export const BACK_VIEW_RULE =
 /** Engine-facing framing lock: the output crop is the upload's crop, nothing outside it is drawn. */
 export function framingRule(framing?: string, handsInPockets = false): string {
   const hands = handsInPockets
-    ? " Hands: a hand may rest in a pocket, as in the reference photo."
+    ? " Hands: one hand may rest in a pocket, as in the reference photo, only where the written pose says so; that hand is then nowhere else."
     : " Hands: no hand in a pocket; hands stay out of pockets, relaxed and visible.";
   if (framing === "UPPER_BODY")
     return (
@@ -349,6 +357,7 @@ export function buildEditorialPrompt(
   if (on("tattoos")) parts.push(TATTOO_RULE);
   if (on("framing")) parts.push(framingRule(framing, handsInPockets && on("hands")));
   if (backView && on("framing")) parts.push(BACK_VIEW_RULE);
+  parts.push(POSE_RULE, ANATOMY_RULE);
   // Creative direction: hair follows the direction; the light is bright but balanced.
   if (relaxed) {
     if (on("light")) parts.push(LIGHT_RULE);
@@ -369,7 +378,7 @@ export function buildEditorialPrompt(
   let idx = 2;
   if (images.mood)
     roles.push(
-      `Image ${idx++} is a visual reference: use it only for the background/setting, the pose and stance, the lighting and the camera angle; never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, three-quarter stays three-quarter, an upper-body crop stays upper-body, a lower-body crop stays lower-body, a back view stays a back view).${
+      `Image ${idx++} is a visual reference: use it only for the background/setting, the lighting and the camera angle; its stance was already turned into the written pose above, so the pose comes from the written prompt, not from image 1 and not from a mix of the two. Never copy its clothing, face, hats, bags, accessories or exact spot. Keep the framing of image 1 (full body stays full body, three-quarter stays three-quarter, an upper-body crop stays upper-body, a lower-body crop stays lower-body, a back view stays a back view).${
         relaxed && framing === "FULL_BODY"
           ? " For this full-body image reproduce the reference's camera angle, camera height, tilt and distance exactly as the prompt describes them."
           : ""
@@ -377,7 +386,7 @@ export function buildEditorialPrompt(
     );
   if (images.set)
     roles.push(
-      `Image ${idx++} is an already generated image of the same product: reproduce its background, lighting, colour grade and camera distance exactly so both images read as one shoot; only the pose and the crop follow image 1.`,
+      `Image ${idx++} is an already generated image of the same product: reproduce its background, lighting, colour grade and camera distance exactly so both images read as one shoot. Only the crop follows image 1; the pose is the one written in the prompt, which differs from the sibling's pose and from image 1's stance.`,
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.
@@ -403,6 +412,7 @@ export function buildEditorialPrompt(
           .join(", ")
       : "wind-blown hair, flying hair strands, messy hair",
     handsInPockets || !on("hands") ? "" : "hands in pockets",
+    "extra limb, third arm, third leg, extra hand, duplicated hand, extra foot, extra shoe, merged poses, the pose of the outfit photo kept",
     on("tattoos") ? "tattoos, tattoo, body ink" : "",
     newModel || !on("identity")
       ? ""
@@ -432,6 +442,7 @@ export function buildCompactPrompt(
     `Catalogue lifestyle photograph of the model from the reference photo wearing exactly the supplied outfit (${brief.garments}). Setting: ${brief.scene}. Pose: ${brief.pose}. Light: ${brief.light}. Photorealistic, natural colour, clean editorial look.`,
     newModel ? NEW_MODEL_RULE : IDENTITY_RULE,
     framingRule(framing, handsInPockets),
+    "POSE: only the pose written above; not the stance of image 1. One person, two arms, two hands, two legs, two feet, no extra limb.",
   ];
   if (center) parts.push(CENTERING);
   parts.push(
