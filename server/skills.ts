@@ -5,9 +5,9 @@
  */
 import type { Env } from "./env";
 import { all, first } from "./db";
-import { getSetting, setSetting } from "./settings";
+import { getSetting, setSetting, MOOD_BOARD_SETTING } from "./settings";
 import { SKILLS, deriveSkill, type SkillDef, type SkillDraft } from "@shared/skills";
-import type { SkillInfo } from "@shared/types";
+import type { MoodBoardInfo, SkillInfo } from "@shared/types";
 
 interface SkillRow extends SkillDraft {
   hidden: number;
@@ -71,6 +71,48 @@ export async function setFavourite(
   if (on) favs.add(id);
   else favs.delete(id);
   await setSetting(env, favSetting(userId), JSON.stringify([...favs]));
+}
+
+export const MOOD_BOARD_DEFAULTS: Omit<MoodBoardInfo, "favourite"> = {
+  title: "Mood board",
+  caption: "Mood board world · prompt structure",
+  description:
+    "Each image gets a new scene from the mood board, written in the creative-direction prompt structure. Add notes below only when a batch needs something specific (a city, a colour story, a pose).",
+  hidden: false,
+};
+
+/** The Mood board entry as the team keeps it, with the user's star. */
+export async function readMoodBoard(env: Env, userId?: string): Promise<MoodBoardInfo> {
+  let stored: Partial<MoodBoardInfo> = {};
+  try {
+    stored = JSON.parse(
+      (await getSetting(env, MOOD_BOARD_SETTING)) || "{}",
+    ) as Partial<MoodBoardInfo>;
+  } catch {
+    stored = {};
+  }
+  const favs = userId ? await readIds(env, favSetting(userId)) : [];
+  return {
+    title: stored.title?.trim() || MOOD_BOARD_DEFAULTS.title,
+    caption: stored.caption ?? MOOD_BOARD_DEFAULTS.caption,
+    description: stored.description ?? MOOD_BOARD_DEFAULTS.description,
+    hidden: !!stored.hidden,
+    favourite: favs.includes("zaid"),
+  };
+}
+
+export async function writeMoodBoard(
+  env: Env,
+  patch: Partial<Omit<MoodBoardInfo, "favourite">>,
+): Promise<void> {
+  const current = await readMoodBoard(env);
+  const next = {
+    title: patch.title ?? current.title,
+    caption: patch.caption ?? current.caption,
+    description: patch.description ?? current.description,
+    hidden: patch.hidden ?? current.hidden,
+  };
+  await setSetting(env, MOOD_BOARD_SETTING, JSON.stringify(next));
 }
 
 /** Skills as the team sees them: favourites of `userId` first, then the saved order. */

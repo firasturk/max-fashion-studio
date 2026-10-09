@@ -19,7 +19,7 @@ import {
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
 import { FAL_MODELS } from "./fal";
-import { listSkills, saveSkillsOrder, setFavourite } from "./skills";
+import { listSkills, saveSkillsOrder, setFavourite, readMoodBoard, writeMoodBoard } from "./skills";
 import { buildSkillFromReferences } from "./skillbuilder";
 import { SKILLS } from "@shared/skills";
 import { DEFAULT_DIRECTION_RULES, storeDirectionRules } from "@shared/direction-rules";
@@ -140,6 +140,7 @@ studioRoutes.get("/state", async (c) => {
     batches,
     spendThreshold: adminSettings.spendThreshold,
     zaidDirection: (await getSetting(c.env, ZAID_DIRECTION_SETTING)) || "",
+    moodBoard: await readMoodBoard(c.env, user.id),
     modes: await readModes(c.env),
     hero: await heroStamp(c.env),
     engine: {
@@ -292,6 +293,40 @@ studioRoutes.put("/direction-rules", async (c) => {
 studioRoutes.delete("/direction-rules", async (c) => {
   await deleteSetting(c.env, DIRECTION_RULES_SETTING);
   return c.json({ ok: true, rules: DEFAULT_DIRECTION_RULES });
+});
+
+/** Creative direction's Mood board entry: rename, describe, hide, restore. The star uses the skills route. */
+studioRoutes.get("/direction-skill", async (c) =>
+  c.json({ moodBoard: await readMoodBoard(c.env, c.get("user").id) }),
+);
+
+studioRoutes.post("/direction-skill", async (c) => {
+  const d = await body(
+    c,
+    z.object({
+      title: z.string().trim().min(2).max(60),
+      caption: z.string().trim().max(80).default(""),
+      description: z.string().trim().max(400).default(""),
+      goal: z.string().max(20000).optional(),
+    }),
+  );
+  await writeMoodBoard(c.env, { title: d.title, caption: d.caption, description: d.description });
+  if (d.goal !== undefined) await setSetting(c.env, ZAID_DIRECTION_SETTING, d.goal.trim());
+  return c.json({
+    ok: true,
+    moodBoard: await readMoodBoard(c.env, c.get("user").id),
+    direction: d.goal?.trim(),
+  });
+});
+
+studioRoutes.delete("/direction-skill", async (c) => {
+  await writeMoodBoard(c.env, { hidden: true });
+  return c.json({ ok: true, moodBoard: await readMoodBoard(c.env, c.get("user").id) });
+});
+
+studioRoutes.post("/direction-skill/restore", async (c) => {
+  await writeMoodBoard(c.env, { hidden: false });
+  return c.json({ ok: true, moodBoard: await readMoodBoard(c.env, c.get("user").id) });
 });
 
 /** Team-managed skills: list, create or edit, delete (a built-in is hidden rather than removed). */

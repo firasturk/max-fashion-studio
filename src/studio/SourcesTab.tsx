@@ -28,6 +28,8 @@ export default function SourcesTab({
   onRoles,
   onBatchName,
   skills = [],
+  moodBoardHidden = false,
+  moodBoardTitle,
   canAssignSkill = false,
   onAssignSkill,
 }: {
@@ -44,6 +46,9 @@ export default function SourcesTab({
   onRoles: (urls: string[], role: "lead" | "supporting") => void;
   /** Skills offered per photo in a saved Zaid creative direction batch. */
   skills?: SkillInfo[];
+  /** The Mood board entry is hidden: it is not offered for assignment. */
+  moodBoardHidden?: boolean;
+  moodBoardTitle?: string;
   canAssignSkill?: boolean;
   onAssignSkill?: (ids: string[], skill: string | null) => Promise<void>;
   onBatchName: (name: string) => void;
@@ -79,11 +84,13 @@ export default function SourcesTab({
   const sourceGroups = groupBy(sources.slice(0, limit), (s) => s.name);
   // Saved batch, Zaid creative direction: pick photos and send them to another skill.
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [assignTo, setAssignTo] = useState("zaid");
+  const [assignTo, setAssignTo] = useState(moodBoardHidden ? (skills[0]?.id ?? "zaid") : "zaid");
   const [assigning, setAssigning] = useState(false);
-  const skillChoices = ["zaid", ...skills.map((s) => s.id)];
+  const skillChoices = [...(moodBoardHidden ? [] : ["zaid"]), ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
-    !id || id === "zaid" ? "Mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+    !id || id === "zaid"
+      ? (moodBoardTitle ?? "Mood board")
+      : (skills.find((s) => s.id === id)?.title ?? id);
   async function assignPicked() {
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);

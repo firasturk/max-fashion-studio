@@ -99,6 +99,15 @@ export interface LookInfo {
 }
 
 /** A skill as the team sees and edits it. */
+/** The Mood board entry of Creative direction: a built-in the team can rename, hide and star. */
+export interface MoodBoardInfo {
+  title: string;
+  caption: string;
+  description: string;
+  hidden: boolean;
+  favourite: boolean;
+}
+
 export interface SkillInfo {
   id: string;
   title: string;
@@ -128,6 +137,8 @@ export interface StateResponse {
   batches: Batch[];
   spendThreshold: number;
   zaidDirection: string;
+  /** Creative direction's Mood board entry (name, tagline, hidden, starred). */
+  moodBoard?: MoodBoardInfo;
   /** Renamed or hidden production approaches, keyed by mode id. */
   modes: Record<string, ModeOverride>;
   /** Version stamp of the uploaded hero video, empty when none. */

@@ -46,6 +46,8 @@ export default function ResultsTab({
   onDownloadTask,
   onDownloadSet,
   skills = [],
+  moodBoardHidden = false,
+  moodBoardTitle,
   batchSkill,
   canAssignSkill = false,
   onAssignSkill,
@@ -66,17 +68,22 @@ export default function ResultsTab({
   onDownloadSet?: (t: Task) => void;
   /** Zaid creative direction, before generation: send chosen photos to another skill. */
   skills?: SkillInfo[];
+  /** The Mood board entry is hidden: it is not offered for assignment. */
+  moodBoardHidden?: boolean;
+  moodBoardTitle?: string;
   /** The skill chosen in the panel: what a photo without its own assignment uses. */
   batchSkill?: string;
   canAssignSkill?: boolean;
   onAssignSkill?: (sourceIds: string[], skill: string | null) => Promise<void>;
 }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [assignTo, setAssignTo] = useState("zaid");
+  const [assignTo, setAssignTo] = useState(moodBoardHidden ? (skills[0]?.id ?? "zaid") : "zaid");
   const [assigning, setAssigning] = useState(false);
-  const skillChoices = ["zaid", ...skills.map((s) => s.id)];
+  const skillChoices = [...(moodBoardHidden ? [] : ["zaid"]), ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
-    !id || id === "zaid" ? "Mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+    !id || id === "zaid"
+      ? (moodBoardTitle ?? "Mood board")
+      : (skills.find((s) => s.id === id)?.title ?? id);
   async function assignPicked() {
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);

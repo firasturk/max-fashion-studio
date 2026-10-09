@@ -131,6 +131,8 @@ export async function resolveFalKey(
 }
 
 export const ZAID_DIRECTION_SETTING = "zaid_direction";
+/** Creative direction: the Mood board entry's name, tagline, description and hidden flag. */
+export const MOOD_BOARD_SETTING = "zaid_skill";
 export const MODES_SETTING = "modes_config";
 /** R2 keys of the looping hero video shown under the studio title, one per format. */
 export const HERO_KEYS = { mp4: "hero/video", webm: "hero/video.webm" } as const;

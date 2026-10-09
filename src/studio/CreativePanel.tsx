@@ -16,7 +16,7 @@ import { del, get, post } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import Picker from "./Picker";
 const SkillDialog = lazyScreen(() => import("./SkillDialog"));
-import { ChevronDown, Plus, Star } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Star } from "lucide-react";
 const ReferenceLibrary = lazyScreen(() => import("./ReferenceLibrary"));
 const DirectionRules = lazyScreen(() => import("./DirectionRules"));
 import {
@@ -33,7 +33,7 @@ import {
   isSkillCampaign,
   usesBuilder,
 } from "@shared/config";
-import type { EngineModel, LookInfo, Preset, SkillInfo } from "@shared/types";
+import type { EngineModel, LookInfo, Preset, SkillInfo, MoodBoardInfo } from "@shared/types";
 
 const COUNTS = Array.from({ length: MAX_COUNT }, (_, i) => String(i + 1));
 
@@ -53,6 +53,8 @@ export default function CreativePanel({
   presets = [],
   onPresetsChanged,
   defaultDirection = "",
+  moodBoard = null,
+  onMoodBoardChanged,
   onDirectionSaved,
   skills = [],
   onSkillsChanged,
@@ -75,6 +77,9 @@ export default function CreativePanel({
   onPresetsChanged?: () => Promise<void>;
   /** Mode 7: the shared default direction text. */
   defaultDirection?: string;
+  /** Creative direction: the Mood board entry as the team keeps it (name, tagline, hidden, starred). */
+  moodBoard?: MoodBoardInfo | null;
+  onMoodBoardChanged?: (mb: MoodBoardInfo) => void;
   onDirectionSaved?: (text: string) => void;
   /** Skills as the server lists them (built-in plus team edits and additions). */
   skills?: SkillInfo[];
@@ -98,20 +103,35 @@ export default function CreativePanel({
   }, [zaidMode]);
   const zaidEntry: SkillInfo = {
     id: "zaid",
-    title: "Mood board",
-    caption: "Mood board world · prompt structure",
+    title: moodBoard?.title ?? "Mood board",
+    caption: moodBoard?.caption ?? "Mood board world · prompt structure",
     description:
+      moodBoard?.description ??
       "Each image gets a new scene from the mood board, written in the creative-direction prompt structure. Add notes below only when a batch needs something specific (a city, a colour story, a pose).",
-    goal: "",
+    goal: defaultDirection,
     library: "",
+    favourite: !!moodBoard?.favourite,
     builtIn: true,
     edited: false,
     auto: false,
-    favourite: false,
     thumb: zaidThumb,
   };
-  const skillList = zaidMode ? [zaidEntry, ...skills] : skills;
+  // Creative direction: the Mood board entry sits first unless other skills are starred and it is
+  // not; a hidden Mood board is left out entirely.
+  const moodHidden = zaidMode && !!moodBoard?.hidden;
+  const skillList = !zaidMode
+    ? skills
+    : moodHidden
+      ? skills
+      : zaidEntry.favourite
+        ? [zaidEntry, ...skills]
+        : [...skills.filter((x) => x.favourite), zaidEntry, ...skills.filter((x) => !x.favourite)];
   const currentSkill = skillList.find((s) => s.id === config.skill) ?? skillList[0];
+  useEffect(() => {
+    if (moodHidden && config.skill === "zaid" && skills[0] && !locked)
+      onChange({ skill: skills[0].id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moodHidden, config.skill, skills.length]);
   const isZaidEntry = currentSkill?.id === "zaid";
   const skillLooks = looks.filter((l) => l.skill === (config.skill || "editorial"));
   const currentLook = skillLooks.find((l) => l.id === config.look) ?? null;
@@ -153,6 +173,8 @@ export default function CreativePanel({
       const r = await post<{ skills: SkillInfo[] }>(`/api/studio/skills/${s.id}/favourite`, {
         on: !s.favourite,
       });
+      if (s.id === "zaid" && moodBoard)
+        onMoodBoardChanged?.({ ...moodBoard, favourite: !s.favourite });
       onSkillsChanged?.(r.skills);
     } catch (e) {
       toast.error((e as Error).message);
@@ -179,6 +201,22 @@ export default function CreativePanel({
 
   async function deleteSkill() {
     if (!currentSkill) return;
+    if (currentSkill.id === "zaid") {
+      if (
+        !window.confirm(
+          `Hide "${currentSkill.title}" from the skill picker? Its photos stay in the library and you can restore it with "Restore ${currentSkill.title}".`,
+        )
+      )
+        return;
+      try {
+        const r = await del<{ moodBoard: MoodBoardInfo }>("/api/studio/direction-skill");
+        onMoodBoardChanged?.(r.moodBoard);
+        toast.success(`${currentSkill.title} hidden.`);
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+      return;
+    }
     const msg = currentSkill.builtIn
       ? `Hide the built-in skill "${currentSkill.title}"? You can restore it later from Edit.`
       : `Delete the skill "${currentSkill.title}"? Its reference photos stay in the library.`;
@@ -187,6 +225,15 @@ export default function CreativePanel({
       const r = await del<{ skills: SkillInfo[] }>(`/api/studio/skills/${currentSkill.id}`);
       onSkillsChanged?.(r.skills);
       toast.success(currentSkill.builtIn ? "Skill hidden." : "Skill deleted.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+  async function restoreMoodBoard() {
+    try {
+      const r = await post<{ moodBoard: MoodBoardInfo }>("/api/studio/direction-skill/restore", {});
+      onMoodBoardChanged?.(r.moodBoard);
+      toast.success(`${r.moodBoard.title} is back in the picker.`);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -423,7 +470,7 @@ export default function CreativePanel({
           <div className="field-row">
             <label className="field-label">Skill</label>
             <span className="field-row-actions">
-              {currentSkill && !isZaidEntry && (
+              {currentSkill && (
                 <button
                   type="button"
                   className="text-button"
@@ -432,13 +479,22 @@ export default function CreativePanel({
                   <Pencil size={13} /> Edit
                 </button>
               )}
-              {currentSkill && !isZaidEntry && skills.length > 1 && (
+              {currentSkill && (isZaidEntry ? skills.length > 0 : skillList.length > 1) && (
                 <button
                   type="button"
                   className="text-button danger-text"
                   onClick={() => void deleteSkill()}
                 >
                   <Trash2 size={13} /> Delete
+                </button>
+              )}
+              {moodHidden && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => void restoreMoodBoard()}
+                >
+                  <RotateCcw size={13} /> Restore {moodBoard?.title ?? "Mood board"}
                 </button>
               )}
               <button
@@ -485,7 +541,7 @@ export default function CreativePanel({
                   <strong>{s.title}</strong>
                   <span>{s.caption}</span>
                 </button>
-                {s.id !== "zaid" && (
+                {
                   <button
                     type="button"
                     className={`skill-star ${s.favourite ? "on" : ""}`}
@@ -495,7 +551,7 @@ export default function CreativePanel({
                   >
                     <Star size={14} fill={s.favourite ? "currentColor" : "none"} />
                   </button>
-                )}
+                }
               </div>
             ))}
           </div>
@@ -606,6 +662,13 @@ export default function CreativePanel({
               skill={skillEditor.skill}
               onClose={() => setSkillEditor((e) => ({ ...e, open: false }))}
               onSaved={(list, id) => onSkillsChanged?.(list, id)}
+              onMoodBoardSaved={(mb, direction) => {
+                onMoodBoardChanged?.(mb);
+                if (direction !== undefined) {
+                  onDirectionSaved?.(direction);
+                  if (!locked) onChange({ prompt: direction });
+                }
+              }}
             />
           </Suspense>
 

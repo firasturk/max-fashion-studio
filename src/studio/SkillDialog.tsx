@@ -3,7 +3,7 @@ import { LoaderCircle, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { del, post } from "@/api";
-import type { SkillInfo } from "@shared/types";
+import type { MoodBoardInfo, SkillInfo } from "@shared/types";
 
 const EMPTY: SkillInfo = {
   id: "",
@@ -44,12 +44,15 @@ export default function SkillDialog({
   skill,
   onClose,
   onSaved,
+  onMoodBoardSaved,
 }: {
   open: boolean;
   /** null = new skill */
   skill: SkillInfo | null;
   onClose: () => void;
   onSaved: (skills: SkillInfo[], id?: string) => void;
+  /** Creative direction's Mood board entry saves its name, tagline, description and direction here. */
+  onMoodBoardSaved?: (mb: MoodBoardInfo, direction?: string) => void;
 }) {
   const [form, setForm] = useState<SkillInfo>(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -69,9 +72,26 @@ export default function SkillDialog({
   // Editing the direction or library by hand switches the skill to manual text.
   const textTouched = !!skill && (form.goal !== skill.goal || form.library !== skill.library);
 
+  const moodBoard = skill?.id === "zaid";
+
   async function save() {
     setBusy(true);
     try {
+      if (moodBoard) {
+        const r = await post<{ moodBoard: MoodBoardInfo; direction?: string }>(
+          "/api/studio/direction-skill",
+          {
+            title: form.title,
+            caption: form.caption,
+            description: form.description,
+            goal: form.goal,
+          },
+        );
+        onMoodBoardSaved?.(r.moodBoard, r.direction);
+        toast.success("Mood board saved.");
+        onClose();
+        return;
+      }
       const r = await post<{ id: string; skills: SkillInfo[] }>("/api/studio/skills", {
         id: form.id || undefined,
         title: form.title,
@@ -213,25 +233,7 @@ export default function SkillDialog({
                 />
               </div>
             </div>
-            <p className="prompt-tip">
-              {form.auto && !textTouched
-                ? "Text is automatic: written from the reference photos and refreshed when they change. Editing the text below switches this skill to manual."
-                : 'Text is manual: it stays as written here. Use "Build from reference photos" to rewrite it from the library and go back to automatic.'}
-            </p>
-            <div className="field-row">
-              <button type="button" className="text-button" onClick={() => setShowText((v) => !v)}>
-                {showText ? "Hide text" : "Show text"}
-              </button>
-              <button
-                type="button"
-                className="text-button"
-                disabled={busy}
-                onClick={() => void buildFromReferences()}
-              >
-                <Sparkles size={13} /> Build from reference photos
-              </button>
-            </div>
-            {showText && (
+            {moodBoard ? (
               <>
                 <label className="field-label" htmlFor="skill-description">
                   Description (shown under the picker)
@@ -243,7 +245,7 @@ export default function SkillDialog({
                   onChange={(e) => set({ description: e.target.value })}
                 />
                 <label className="field-label" htmlFor="skill-goal">
-                  Direction
+                  Default direction (the text every Creative direction batch starts with)
                 </label>
                 <textarea
                   id="skill-goal"
@@ -252,34 +254,86 @@ export default function SkillDialog({
                   value={form.goal}
                   onChange={(e) => set({ goal: e.target.value })}
                 />
-                <label className="field-label" htmlFor="skill-library">
-                  Library (numbered scene families, poses, light, camera, colour, avoid)
-                </label>
-                <textarea
-                  id="skill-library"
-                  className="prompt prompt-tall"
-                  rows={14}
-                  value={form.library}
-                  onChange={(e) => set({ library: e.target.value })}
-                />
+                <p className="prompt-tip">
+                  The scenes, light and camera come from the mood-board photos in the panel; the
+                  fixed rules are in the Fixed rules section.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="prompt-tip">
+                  {form.auto && !textTouched
+                    ? "Text is automatic: written from the reference photos and refreshed when they change. Editing the text below switches this skill to manual."
+                    : 'Text is manual: it stays as written here. Use "Build from reference photos" to rewrite it from the library and go back to automatic.'}
+                </p>
+                <div className="field-row">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setShowText((v) => !v)}
+                  >
+                    {showText ? "Hide text" : "Show text"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => void buildFromReferences()}
+                  >
+                    <Sparkles size={13} /> Build from reference photos
+                  </button>
+                </div>
+                {showText && (
+                  <>
+                    <label className="field-label" htmlFor="skill-description">
+                      Description (shown under the picker)
+                    </label>
+                    <input
+                      id="skill-description"
+                      className="text-input"
+                      value={form.description}
+                      onChange={(e) => set({ description: e.target.value })}
+                    />
+                    <label className="field-label" htmlFor="skill-goal">
+                      Direction
+                    </label>
+                    <textarea
+                      id="skill-goal"
+                      className="prompt"
+                      rows={6}
+                      value={form.goal}
+                      onChange={(e) => set({ goal: e.target.value })}
+                    />
+                    <label className="field-label" htmlFor="skill-library">
+                      Library (numbered scene families, poses, light, camera, colour, avoid)
+                    </label>
+                    <textarea
+                      id="skill-library"
+                      className="prompt prompt-tall"
+                      rows={14}
+                      value={form.library}
+                      onChange={(e) => set({ library: e.target.value })}
+                    />
+                  </>
+                )}
+                <p className="prompt-tip">
+                  Shared rules apply to every skill automatically: the original outfit, footwear and
+                  accessories stay identical; references give only setting, pose, light and camera
+                  angle; nothing is copied from a reference's hats, bags or props; one reference is
+                  picked at random per image; the upload's framing is kept; catalogue-safe wording.
+                </p>
               </>
             )}
-            <p className="prompt-tip">
-              Shared rules apply to every skill automatically: the original outfit, footwear and
-              accessories stay identical; references give only setting, pose, light and camera
-              angle; nothing is copied from a reference's hats, bags or props; one reference is
-              picked at random per image; the upload's framing is kept; catalogue-safe wording.
-            </p>
           </>
         )}
         <div className="footer-actions">
-          {skill && (
+          {skill && !moodBoard && (
             <button className="secondary danger" onClick={() => void remove()} disabled={busy}>
               <Trash2 size={16} />
               {skill.builtIn ? "Hide" : "Delete"}
             </button>
           )}
-          {skill?.builtIn && skill.edited && (
+          {skill?.builtIn && skill.edited && !moodBoard && (
             <button className="secondary" onClick={() => void reset()} disabled={busy}>
               <RotateCcw size={16} />
               Reset to original

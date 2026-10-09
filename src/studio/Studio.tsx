@@ -55,6 +55,7 @@ import type {
   Batch,
   EngineModel,
   ModeOverride,
+  MoodBoardInfo,
   Preset,
   SkillInfo,
   StateResponse,
@@ -115,6 +116,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }, []);
   const [spendThreshold, setSpendThreshold] = useState(20);
   const [zaidDirection, setZaidDirection] = useState("");
+  const [moodBoard, setMoodBoard] = useState<MoodBoardInfo | null>(null);
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
   const [hero, setHero] = useState("");
   // Boot screen: wait for the first state load, the approach pictures and the hero video (or a timeout).
@@ -152,6 +154,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       setEngine(d.engine);
       setSpendThreshold(d.spendThreshold ?? 20);
       setZaidDirection(d.zaidDirection ?? "");
+      if (d.moodBoard) setMoodBoard(d.moodBoard);
       const ov = d.modes ?? {};
       setModeOverrides(ov);
       setHero(d.hero ?? "");
@@ -844,6 +847,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 onPresetsChanged={loadPresets}
                 defaultDirection={zaidDirection}
                 onDirectionSaved={setZaidDirection}
+                moodBoard={moodBoard}
+                onMoodBoardChanged={setMoodBoard}
                 skills={skills}
                 onSkillsChanged={(list, id) => {
                   setSkills(list);
@@ -928,6 +933,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
                       onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
+                      moodBoardHidden={!!moodBoard?.hidden}
+                      moodBoardTitle={moodBoard?.title}
                     />
                   </TabsContent>
                   <TabsContent value="results">
@@ -954,6 +961,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onDownloadSet={(t) => void downloadSet(t)}
                       skills={skills}
                       batchSkill={viewConfig.skill}
+                      moodBoardHidden={!!moodBoard?.hidden}
+                      moodBoardTitle={moodBoard?.title}
                       canAssignSkill={
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
