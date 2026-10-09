@@ -53,7 +53,7 @@ flowchart LR
 | 1 | Lifestyle set | deterministic builder, 5 cards + fabric card |
 | 2–4, 6 | Studio / catalogue variants | deterministic builder |
 | 5 | Skill campaign — same model | written brief (vision prompt builder) |
-| 7 | Zaid creative direction | written brief, 800–1,000 words, mood board, skill picker, saved looks |
+| 7 | Creative direction | written brief, 800–1,000 words, mood board, skill picker, saved looks |
 | 8 | Skill campaign — new model | written brief, model replaced |
 | **9** | **No prompt** | **fixed rules + library photos, no builder** |
 

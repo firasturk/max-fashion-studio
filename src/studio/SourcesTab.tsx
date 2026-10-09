@@ -83,7 +83,7 @@ export default function SourcesTab({
   const [assigning, setAssigning] = useState(false);
   const skillChoices = ["zaid", ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
-    !id || id === "zaid" ? "Zaid's mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+    !id || id === "zaid" ? "Mood board" : (skills.find((s) => s.id === id)?.title ?? id);
   async function assignPicked() {
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);

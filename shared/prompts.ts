@@ -6,7 +6,7 @@ export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "2": "Create a lifestyle image from the supplied real model photograph. Keep the exact garment, styling and body proportions, but present a DIFFERENT photorealistic adult model face and hair suited to the garment. Never reuse the original person's face.",
   "3": "Create a new pose from the supplied real model photograph. Keep the same person's body, styling and the exact garment, but give her a DIFFERENT photorealistic face so she is not identifiable. Only the pose and framing change.",
   "5": "Premium fashion editorial (Zara / Splash style) built by the Fashion Editorial Prompt Builder from the attached photo. The outfit is the hero product and is never changed.",
-  "7": "Fashion imagery written per image by the prompt builder following Zaid's creative direction. The outfit is the hero and is never changed.",
+  "7": "Fashion imagery written per image by the prompt builder following the creative direction. The outfit is the hero and is never changed.",
   "8": "Premium fashion editorial built by the prompt builder from the attached photo, worn by a new AI-generated model. Only the outfit, footwear, accessories and bags come from the photo; the person is replaced entirely.",
   "6": "Product packshot recolour: change ONLY the background colour of the attached product photo. The product (garment, mannequin or model, and everything on it) must stay pixel-identical: same position, scale, crop, pose, colours, print, texture, folds and edges. Do not retouch, restyle, move, crop or re-light the product.",
   "9": "No prompt: the model from the attached photo is placed in the attached background photo and takes the pose of the attached pose photo; the fixed rules do the rest.",
@@ -110,7 +110,7 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
     if (c.mode === "8") parts.push(NEW_MODEL_RULE);
     if (c.prompt) parts.push(`City / mood preference: ${c.prompt}`);
   } else if (c.mode === "7") {
-    parts.push("Prompt is written per image by the prompt builder from Zaid's creative direction.");
+    parts.push("Prompt is written per image by the prompt builder from the creative direction.");
     if (c.prompt) parts.push(`Creative direction: ${c.prompt}`);
   } else {
     parts.push(`New background for this image: ${sceneFor(c, card)} ${c.prompt}`);

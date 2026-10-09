@@ -135,8 +135,7 @@ export function validateConfig(c: Config): string | null {
   if (c.mode === "5" && c.input !== "model") return "Skill campaign needs a real model photo.";
   if (c.mode === "8" && c.input !== "model")
     return "Skill campaign (new model) needs a real model photo.";
-  if (c.mode === "7" && c.input !== "model")
-    return "Zaid creative direction needs a real model photo.";
+  if (c.mode === "7" && c.input !== "model") return "Creative direction needs a real model photo.";
   return null;
 }
 

@@ -25,7 +25,7 @@ function cardLabel(mode: string, card: number): string {
   if (mode === "3") return `Pose ${card}`;
   if (mode === "5") return `Editorial ${card}`;
   if (mode === "8") return `New model ${card}`;
-  if (mode === "7") return `Zaid ${card}`;
+  if (mode === "7") return `Direction ${card}`;
   if (mode === "9") return `No prompt ${card}`;
   if (mode === "6") return `Colour ${card}`;
   return `Lifestyle ${card}`;
@@ -73,7 +73,7 @@ export default function ResultsTab({
   const [assigning, setAssigning] = useState(false);
   const skillChoices = ["zaid", ...skills.map((s) => s.id)];
   const skillTitle = (id: string | null | undefined) =>
-    !id || id === "zaid" ? "Zaid's mood board" : (skills.find((s) => s.id === id)?.title ?? id);
+    !id || id === "zaid" ? "Mood board" : (skills.find((s) => s.id === id)?.title ?? id);
   async function assignPicked() {
     if (!onAssignSkill || !picked.size) return;
     setAssigning(true);

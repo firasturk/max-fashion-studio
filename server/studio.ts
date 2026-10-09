@@ -395,7 +395,8 @@ const skillBody = z.object({
 
 studioRoutes.post("/skills", async (c) => {
   const d = await body(c, skillBody);
-  if (d.id === "zaid") throw new StudioError("Zaid's direction is edited from its own workflow.");
+  if (d.id === "zaid")
+    throw new StudioError("The creative direction is edited from its own workflow.");
   const goal =
     d.goal ||
     `Goal: write ONE prompt for "${d.title}". The reference photos in this skill's library are the creative source: build the scene, pose and stance, light and camera angle from the attached reference as a sibling of it. The garment, footwear and accessories stay exactly as supplied; the output keeps the upload's framing.`;

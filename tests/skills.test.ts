@@ -46,12 +46,12 @@ describe("zaid creative direction", () => {
     const s = zaidSkill("Prefer Munich.");
     const merged = zaidSkill("", skillById("kids"));
     expect(merged.id).toBe("kids");
-    expect(merged.instructions).toContain("Zaid creative direction Prompt Builder");
+    expect(merged.instructions).toContain("Creative direction Prompt Builder");
     expect(merged.instructions).toContain("Example 1");
-    expect(merged.instructions).not.toContain("Zaid's world, distilled");
+    expect(merged.instructions).not.toContain("The creative-direction world, distilled");
     expect(merged.library).toBe(skillById("kids").library);
     expect(merged.template).toBe(s.template);
-    expect(s.instructions).toContain("Zaid creative direction Prompt Builder");
+    expect(s.instructions).toContain("Creative direction Prompt Builder");
     expect(s.instructions).toContain("ADDITIONAL DIRECTION FROM THE TEAM");
     expect(s.instructions).toContain(ZAID_EXAMPLES[2].prompt.slice(0, 60));
     expect(libraryScenes(s.library)).toHaveLength(ZAID_SCENES.length);

@@ -48,7 +48,7 @@ in the Connection dialog. Use your own keys, not the production ones.
 npx wrangler d1 migrations apply DB --remote
 ```
 
-## 6. Mood-board photos for the Zaid workflow (optional)
+## 6. Mood-board photos for the Creative direction workflow (optional)
 
 ```
 for f in assets/zaid/*.jpg; do
@@ -83,7 +83,7 @@ This runs formatting, lint, type checks, tests and the build. Keep it green.
 ## Where things are
 
 - `shared/skills.ts`: the ready-made skills (mode 5)
-- `shared/zaid.ts`: Zaid's smart direction (mode 7)
+- `shared/zaid.ts`: Creative direction smart skill (mode 7)
 - `shared/prompts.ts`: prompts for modes 1-4 and 6
 - `shared/pricing.ts`: cost estimates
 - `server/engine.ts`: the batch engine

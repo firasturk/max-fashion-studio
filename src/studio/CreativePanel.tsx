@@ -97,10 +97,10 @@ export default function CreativePanel({
   }, [zaidMode]);
   const zaidEntry: SkillInfo = {
     id: "zaid",
-    title: "Zaid's mood board",
-    caption: "Zaid's world · his prompt structure",
+    title: "Mood board",
+    caption: "Mood board world · prompt structure",
     description:
-      "Each image gets a new scene from Zaid's mood board, written in Zaid's prompt structure. Add notes below only when a batch needs something specific (a city, a colour story, a pose).",
+      "Each image gets a new scene from the mood board, written in the creative-direction prompt structure. Add notes below only when a batch needs something specific (a city, a colour story, a pose).",
     goal: "",
     library: "",
     builtIn: true,
@@ -594,9 +594,7 @@ export default function CreativePanel({
               <ReferenceLibrary
                 key={currentSkill.id}
                 skill={currentSkill.id}
-                title={
-                  isZaidEntry ? "Zaid's mood board" : `${currentSkill.title} reference library`
-                }
+                title={isZaidEntry ? "Mood board" : `${currentSkill.title} reference library`}
                 onChanged={libraryChanged}
               />
             </Suspense>
