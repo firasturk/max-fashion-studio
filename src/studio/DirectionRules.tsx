@@ -73,12 +73,16 @@ export default function DirectionRules({ locked = false }: { locked?: boolean })
   }
 
   async function reset() {
-    if (!window.confirm("Put back the built-in rules? Your edits and added rules are removed."))
+    if (
+      !window.confirm(
+        "Restore the original 13 rules exactly as they were? Your edits, switched-off rules and added rules are discarded.",
+      )
+    )
       return;
     try {
       const d = await del<{ rules: DirectionRule[] }>("/api/studio/direction-rules");
       setRules(d.rules);
-      toast.success("Built-in rules restored.");
+      toast.success("The original 13 rules are back.");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -109,7 +113,8 @@ export default function DirectionRules({ locked = false }: { locked?: boolean })
           <p className="prompt-tip rules-tip">
             These rules are given to the prompt writer on every Creative direction image and
             override the skill, its template and the mood board. Switch one off, change its wording
-            or add your own; the next prompt written uses the list as it is here.
+            or add your own; the next prompt written uses the list as it is here. "Restore original
+            rules" puts the 13 built-in rules back and discards your changes.
             {saving ? " Saving…" : ""}
           </p>
           {rules === null ? (
@@ -158,8 +163,14 @@ export default function DirectionRules({ locked = false }: { locked?: boolean })
             <button type="button" className="text-button" disabled={locked} onClick={add}>
               <Plus size={13} /> Add rule
             </button>
-            <button type="button" className="text-button" disabled={locked} onClick={reset}>
-              <RotateCcw size={13} /> Built-in rules
+            <button
+              type="button"
+              className="text-button"
+              disabled={locked}
+              title="Put the original 13 rules back and discard your edits and added rules"
+              onClick={reset}
+            >
+              <RotateCcw size={13} /> Restore original rules
             </button>
           </div>
         </div>
