@@ -1440,6 +1440,7 @@ async function engineRuleFlags(env: Env) {
     "detail",
     "integration",
     "composition",
+    "grain",
   ] as const;
   return Object.fromEntries(keys.map((k) => [k, ruleOn(rules, k)]));
 }

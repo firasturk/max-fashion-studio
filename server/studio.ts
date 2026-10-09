@@ -22,7 +22,7 @@ import { FAL_MODELS } from "./fal";
 import { listSkills, saveSkillsOrder, setFavourite } from "./skills";
 import { buildSkillFromReferences } from "./skillbuilder";
 import { SKILLS } from "@shared/skills";
-import { DEFAULT_DIRECTION_RULES } from "@shared/direction-rules";
+import { DEFAULT_DIRECTION_RULES, storeDirectionRules } from "@shared/direction-rules";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
@@ -285,7 +285,7 @@ const rulesBody = z.object({
 
 studioRoutes.put("/direction-rules", async (c) => {
   const { rules } = await body(c, rulesBody);
-  await setSetting(c.env, DIRECTION_RULES_SETTING, JSON.stringify(rules));
+  await setSetting(c.env, DIRECTION_RULES_SETTING, JSON.stringify(storeDirectionRules(rules)));
   return c.json({ ok: true, rules });
 });
 

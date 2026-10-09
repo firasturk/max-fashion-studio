@@ -68,6 +68,12 @@ export const DEFAULT_DIRECTION_RULES: DirectionRule[] = [
     enabled: true,
   },
   {
+    key: "grain",
+    title: "Film grain",
+    text: "FILM GRAIN: every image carries a subtle, fine, even analog film grain over the whole frame, like a professionally scanned 35mm colour negative: fine organic grain visible in the midtones and shadows, slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour; write this in the prompt's photographic treatment section as a delicate finishing texture that stays uniform across model and background, never heavy, never digital noise, never a vintage filter, never blur or loss of detail.",
+    enabled: true,
+  },
+  {
     key: "integration",
     title: "Integration: model part of the scene",
     text: "INTEGRATION: the model is a real part of the scene, not a cutout: the same sun direction, colour temperature and contrast on the model as on the background, feet planted on the ground with a true contact shadow and a cast shadow that matches the scene's shadows, matching perspective and camera height, the same grain, sharpness and colour grade on model and background, reflected light and ambient colour from the surroundings on skin and garment, and described in the prompt.",
@@ -108,12 +114,43 @@ export function ruleOn(rules: DirectionRule[] | undefined, key: string): boolean
   return rules.some((r) => r.key === key && r.enabled);
 }
 
-/** Reads a stored list, falling back to the defaults when absent or unreadable. */
+/** What is stored: the team's list plus the built-in keys they removed (so a new built-in still appears). */
+export interface StoredDirectionRules {
+  rules: DirectionRule[];
+  removed: string[];
+}
+
+/** Prepares the team's list for storage, remembering which built-in rules they removed. */
+export function storeDirectionRules(rules: DirectionRule[]): StoredDirectionRules {
+  const keys = new Set(rules.map((r) => r.key));
+  return {
+    rules,
+    removed: DEFAULT_DIRECTION_RULES.map((r) => r.key).filter((k) => !keys.has(k)),
+  };
+}
+
+/**
+ * Reads a stored list, falling back to the defaults when absent or unreadable. A built-in rule
+ * added after the team saved their list is appended, unless they removed it on purpose.
+ */
 export function parseDirectionRules(raw: string | null | undefined): DirectionRule[] {
   if (!raw) return DEFAULT_DIRECTION_RULES;
   try {
-    const d = JSON.parse(raw) as unknown;
-    if (!Array.isArray(d)) return DEFAULT_DIRECTION_RULES;
+    const parsed = JSON.parse(raw) as unknown;
+    const stored: unknown = Array.isArray(parsed)
+      ? parsed
+      : parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as StoredDirectionRules).rules)
+        ? (parsed as StoredDirectionRules).rules
+        : null;
+    const removed = new Set(
+      !Array.isArray(parsed) && parsed && typeof parsed === "object"
+        ? ((parsed as StoredDirectionRules).removed ?? [])
+        : [],
+    );
+    if (!Array.isArray(stored)) return DEFAULT_DIRECTION_RULES;
+    const d = stored;
     const list = d
       .filter(
         (r): r is DirectionRule =>
@@ -125,6 +162,9 @@ export function parseDirectionRules(raw: string | null | undefined): DirectionRu
         text: r.text,
         enabled: r.enabled !== false,
       }));
+    const present = new Set(list.map((r) => r.key));
+    for (const r of DEFAULT_DIRECTION_RULES)
+      if (!present.has(r.key) && !removed.has(r.key)) list.push(r);
     return list;
   } catch {
     return DEFAULT_DIRECTION_RULES;

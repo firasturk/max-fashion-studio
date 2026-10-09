@@ -4,15 +4,23 @@ import {
   composeFixedRules,
   parseDirectionRules,
   ruleOn,
+  storeDirectionRules,
 } from "../shared/direction-rules";
-import { buildEditorialPrompt, LIGHT_RULE, DETAIL_RULE, BLEND_RULE } from "../shared/prompts";
+import {
+  buildEditorialPrompt,
+  LIGHT_RULE,
+  DETAIL_RULE,
+  BLEND_RULE,
+  GRAIN_RULE,
+} from "../shared/prompts";
 
 describe("creative direction fixed rules", () => {
   it("numbers the enabled rules in the team's order", () => {
     const text = composeFixedRules(DEFAULT_DIRECTION_RULES);
     expect(text.startsWith("Fixed rules for every prompt")).toBe(true);
     expect(text).toContain("(1) OUTFIT:");
-    expect(text).toContain("(13) COMPOSITION:");
+    expect(text).toContain("(14) COMPOSITION:");
+    expect(text).toContain("FILM GRAIN:");
     expect(text).toContain("Catalogue-safe wording only");
     const fewer = composeFixedRules([
       { key: "a", title: "", text: "Rule A.", enabled: true },
@@ -31,13 +39,22 @@ describe("creative direction fixed rules", () => {
     const list = parseDirectionRules(
       JSON.stringify([{ key: "light", text: "Sun.", enabled: false }, { text: "Mine." }]),
     );
-    expect(list).toEqual([
+    // A plain stored array (older save) gets the built-ins it does not mention appended.
+    expect(list.slice(0, 2)).toEqual([
       { key: "light", title: "", text: "Sun.", enabled: false },
       { key: "custom-2", title: "", text: "Mine.", enabled: true },
     ]);
+    expect(list.map((r) => r.key)).toContain("grain");
     expect(ruleOn(list, "light")).toBe(false);
-    expect(ruleOn(list, "detail")).toBe(false);
+    expect(ruleOn(list, "detail")).toBe(true);
     expect(ruleOn(undefined, "detail")).toBe(true);
+    // A removed built-in stays removed; a new built-in still appears.
+    const kept = DEFAULT_DIRECTION_RULES.filter((r) => r.key !== "light" && r.key !== "grain");
+    const stored = storeDirectionRules(kept);
+    expect(stored.removed).toEqual(["light", "grain"]);
+    const back = parseDirectionRules(JSON.stringify({ rules: kept, removed: ["light"] }));
+    expect(back.map((r) => r.key)).not.toContain("light");
+    expect(back.map((r) => r.key)).toContain("grain");
   });
 
   it("switches the engine-side rules with the list", () => {
@@ -45,6 +62,7 @@ describe("creative direction fixed rules", () => {
     expect(full).toContain(LIGHT_RULE);
     expect(full).toContain(DETAIL_RULE);
     expect(full).toContain(BLEND_RULE);
+    expect(full).toContain(GRAIN_RULE);
     expect(full).toContain("hands in pockets");
     const off = buildEditorialPrompt(
       "Body.",
@@ -62,9 +80,12 @@ describe("creative direction fixed rules", () => {
         detail: false,
         hands: false,
         tattoos: false,
+        grain: false,
       },
     );
     expect(off).not.toContain(LIGHT_RULE);
+    expect(off).not.toContain(GRAIN_RULE);
+    expect(off).not.toContain("digital noise");
     expect(off).not.toContain(DETAIL_RULE);
     expect(off).toContain(BLEND_RULE);
     expect(off).not.toContain("overcast sky");
