@@ -70,7 +70,7 @@ export const DEFAULT_DIRECTION_RULES: DirectionRule[] = [
   {
     key: "grain",
     title: "Film grain",
-    text: "FILM GRAIN: every image carries a subtle, fine, even analog film grain over the whole frame, like a professionally scanned 35mm colour negative: fine organic grain visible in the midtones and shadows, slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour; write this in the prompt's photographic treatment section as a delicate finishing texture that stays uniform across model and background, never heavy, never digital noise, never a vintage filter, never blur or loss of detail.",
+    text: "FILM GRAIN: every image carries a clearly visible, fine, even analog film grain over the whole frame, like a professionally scanned 35mm colour negative at ISO 400: the grain is noticeable at normal viewing size without zooming in, organic and uniform, strongest in the midtones and shadows and present in the skin, the garment and the sky alike; slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour; write this in the prompt's photographic treatment section as a real film texture (not a faint hint), still never coarse or clumpy, never digital noise, never a vintage filter, never blur or loss of detail.",
     enabled: true,
   },
   {
@@ -113,6 +113,13 @@ export function ruleOn(rules: DirectionRule[] | undefined, key: string): boolean
   if (!rules) return true;
   return rules.some((r) => r.key === key && r.enabled);
 }
+
+/** Earlier wordings of built-in rules: a stored copy the team never edited is upgraded to the current text. */
+const SUPERSEDED_TEXTS: Record<string, string[]> = {
+  grain: [
+    "FILM GRAIN: every image carries a subtle, fine, even analog film grain over the whole frame, like a professionally scanned 35mm colour negative: fine organic grain visible in the midtones and shadows, slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour; write this in the prompt's photographic treatment section as a delicate finishing texture that stays uniform across model and background, never heavy, never digital noise, never a vintage filter, never blur or loss of detail.",
+  ],
+};
 
 /** What is stored: the team's list plus the built-in keys they removed (so a new built-in still appears). */
 export interface StoredDirectionRules {
@@ -162,6 +169,13 @@ export function parseDirectionRules(raw: string | null | undefined): DirectionRu
         text: r.text,
         enabled: r.enabled !== false,
       }));
+    for (const r of list) {
+      const current = DEFAULT_DIRECTION_RULES.find((d) => d.key === r.key);
+      if (current && (SUPERSEDED_TEXTS[r.key] ?? []).includes(r.text.trim())) {
+        r.text = current.text;
+        if (!r.title) r.title = current.title;
+      }
+    }
     const present = new Set(list.map((r) => r.key));
     for (const r of DEFAULT_DIRECTION_RULES)
       if (!present.has(r.key) && !removed.has(r.key)) list.push(r);

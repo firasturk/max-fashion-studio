@@ -52,6 +52,21 @@ describe("creative direction fixed rules", () => {
     const kept = DEFAULT_DIRECTION_RULES.filter((r) => r.key !== "light" && r.key !== "grain");
     const stored = storeDirectionRules(kept);
     expect(stored.removed).toEqual(["light", "grain"]);
+    // An untouched copy of an older wording is upgraded; an edited one is kept.
+    const upgraded = parseDirectionRules(
+      JSON.stringify([
+        {
+          key: "grain",
+          title: "",
+          text: "FILM GRAIN: every image carries a subtle, fine, even analog film grain over the whole frame, like a professionally scanned 35mm colour negative: fine organic grain visible in the midtones and shadows, slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour; write this in the prompt's photographic treatment section as a delicate finishing texture that stays uniform across model and background, never heavy, never digital noise, never a vintage filter, never blur or loss of detail.",
+          enabled: true,
+        },
+        { key: "light", title: "", text: "My own light rule.", enabled: true },
+      ]),
+    );
+    expect(upgraded[0].text).toContain("ISO 400");
+    expect(upgraded[0].title).toBe("Film grain");
+    expect(upgraded[1].text).toBe("My own light rule.");
     const back = parseDirectionRules(JSON.stringify({ rules: kept, removed: ["light"] }));
     expect(back.map((r) => r.key)).not.toContain("light");
     expect(back.map((r) => r.key)).toContain("grain");

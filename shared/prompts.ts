@@ -326,7 +326,7 @@ export interface EngineRuleFlags {
 
 /** Engine-facing film-grain finish for Creative direction. */
 export const GRAIN_RULE =
-  "FILM GRAIN: finish the whole image with a subtle, fine, even analog film grain, as in a professionally scanned 35mm colour negative: fine organic grain visible in the midtones and shadows, slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour. The grain is delicate and uniform across the model and the background and reads as part of the photograph; it is not digital noise, not a heavy vintage filter, and it never blurs or softens the detail of the face, the garment or the setting.";
+  "FILM GRAIN: finish the whole image with a clearly visible, fine, even analog film grain, as in a professionally scanned 35mm colour negative at ISO 400: the grain is noticeable at normal viewing size without zooming in, organic and uniform across the model, the garment, the skin, the background and the sky, strongest in the midtones and shadows; slightly softened micro-contrast, a gentle bloom on the brightest sunlit edges and backlit hair, natural restrained colour. It is a real film texture, not a faint hint; still never coarse or clumpy, not digital noise, not a heavy vintage filter, and it never blurs or softens the detail of the face, the garment or the setting.";
 
 export function buildEditorialPrompt(
   briefPrompt: string,
@@ -396,7 +396,7 @@ export function buildEditorialPrompt(
             ? "cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges"
             : "",
           on("grain")
-            ? "digital noise, heavy grain, vintage filter, plastic-smooth digital look, oversharpened"
+            ? "digital noise, coarse clumpy grain, grain-free plastic-smooth digital look, vintage filter, oversharpened"
             : "",
         ]
           .filter(Boolean)
