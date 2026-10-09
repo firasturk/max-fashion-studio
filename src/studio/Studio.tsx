@@ -541,7 +541,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           ? { format, quality: viewConfig.outputQuality || 90, fit }
           : undefined;
       return {
-        name: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, convert ? format : srcExt),
+        name: outputName(byId.get(t.source)!.name, numbers.get(t) ?? 1, convert?.format ?? srcExt),
         url: outputUrl(t),
         convert,
       };
