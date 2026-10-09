@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { del, get } from "@/api";
@@ -36,6 +37,8 @@ export default function ReferenceLibrary({
   const [items, setItems] = useState<Reference[]>([]);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // Hovering a thumbnail shows the photo at a readable size next to the pointer.
+  const [preview, setPreview] = useState<{ item: Reference; x: number; y: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -114,7 +117,12 @@ export default function ReferenceLibrary({
       {items.length ? (
         <div className="mood-strip">
           {items.map((r) => (
-            <figure key={r.id}>
+            <figure
+              key={r.id}
+              onMouseEnter={(e) => setPreview({ item: r, x: e.clientX, y: e.clientY })}
+              onMouseMove={(e) => setPreview({ item: r, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setPreview(null)}
+            >
               <img
                 src={`/api/studio/references/${r.id}/file`}
                 alt={r.name ?? "reference"}
@@ -140,6 +148,7 @@ export default function ReferenceLibrary({
           one of them (never the clothes or accessories).
         </div>
       )}
+      {preview && createPortal(<HoverPreview {...preview} />, document.body)}
       {items.length > 0 && (
         <div className="prompt-tip">
           {items.length} photo{items.length > 1 ? "s" : ""}. Each image borrows background, pose and
@@ -148,5 +157,25 @@ export default function ReferenceLibrary({
         </div>
       )}
     </>
+  );
+}
+
+const PREVIEW_W = 420;
+const PREVIEW_H = 560;
+
+/** The hovered reference at a readable size, kept inside the viewport and never under the pointer. */
+function HoverPreview({ item, x, y }: { item: Reference; x: number; y: number }) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = x + 20 + PREVIEW_W > vw ? Math.max(8, x - 20 - PREVIEW_W) : x + 20;
+  const top = Math.max(8, Math.min(y - PREVIEW_H / 3, vh - PREVIEW_H - 8));
+  return (
+    <div className="ref-preview" style={{ left, top }} aria-hidden>
+      <img src={`/api/studio/references/${item.id}/file`} alt="" />
+      <div className="ref-preview-caption">
+        {item.name ?? "Reference"}
+        {item.framing ? ` · ${FRAMING_LABEL[item.framing] ?? item.framing}` : ""}
+      </div>
+    </div>
   );
 }
