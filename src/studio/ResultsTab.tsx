@@ -46,6 +46,7 @@ export default function ResultsTab({
   onDownloadTask,
   onDownloadSet,
   skills = [],
+  batchSkill,
   canAssignSkill = false,
   onAssignSkill,
 }: {
@@ -65,6 +66,8 @@ export default function ResultsTab({
   onDownloadSet?: (t: Task) => void;
   /** Zaid creative direction, before generation: send chosen photos to another skill. */
   skills?: SkillInfo[];
+  /** The skill chosen in the panel: what a photo without its own assignment uses. */
+  batchSkill?: string;
   canAssignSkill?: boolean;
   onAssignSkill?: (sourceIds: string[], skill: string | null) => Promise<void>;
 }) {
@@ -371,7 +374,7 @@ export default function ResultsTab({
                       : (STATUS_LABEL[t.status] ?? t.status)}
                   </i>
                   {" · "}
-                  {mode === "7" ? skillTitle(s?.skill) : cardLabel(mode, t.card)}
+                  {mode === "7" ? skillTitle(s?.skill ?? batchSkill) : cardLabel(mode, t.card)}
                 </span>
                 {t.error && (
                   <span className={/…$/.test(t.error) ? "image-note" : "image-error"}>

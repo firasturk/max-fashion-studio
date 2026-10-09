@@ -347,7 +347,7 @@ export default function SourcesTab({
                         <strong title={s.name}>{s.name.split("/").pop()}</strong>
                         <span>
                           {s.role === "supporting" ? "Kept original only" : "Generated"}
-                          {canAssignSkill && ` · ${skillTitle(s.skill)}`}
+                          {canAssignSkill && ` · ${skillTitle(s.skill ?? config.skill)}`}
                         </span>
                       </div>
                     </article>

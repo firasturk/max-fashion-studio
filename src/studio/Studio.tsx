@@ -953,6 +953,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                       onDownloadTask={(t) => void downloadOne(t)}
                       onDownloadSet={(t) => void downloadSet(t)}
                       skills={skills}
+                      batchSkill={viewConfig.skill}
                       canAssignSkill={
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
