@@ -48,6 +48,17 @@ export async function post<T>(path: string, body?: unknown): Promise<T> {
   );
 }
 
+export async function put<T>(path: string, body: unknown): Promise<T> {
+  return parse<T>(
+    await fetch(path, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 export async function postForm<T>(path: string, form: FormData): Promise<T> {
   return parse<T>(await fetch(path, { method: "POST", credentials: "same-origin", body: form }));
 }

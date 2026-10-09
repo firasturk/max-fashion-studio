@@ -53,6 +53,7 @@ import {
   type FramingCheck,
 } from "./editorial";
 import { FABRIC_CARD, isNoPrompt, NP_BACKGROUNDS, NP_POSES, type Config } from "@shared/config";
+import { parseDirectionRules, ruleOn } from "@shared/direction-rules";
 import type { QA } from "@shared/types";
 import {
   getSetting,
@@ -877,6 +878,7 @@ async function ensureBrief(
     references: library.map((r) => r.id),
     usedReferences,
     direction: config.mode === "7" ? config.prompt : undefined,
+    rules: config.mode === "7" ? await directionRules(env) : undefined,
     market: config.market || "auto",
     preference: config.mode === "7" ? "" : config.prompt,
     aspectRatio: config.ratio,
@@ -1419,6 +1421,29 @@ async function referenceEngineUrl(env: Env, client: HiggsfieldClient, id: string
 
 const SKILL_MODES = new Set(["5", "7", "8"]);
 
+export const DIRECTION_RULES_SETTING = "direction_rules";
+
+/** The Creative direction fixed rules as the team keeps them (defaults until they edit). */
+export async function directionRules(env: Env) {
+  return parseDirectionRules(await getSetting(env, DIRECTION_RULES_SETTING));
+}
+
+/** The engine-side switches that follow the team's rule list. */
+async function engineRuleFlags(env: Env) {
+  const rules = await directionRules(env);
+  const keys = [
+    "identity",
+    "tattoos",
+    "framing",
+    "hands",
+    "light",
+    "detail",
+    "integration",
+    "composition",
+  ] as const;
+  return Object.fromEntries(keys.map((k) => [k, ruleOn(rules, k)]));
+}
+
 /** Prompt for a card: the editorial brief in mode 5, the deterministic builder otherwise. */
 async function promptFor(
   env: Env,
@@ -1468,6 +1493,7 @@ async function promptFor(
           pockets,
           config.mode === "7",
           backView,
+          config.mode === "7" ? await engineRuleFlags(env) : {},
         );
     if (child) prompt = sanitizeChildPrompt(prompt);
   } else {

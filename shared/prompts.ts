@@ -311,6 +311,18 @@ export function framingRule(framing?: string, handsInPockets = false): string {
   );
 }
 
+/** Creative direction: which engine-side rules are on (absent means on). */
+export interface EngineRuleFlags {
+  identity?: boolean;
+  tattoos?: boolean;
+  framing?: boolean;
+  hands?: boolean;
+  light?: boolean;
+  detail?: boolean;
+  integration?: boolean;
+  composition?: boolean;
+}
+
 export function buildEditorialPrompt(
   briefPrompt: string,
   negative: string,
@@ -322,17 +334,23 @@ export function buildEditorialPrompt(
   handsInPockets = false,
   relaxed = false,
   backView = false,
+  flags: EngineRuleFlags = {},
 ): string {
+  // Creative direction: each engine-side rule follows the team's switch for the matching fixed rule.
+  const on = (k: keyof EngineRuleFlags) => !relaxed || flags[k] !== false;
   const parts = [briefPrompt.trim()];
   if (newModel) parts.push(NEW_MODEL_RULE);
-  else parts.push(IDENTITY_RULE);
-  parts.push(TATTOO_RULE);
-  parts.push(framingRule(framing, handsInPockets));
-  if (backView) parts.push(BACK_VIEW_RULE);
-  // Zaid creative direction: hair follows the direction; the light is bright but balanced.
-  if (relaxed) parts.push(LIGHT_RULE, DETAIL_RULE, BLEND_RULE);
-  else parts.push(HAIR_RULE);
-  if (center) parts.push(CENTERING);
+  else if (on("identity")) parts.push(IDENTITY_RULE);
+  if (on("tattoos")) parts.push(TATTOO_RULE);
+  if (on("framing")) parts.push(framingRule(framing, handsInPockets && on("hands")));
+  if (backView && on("framing")) parts.push(BACK_VIEW_RULE);
+  // Creative direction: hair follows the direction; the light is bright but balanced.
+  if (relaxed) {
+    if (on("light")) parts.push(LIGHT_RULE);
+    if (on("detail")) parts.push(DETAIL_RULE);
+    if (on("integration")) parts.push(BLEND_RULE);
+  } else parts.push(HAIR_RULE);
+  if (center && on("composition")) parts.push(CENTERING);
   if (edit)
     parts.push(
       `Revision of the existing result: ${edit}. Change only what is requested; keep all other details.`,
@@ -361,11 +379,23 @@ export function buildEditorialPrompt(
   const avoid = [
     negative,
     relaxed
-      ? "dim scene, murky light, overcast sky, blown-out highlights, harsh shadows, empty background, smeared background, heavy background blur, low-detail background, cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges"
+      ? [
+          on("light")
+            ? "dim scene, murky light, overcast sky, blown-out highlights, harsh shadows"
+            : "",
+          on("detail")
+            ? "empty background, smeared background, heavy background blur, low-detail background"
+            : "",
+          on("integration")
+            ? "cutout look, pasted-on model, floating feet, missing contact shadow, mismatched lighting, halo edges"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(", ")
       : "wind-blown hair, flying hair strands, messy hair",
-    handsInPockets ? "" : "hands in pockets",
-    "tattoos, tattoo, body ink",
-    newModel
+    handsInPockets || !on("hands") ? "" : "hands in pockets",
+    on("tattoos") ? "tattoos, tattoo, body ink" : "",
+    newModel || !on("identity")
       ? ""
       : "different face, altered facial features, changed hairstyle, different hair length or colour",
   ]

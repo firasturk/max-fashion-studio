@@ -80,9 +80,16 @@ describe("zaid creative direction", () => {
     expect(text).toContain("BACKGROUND DETAIL");
     expect(text).toContain("INTEGRATION");
     expect(text).toContain("CAMERA ANGLE");
-    expect(text).toContain("(11) IDENTITY");
-    expect(text).toContain("(12) TATTOOS");
-    expect(text).toContain("(13) catalogue-safe wording only");
+    expect(text).toContain("IDENTITY: when the model is kept");
+    expect(text).toContain("TATTOOS: any tattoo");
+    expect(text).toContain("Catalogue-safe wording only");
+    const custom = builderInstruction({
+      ...req,
+      skill: "zaid",
+      rules: [{ key: "custom-1", title: "", text: "Always a red wall.", enabled: true }],
+    });
+    expect(custom).toContain("(1) Always a red wall.");
+    expect(custom).not.toContain("LIGHT: real sun");
     expect(text).toContain("golden-hour sun");
     expect(text).toContain("800-1000 words");
     expect(text).not.toContain("600-1100 words");

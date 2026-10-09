@@ -1,0 +1,132 @@
+/**
+ * Creative direction (mode 7): the fixed rules every prompt follows. The team sees, edits, adds and
+ * removes them in the studio; the list is stored once (settings) and read on every prompt. Each
+ * built-in rule has a key, so the engine-side companion rule (light, detail, integration, identity,
+ * tattoos, framing, centring) follows the same switch.
+ */
+export interface DirectionRule {
+  /** Stable id. Built-in rules keep their key; team rules get `custom-<n>`. */
+  key: string;
+  title: string;
+  text: string;
+  enabled: boolean;
+}
+
+export const DEFAULT_DIRECTION_RULES: DirectionRule[] = [
+  {
+    key: "outfit",
+    title: "Outfit lock",
+    text: "OUTFIT: everything worn in image 1 stays exactly as it is, garments, footwear and any accessory already in the photo, nothing added, removed or invented.",
+    enabled: true,
+  },
+  {
+    key: "framing",
+    title: "Framing lock",
+    text: "FRAMING LOCK: the output crop equals the upload crop, an upper-body upload stays upper body and ends at the same line with no legs or footwear drawn, a lower-body upload stays lower body and starts at the same line with no face or top drawn, a full-body upload stays full body with footwear visible, a three-quarter upload (head to around the knees) stays three-quarter and ends at the same line with no feet drawn, and a back-view upload stays a back view with the model facing away and no face shown.",
+    enabled: true,
+  },
+  {
+    key: "reference",
+    title: "Reference use",
+    text: "A reference image contributes only setting, pose and stance, lighting and camera angle.",
+    enabled: true,
+  },
+  {
+    key: "props",
+    title: "No props from references",
+    text: "Never copy hats, bags, sunglasses, jewellery or props from a reference.",
+    enabled: true,
+  },
+  {
+    key: "hands",
+    title: "Hands and pockets",
+    text: "HANDS: a hand goes into a pocket only when the upload shows a hand in a pocket; otherwise hands stay out of pockets, relaxed and visible.",
+    enabled: true,
+  },
+  {
+    key: "catalogue",
+    title: "Catalogue-safe wording",
+    text: "Catalogue-safe wording only.",
+    enabled: true,
+  },
+  {
+    key: "identity",
+    title: "Identity: face and hairstyle",
+    text: "IDENTITY: when the model is kept, the face and facial structure are reproduced exactly as in image 1 (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones, skin tone, age), and the hairstyle is kept exactly (length, colour, parting, texture, styling); write this explicitly in the FACE & HAIR section and never describe a different or idealised face or a restyled hair.",
+    enabled: true,
+  },
+  {
+    key: "tattoos",
+    title: "Tattoos removed",
+    text: "TATTOOS: any tattoo visible on the person in image 1 is removed in the output; state in the prompt that the skin is clean with no tattoo or ink, and add tattoos to the AVOID list.",
+    enabled: true,
+  },
+  {
+    key: "light",
+    title: "Light: golden hour or midday sun",
+    text: "LIGHT: real sun, either golden-hour sun (low, warm, long soft shadows) or midday sun (high, clean, short shadows), chosen per image and named in the prompt; never overcast, dusk, night or artificial light; the scene is bright but balanced, with open shadows and no blown-out highlights, no dim, murky, heavy-shadow or high-contrast scenes; the model is lit evenly and the garment colours read true.",
+    enabled: true,
+  },
+  {
+    key: "integration",
+    title: "Integration: model part of the scene",
+    text: "INTEGRATION: the model is a real part of the scene, not a cutout: the same sun direction, colour temperature and contrast on the model as on the background, feet planted on the ground with a true contact shadow and a cast shadow that matches the scene's shadows, matching perspective and camera height, the same grain, sharpness and colour grade on model and background, reflected light and ambient colour from the surroundings on skin and garment, and described in the prompt.",
+    enabled: true,
+  },
+  {
+    key: "camera",
+    title: "Camera angle from the reference",
+    text: "CAMERA ANGLE: for a FULL_BODY upload the camera angle, camera height, tilt, lens feel and distance are taken from the attached reference photo (image 2) and described explicitly in the CAMERA section (low angle from knee height, eye level, slightly high, three-quarter view, wide with environment, tight full body); the library's angles are meant to vary across the set, so never default to a straight eye-level frontal view; for an UPPER_BODY or LOWER_BODY upload the camera stays on the crop and only the reference's angle direction is borrowed.",
+    enabled: true,
+  },
+  {
+    key: "detail",
+    title: "Background detail",
+    text: "BACKGROUND DETAIL: the background is rendered in full, crisp detail, every element named and described in the prompt (architecture, facades, materials, textures, signage, foliage, street furniture, floor surfaces, distant layers), sharply defined and rich, with only a gentle natural depth of field that keeps the whole setting readable; never an empty, plain, smeared, washed-out or heavily blurred background.",
+    enabled: true,
+  },
+  {
+    key: "composition",
+    title: "Composition: centred model",
+    text: "COMPOSITION: the model is centred on the vertical axis of the frame, the midpoint of the full body at x=50% with equal space left and right, never pushed to one side; architecture, street or furniture may frame the model symmetrically but never offset them. Say this explicitly in the prompt's composition section.",
+    enabled: true,
+  },
+];
+
+/** The paragraph the prompt builder gets: the enabled rules, numbered in the team's order. */
+export function composeFixedRules(rules: DirectionRule[]): string {
+  const active = rules.filter((r) => r.enabled && r.text.trim());
+  if (!active.length) return "";
+  return `Fixed rules for every prompt (they override the skill's own direction, template and library, including any default framing such as full body): ${active
+    .map((r, i) => `(${i + 1}) ${r.text.trim().replace(/[.;]\s*$/, "")}`)
+    .join("; ")}.`;
+}
+
+/** Whether a built-in rule is present and on (an absent key counts as off). */
+export function ruleOn(rules: DirectionRule[] | undefined, key: string): boolean {
+  if (!rules) return true;
+  return rules.some((r) => r.key === key && r.enabled);
+}
+
+/** Reads a stored list, falling back to the defaults when absent or unreadable. */
+export function parseDirectionRules(raw: string | null | undefined): DirectionRule[] {
+  if (!raw) return DEFAULT_DIRECTION_RULES;
+  try {
+    const d = JSON.parse(raw) as unknown;
+    if (!Array.isArray(d)) return DEFAULT_DIRECTION_RULES;
+    const list = d
+      .filter(
+        (r): r is DirectionRule =>
+          !!r && typeof r === "object" && typeof (r as DirectionRule).text === "string",
+      )
+      .map((r, i) => ({
+        key: typeof r.key === "string" && r.key ? r.key : `custom-${i + 1}`,
+        title: typeof r.title === "string" ? r.title : "",
+        text: r.text,
+        enabled: r.enabled !== false,
+      }));
+    return list;
+  } catch {
+    return DEFAULT_DIRECTION_RULES;
+  }
+}

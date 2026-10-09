@@ -13,6 +13,8 @@ import {
   makeOpenAIClient,
   runFramingCheck,
   runReferenceRead,
+  directionRules,
+  DIRECTION_RULES_SETTING,
 } from "./engine";
 import { OPENAI_MODELS } from "./openai";
 import { GOOGLE_MODELS } from "./google";
@@ -20,6 +22,7 @@ import { FAL_MODELS } from "./fal";
 import { listSkills, saveSkillsOrder, setFavourite } from "./skills";
 import { buildSkillFromReferences } from "./skillbuilder";
 import { SKILLS } from "@shared/skills";
+import { DEFAULT_DIRECTION_RULES } from "@shared/direction-rules";
 import {
   ENGINE_KEY_SETTING,
   ENGINE_MODEL_SETTING,
@@ -257,6 +260,38 @@ studioRoutes.post("/direction", async (c) => {
   const { text } = await body(c, z.object({ text: z.string().max(20000) }));
   await setSetting(c.env, ZAID_DIRECTION_SETTING, text.trim());
   return c.json({ ok: true, text: text.trim() });
+});
+
+/** Creative direction fixed rules: read, replace, reset to the built-in list. */
+studioRoutes.get("/direction-rules", async (c) =>
+  c.json({ rules: await directionRules(c.env), defaults: DEFAULT_DIRECTION_RULES }),
+);
+
+const rulesBody = z.object({
+  rules: z
+    .array(
+      z.object({
+        key: z
+          .string()
+          .trim()
+          .regex(/^[a-z0-9-]{1,40}$/),
+        title: z.string().trim().max(80).default(""),
+        text: z.string().trim().max(4000),
+        enabled: z.boolean().default(true),
+      }),
+    )
+    .max(40),
+});
+
+studioRoutes.put("/direction-rules", async (c) => {
+  const { rules } = await body(c, rulesBody);
+  await setSetting(c.env, DIRECTION_RULES_SETTING, JSON.stringify(rules));
+  return c.json({ ok: true, rules });
+});
+
+studioRoutes.delete("/direction-rules", async (c) => {
+  await deleteSetting(c.env, DIRECTION_RULES_SETTING);
+  return c.json({ ok: true, rules: DEFAULT_DIRECTION_RULES });
 });
 
 /** Team-managed skills: list, create or edit, delete (a built-in is hidden rather than removed). */

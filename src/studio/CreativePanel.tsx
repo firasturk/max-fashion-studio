@@ -18,6 +18,7 @@ import Picker from "./Picker";
 const SkillDialog = lazyScreen(() => import("./SkillDialog"));
 import { ChevronDown, Plus, Star } from "lucide-react";
 const ReferenceLibrary = lazyScreen(() => import("./ReferenceLibrary"));
+const DirectionRules = lazyScreen(() => import("./DirectionRules"));
 import {
   DEFAULT_PROMPT,
   SCENES,
@@ -729,6 +730,12 @@ export default function CreativePanel({
             </div>
           )}
         </>
+      )}
+
+      {config.mode === "7" && (
+        <Suspense fallback={null}>
+          <DirectionRules locked={locked} />
+        </Suspense>
       )}
 
       <div className="two-fields">

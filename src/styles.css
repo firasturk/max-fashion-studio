@@ -3706,3 +3706,68 @@ textarea:focus {
     display: none;
   }
 }
+
+/* Creative direction fixed rules (editable list in the panel). */
+.rules-section {
+  margin: 4px 0 14px;
+}
+.rules-tip {
+  margin: 0 0 10px;
+}
+.rules-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rules-list li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+}
+.rules-list li.off {
+  opacity: 0.55;
+}
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rule-number {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-400);
+  min-width: 16px;
+}
+.rule-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  color: var(--foreground);
+}
+.rule-title:focus {
+  outline: none;
+  border-bottom: 1px solid var(--accent);
+}
+.rule-text {
+  width: 100%;
+  min-height: 64px;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.rules-actions {
+  margin-top: 10px;
+}
+.rules-actions .text-button svg {
+  vertical-align: -2px;
+  margin-right: 3px;
+}
