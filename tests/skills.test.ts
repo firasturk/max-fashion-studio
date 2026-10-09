@@ -82,6 +82,7 @@ describe("zaid creative direction", () => {
     expect(text).toContain("CAMERA ANGLE");
     expect(text).toContain("(11) IDENTITY");
     expect(text).toContain("(12) TATTOOS");
+    expect(text).toContain("(13) catalogue-safe wording only");
     expect(text).toContain("golden-hour sun");
     expect(text).toContain("800-1000 words");
     expect(text).not.toContain("600-1100 words");
