@@ -832,7 +832,7 @@ export default function CreativePanel({
 
       <Section
         title="Export & checks"
-        hint={`${config.output.toUpperCase()}${config.output === "png" ? "" : config.outputSize === "quality" ? ` ${config.outputQuality}%` : " · 1 to 1.9 MB"} · ProductID_0_N`}
+        hint={`${config.output === "png" && config.outputSize !== "quality" ? "JPG" : config.output.toUpperCase()}${config.outputSize === "quality" ? (config.output === "png" ? " · as generated" : ` ${config.outputQuality}%`) : " · 1 to 1.9 MB"} · ProductID_0_N`}
         defaultOpen={false}
       >
         {config.mode !== "4" && config.mode !== "6" && (
@@ -874,9 +874,15 @@ export default function CreativePanel({
             <Picker
               label="Size per image"
               value={config.outputSize ?? "fit"}
-              disabled={locked || config.output === "png"}
+              disabled={locked}
               items={["fit", "quality"]}
-              render={(v) => (v === "fit" ? "1 to 1.9 MB" : "By quality")}
+              render={(v) =>
+                v === "fit"
+                  ? "1 to 1.9 MB"
+                  : config.output === "png"
+                    ? "As generated"
+                    : "By quality"
+              }
               onChange={(v) => onChange({ outputSize: v as Config["outputSize"] })}
             />
           </div>
@@ -898,9 +904,9 @@ export default function CreativePanel({
         )}
         {config.output === "png" && (
           <p className="prompt-tip">
-            PNG keeps the engine's file as is, usually 5 to 10 MB, and cannot be made smaller
-            without lowering the resolution. Choose JPG or WebP: each image is then fitted to 1 to
-            1.9 MB at the full resolution.
+            {config.outputSize === "quality"
+              ? "As generated: the engine's file is kept untouched, usually 3 to 10 MB. Choose 1 to 1.9 MB to fit every image at the full resolution (exported as JPG, since PNG cannot be sized without losing resolution)."
+              : "PNG cannot be sized without lowering the resolution, so with 1 to 1.9 MB every image is exported as a JPG fitted at the full resolution. Choose As generated to keep the engine's file untouched."}
           </p>
         )}
 

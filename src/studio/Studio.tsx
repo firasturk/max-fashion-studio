@@ -77,6 +77,12 @@ const ReviewDialog = lazyScreen(() => import("./ReviewDialog"));
 import type { EngineInfo } from "./ConnectionDialog";
 const ConnectionDialog = lazyScreen(() => import("./ConnectionDialog"));
 
+/** The format a download is encoded in: null keeps the engine's file untouched. */
+function exportFormat(c: Config): "jpg" | "webp" | null {
+  if (c.output === "jpg" || c.output === "webp") return c.output;
+  return c.outputSize !== "quality" ? "jpg" : null;
+}
+
 export default function Studio({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const [config, setConfig] = useState<Config>(loadSavedConfig);
   // Remember the settings and the open batch in this browser so a refresh lands where you left off.
@@ -465,12 +471,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     const src = sources.find((x) => x.id === t.source);
     if (!t.output || !src) return;
     try {
-      const format = viewConfig.output || "png";
       const srcExt = outputExt(t.output);
       let blob = await (await fetch(outputUrl(t))).blob();
       let ext = srcExt;
       const fit = viewConfig.outputSize !== "quality";
-      if (format !== "png" && (fit || srcExt !== format)) {
+      // The size setting wins: "1 to 1.9 MB" fits every image (a PNG choice exports as JPG, since
+      // PNG cannot be sized without losing resolution); "As generated" keeps the engine's file.
+      const format = exportFormat(viewConfig);
+      if (format && (fit || srcExt !== format)) {
         blob = fit
           ? await fitImage(blob, format, viewConfig.outputQuality || 90)
           : await convertImage(blob, format, viewConfig.outputQuality || 90);
@@ -524,12 +532,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   function zipEntriesFor(list: Task[]): ZipEntry[] {
     const byId = new Map(sources.map((x) => [x.id, x]));
     const numbers = outputNumbers();
-    const format = viewConfig.output || "png";
+    const format = exportFormat(viewConfig);
     return list.map((t) => {
       const srcExt = outputExt(t.output);
       const fit = viewConfig.outputSize !== "quality";
       const convert =
-        format !== "png" && (fit || srcExt !== format)
+        format && (fit || srcExt !== format)
           ? { format, quality: viewConfig.outputQuality || 90, fit }
           : undefined;
       return {
