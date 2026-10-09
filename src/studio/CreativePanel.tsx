@@ -609,23 +609,29 @@ export default function CreativePanel({
             />
           </Suspense>
 
-          <label className="field-label">Generated face (when the reference face is hidden)</label>
-          <Picker
-            value={config.market}
-            label="Market look"
-            disabled={locked}
-            items={MARKETS}
-            render={(v) =>
-              v === "auto"
-                ? "Auto (alternate Arab / European)"
-                : v === "arab"
-                  ? "Arab / Middle-Eastern"
-                  : v === "european"
-                    ? "European"
-                    : "Mixed"
-            }
-            onChange={(v) => onChange({ market: v as Config["market"] })}
-          />
+          {config.mode !== "7" && (
+            <>
+              <label className="field-label">
+                Generated face (when the reference face is hidden)
+              </label>
+              <Picker
+                value={config.market}
+                label="Market look"
+                disabled={locked}
+                items={MARKETS}
+                render={(v) =>
+                  v === "auto"
+                    ? "Auto (alternate Arab / European)"
+                    : v === "arab"
+                      ? "Arab / Middle-Eastern"
+                      : v === "european"
+                        ? "European"
+                        : "Mixed"
+                }
+                onChange={(v) => onChange({ market: v as Config["market"] })}
+              />
+            </>
+          )}
         </>
       )}
 
