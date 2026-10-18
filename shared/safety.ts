@@ -60,5 +60,7 @@ export function sanitizeChildPrompt(text: string): string {
 
 /** The content checker's refusal, as fal.ai and Higgsfield phrase it. */
 export function isContentPolicyError(message: string): boolean {
-  return /content[_ ]policy|content checker|partner_validation|flagged|moderation/i.test(message);
+  return /content[_ ]policy|content checker|partner_validation|flagged|moderation|blocked the request|PROHIBITED_CONTENT|blockReason|SAFETY/i.test(
+    message,
+  );
 }

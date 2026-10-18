@@ -123,6 +123,9 @@ describe("safe wording and framing", () => {
     expect(isContentPolicyError('{"type":"content_policy_violation"}')).toBe(true);
     expect(isContentPolicyError("fal.ai timed out (504)")).toBe(false);
     expect(
+      isContentPolicyError("Google Cloud (Vertex) blocked the request: PROHIBITED_CONTENT"),
+    ).toBe(true);
+    expect(
       sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress"),
     ).toBe("A elegant pose with a calm expression and the shoulders in a fitted dress");
     expect(sanitizePrompt("Child model, age 6, happy, natural child proportions")).toBe(

@@ -99,6 +99,8 @@ describe("config rules", () => {
     expect(p2).toContain("solid #F2E8DA backdrop");
     expect(buildPrompt(c, 1)).toContain("pure white (#FFFFFF)");
     expect(buildPrompt(c, 1)).not.toContain("Premium lifestyle environment");
+    expect(buildPrompt(c, 1)).toContain("CROP:");
+    expect(buildPrompt(c, 1)).toContain("COLLAGE:");
     expect(buildPrompt(c, 1, "", { swatch: true })).toContain("Image 2 is a flat swatch");
     expect(p2).toContain("solid #F2E8DA backdrop");
     expect(p2).not.toContain("exactly ONE model");

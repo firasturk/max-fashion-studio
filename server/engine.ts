@@ -78,7 +78,7 @@ import {
 } from "./settings";
 import { GoogleImageClient, isGoogleModel } from "./google";
 import { VertexImageClient } from "./vertex";
-import { FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
+import { FAL_MODELS, FalClient, decodeFalHandle, encodeFalHandle, isFalModel } from "./fal";
 import { signObjectUrl } from "./signed";
 import {
   isChildSubject,
@@ -758,10 +758,20 @@ function taskConfig(config: Config, task: TaskRow): Config {
  */
 async function contentFallbackModel(env: Env, current: string | undefined): Promise<string | null> {
   const candidates: string[] = [];
-  if ((await resolveGoogleAuth(env)).auth) candidates.push("gemini-3-pro-image");
+  // Same model through another vendor first (a block is often one vendor's checker), then the rest.
   if (await engineConfigured(env)) candidates.push("nano-banana-pro");
+  if ((await resolveGoogleAuth(env)).auth) candidates.push("gemini-3-pro-image");
+  if ((await resolveFalKey(env)).key) candidates.push(FAL_MODELS[0].slug);
   if ((await resolveOpenAIKey(env)).key) candidates.push("gpt-image-1");
-  return candidates.find((m) => m !== current) ?? null;
+  const vendor = (m: string | undefined) =>
+    isFalModel(m)
+      ? "fal"
+      : isOpenAIModel(m)
+        ? "openai"
+        : isGoogleModel(m)
+          ? "google"
+          : "higgsfield";
+  return candidates.find((m) => m !== current && vendor(m) !== vendor(current)) ?? null;
 }
 
 /**

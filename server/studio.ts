@@ -1447,7 +1447,7 @@ studioRoutes.post("/task/retry", async (c) => {
   const b = await ownedBatch(c.env, c.get("user"), batch);
   const changed = await run(
     c.env.DB,
-    "UPDATE tasks SET status = 'queued', error = NULL, brief = NULL, updated = ? WHERE id = ? AND batch = ? AND status = 'failed'",
+    "UPDATE tasks SET status = 'queued', error = NULL, brief = NULL, attempts = 0, updated = ? WHERE id = ? AND batch = ? AND status = 'failed'",
     now(),
     id,
     b.id,
