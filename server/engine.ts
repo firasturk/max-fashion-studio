@@ -839,7 +839,12 @@ async function retryAfterRefusal(
   message: string,
 ): Promise<boolean> {
   if (task.attempts > MAX_AUTO_ATTEMPTS + 1) return false;
-  if (!task.model || (isGoogleModel(task.model) && isGoogleModel(config.model))) {
+  // Only the Backdrop colour approach moves a refused photo to another model: the other
+  // approaches depend on the engine chosen for the batch (skills, faces, mood boards).
+  const canMove =
+    config.mode === "6" &&
+    (!task.model || (isGoogleModel(task.model) && isGoogleModel(config.model)));
+  if (canMove) {
     const fallback = await contentFallbackModel(env, config.model, [task.model]);
     if (fallback) {
       const from = task.model ?? config.model ?? "the batch engine";
