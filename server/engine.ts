@@ -6,6 +6,8 @@
  * submit the same task twice or store the same result twice.
  */
 import type { Env } from "./env";
+import { colourHex } from "@shared/colours";
+import { solidPng } from "@shared/png";
 import { concurrency } from "./env";
 import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
@@ -54,7 +56,14 @@ import {
   ZAID_MIN_WORDS,
   type FramingCheck,
 } from "./editorial";
-import { FABRIC_CARD, isNoPrompt, NP_BACKGROUNDS, NP_POSES, type Config } from "@shared/config";
+import {
+  FABRIC_CARD,
+  backdropColors,
+  isNoPrompt,
+  NP_BACKGROUNDS,
+  NP_POSES,
+  type Config,
+} from "@shared/config";
 import { parseDirectionRules, ruleOn } from "@shared/direction-rules";
 import type { QA } from "@shared/types";
 import {
@@ -1493,6 +1502,35 @@ async function referenceEngineUrl(env: Env, client: HiggsfieldClient, id: string
 
 const SKILL_MODES = new Set(["5", "7", "8"]);
 
+/** Backdrop colour: the hex of this card's colour when it is known. */
+function backdropHexFor(config: Config, card: number): string | null {
+  const list = backdropColors(config);
+  return colourHex(list[(card - 1) % list.length]);
+}
+
+/** A flat swatch of one colour, written to R2 once and reused by every packshot of that colour. */
+async function swatchKey(env: Env, hex: string): Promise<string> {
+  const key = `swatch/${hex.replace("#", "").toLowerCase()}.png`;
+  if (!(await env.BUCKET.head(key)))
+    await env.BUCKET.put(key, await solidPng(hex), { httpMetadata: { contentType: "image/png" } });
+  return key;
+}
+
+async function swatchBytes(hex: string): Promise<ImageBytes> {
+  return { bytes: (await solidPng(hex)).buffer as ArrayBuffer, mime: "image/png" };
+}
+
+/** Swatch as a Higgsfield upload URL, cached in settings. */
+async function swatchEngineUrl(env: Env, client: HiggsfieldClient, hex: string): Promise<string> {
+  const settingName = `swatch_url_${hex.replace("#", "").toLowerCase()}`;
+  const cached = await getSetting(env, settingName);
+  if (cached) return cached;
+  const img = await swatchBytes(hex);
+  const url = await client.upload(img.bytes, img.mime);
+  await setSetting(env, settingName, url);
+  return url;
+}
+
 export const DIRECTION_RULES_SETTING = "direction_rules";
 
 /** The Creative direction fixed rules as the team keeps them (defaults until they edit). */
@@ -1588,16 +1626,22 @@ async function submitTask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const imageUrls = [await sourceEngineUrl(env, client, source)];
+  const swatchHex = config.mode === "6" ? backdropHexFor(config, task.card) : null;
   const roles = {
     identity: false,
     firstCard: false,
     studio: false,
     revision: false,
+    swatch: false,
     mood: false,
     set: false,
     background: false,
     pose: false,
   };
+  if (swatchHex) {
+    imageUrls.push(await swatchEngineUrl(env, client, swatchHex));
+    roles.swatch = true;
+  }
 
   if (config.mode === "3" && config.identity) {
     imageUrls.push(await identityEngineUrl(env, client, batch.owner, config.identity));
@@ -1706,16 +1750,22 @@ async function submitOpenAITask(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const images: ImageBytes[] = [await sourceBytes(env, source)];
+  const swatchHex = config.mode === "6" ? backdropHexFor(config, task.card) : null;
   const roles = {
     identity: false,
     firstCard: false,
     studio: false,
     revision: false,
+    swatch: false,
     mood: false,
     set: false,
     background: false,
     pose: false,
   };
+  if (swatchHex) {
+    images.push(await swatchBytes(swatchHex));
+    roles.swatch = true;
+  }
 
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<TaskRow>(
@@ -2099,16 +2149,22 @@ async function collectReferenceKeys(
   const source = await first<SourceRow>(env.DB, "SELECT * FROM sources WHERE id = ?", task.source);
   if (!source) throw new StudioError("Original unavailable.", 404);
   const keys: string[] = [source.reference_key || source.key];
+  const swatchHex = config.mode === "6" ? backdropHexFor(config, task.card) : null;
   const roles = {
     identity: false,
     firstCard: false,
     studio: false,
     revision: false,
+    swatch: false,
     mood: false,
     set: false,
     background: false,
     pose: false,
   };
+  if (swatchHex) {
+    keys.push(await swatchKey(env, swatchHex));
+    roles.swatch = true;
+  }
   if (config.mode === "1" && task.card > 1 && task.card < FABRIC_CARD) {
     const firstCard = await first<{ output: string | null }>(
       env.DB,

@@ -1,5 +1,6 @@
 import type { Config } from "./config";
-import { FABRIC_CARD, FIDELITY, SCENES, backdropColors } from "./config";
+import { DEFAULT_PROMPT, FABRIC_CARD, FIDELITY, SCENES, backdropColors } from "./config";
+import { colourLabel } from "./colours";
 
 export const MODE_PROMPTS: Record<Config["mode"], string> = {
   "1": "Fashion catalogue production from a mannequin or flat-lay reference. Replace the mannequin with a fully clothed photorealistic adult model wearing exactly this garment. Do not invent unseen product construction.",
@@ -55,6 +56,8 @@ export interface PromptImages {
   studio?: boolean;
   /** true when the latest result is attached as the last image for a revision */
   revision?: boolean;
+  /** Backdrop colour: a flat swatch of the exact colour is attached as image 2 */
+  swatch?: boolean;
   /** true when a reference-library photo is attached after the garment photo */
   mood?: boolean;
   /** true when an already generated image of the same product set is attached after the reference */
@@ -100,11 +103,12 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
     parts.push(`New pose: ${POSES[(card - 1) % POSES.length]}`);
     parts.push(`Setting: ${c.prompt} ${sceneFor(c, card)}`);
   } else if (c.mode === "6") {
-    const colour = backdropColors(c)[(card - 1) % backdropColors(c).length];
+    const colour = colourLabel(backdropColors(c)[(card - 1) % backdropColors(c).length]);
     parts.push(
-      `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product: one single ${colour} tone edge to edge, wall and floor alike, every corner included, with no second colour, no grey or white area and no horizon line. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
+      `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product: one single ${colour} tone edge to edge, wall and floor alike, every corner included, with no second colour, no grey or white area and no horizon line. The original background, whatever its colour (often grey or white), is removed entirely: every pixel that is not the product becomes ${colour}. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
     );
-    if (c.prompt) parts.push(c.prompt);
+    // The lifestyle default makes no sense on a packshot; only a note the team wrote is kept.
+    if (c.prompt && c.prompt.trim() !== DEFAULT_PROMPT.trim()) parts.push(c.prompt);
   } else if (c.mode === "5" || c.mode === "8") {
     parts.push("Editorial prompt is written per image by the prompt builder before generation.");
     if (c.mode === "8") parts.push(NEW_MODEL_RULE);
@@ -142,6 +146,10 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
     "Image 1 is the exact source for the outfit, footwear and any accessories worn: keep them identical.",
   ];
   if (images.identity) roles.push("Image 2 is the real model identity reference.");
+  if (images.swatch)
+    roles.push(
+      "Image 2 is a flat swatch of the exact backdrop colour: the entire background of the output matches this swatch, nothing else is taken from it.",
+    );
   if (images.firstCard)
     roles.push(
       "Image 2 is card 1: it establishes the model's face, hair and body. Keep this exact same model across the studio cards.",
