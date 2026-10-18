@@ -340,7 +340,7 @@ export default function ResultsTab({
       <div className="image-grid results-grid">
         {visible.slice(0, limit).map(({ t, key, setSize }, i) => {
           const s = byId.get(t.source);
-          const eligible = t.status === "ready" || t.status === "approved";
+          const eligible = t.status === "ready" || t.status === "approved" || t.status === "review";
           const firstOfSet = setSize > 1 && (i === 0 || visible[i - 1].key !== key);
           return (
             <article
