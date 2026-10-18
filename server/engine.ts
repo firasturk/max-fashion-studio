@@ -516,6 +516,24 @@ async function settleFailedAttempt(
     ]).total + (task.edit || task.recenter ? 0.008 : 0);
   await run(env.DB, "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?", refund, task.id);
   const message = errorMessage(e, "Generation failed.");
+  // The engine an image was moved to after a refusal is not usable (disabled, or out of credits):
+  // try the next one, and never pause the whole batch over it.
+  if (task.model && (isModelUnavailable(message) || isCreditsDepleted(e))) {
+    const next = await contentFallbackModel(env, config.model, [task.model]);
+    if (next) {
+      await run(env.DB, "UPDATE tasks SET model = ? WHERE id = ?", next, task.id);
+      await requeue(env, task, `${task.model} is not available; trying ${next}. ${message}`);
+    } else {
+      await run(env.DB, "UPDATE tasks SET model = NULL WHERE id = ?", task.id);
+      await failTask(
+        env,
+        task,
+        `No other connected engine accepts this photo. Last engine (${task.model}): ${message}`,
+        task.output,
+      );
+    }
+    return;
+  }
   if (isCreditsDepleted(e)) {
     await requeue(env, task, creditsMessage(e));
     await pauseBatch(env, batch.id, creditsMessage(e));
@@ -752,26 +770,62 @@ function taskConfig(config: Config, task: TaskRow): Config {
   return task.model ? { ...config, model: task.model } : config;
 }
 
+/** Models the Connection dialog found disabled on their vendor (the cached model list). */
+async function disabledModels(env: Env): Promise<Set<string>> {
+  try {
+    const cached = await getSetting(env, "engine_models_cache");
+    if (!cached) return new Set();
+    const parsed = JSON.parse(cached) as { models?: { slug: string; enabled?: boolean }[] };
+    return new Set((parsed.models ?? []).filter((m) => m.enabled === false).map((m) => m.slug));
+  } catch {
+    return new Set();
+  }
+}
+
+function vendorOf(model: string | undefined | null): string {
+  return isFalModel(model)
+    ? "fal"
+    : isOpenAIModel(model)
+      ? "openai"
+      : isGoogleModel(model)
+        ? "google"
+        : "higgsfield";
+}
+
 /**
- * Another connected engine for a photo a content checker refused: Nano Banana Pro through Google,
- * else through Higgsfield, else OpenAI. Null when nothing else is connected.
+ * Another connected engine for a photo a content checker refused: the same model through another
+ * vendor first, then the rest. Vendors already tried (and models the Connection dialog found
+ * disabled) are skipped. Null when nothing else is connected.
  */
-async function contentFallbackModel(env: Env, current: string | undefined): Promise<string | null> {
+async function contentFallbackModel(
+  env: Env,
+  current: string | undefined,
+  tried: (string | undefined | null)[] = [],
+): Promise<string | null> {
+  const disabled = await disabledModels(env);
+  const triedModels = new Set([current, ...tried].filter(Boolean) as string[]);
+  // On Google, another Nano Banana generation on the same account comes first: one model's
+  // checker often refuses a photo the other accepts, and it costs no other vendor's credits.
+  if (isGoogleModel(current) && (await resolveGoogleAuth(env)).auth) {
+    const sibling = ["gemini-3.1-flash-image", "gemini-2.5-flash-image", "gemini-3-pro-image"].find(
+      (m) => !triedModels.has(m) && !disabled.has(m),
+    );
+    if (sibling) return sibling;
+  }
   const candidates: string[] = [];
-  // Same model through another vendor first (a block is often one vendor's checker), then the rest.
   if (await engineConfigured(env)) candidates.push("nano-banana-pro");
   if ((await resolveGoogleAuth(env)).auth) candidates.push("gemini-3-pro-image");
   if ((await resolveFalKey(env)).key) candidates.push(FAL_MODELS[0].slug);
   if ((await resolveOpenAIKey(env)).key) candidates.push("gpt-image-1");
-  const vendor = (m: string | undefined) =>
-    isFalModel(m)
-      ? "fal"
-      : isOpenAIModel(m)
-        ? "openai"
-        : isGoogleModel(m)
-          ? "google"
-          : "higgsfield";
-  return candidates.find((m) => m !== current && vendor(m) !== vendor(current)) ?? null;
+  const used = new Set([...triedModels].map((m) => vendorOf(m)));
+  return candidates.find((m) => !used.has(vendorOf(m)) && !disabled.has(m)) ?? null;
+}
+
+/** The vendor says this model is not available on the account (disabled, unknown, no access). */
+function isModelUnavailable(message: string): boolean {
+  return /disabled on your|does not exist on|model_disabled|model_not_found|not available (to|on) this/i.test(
+    message,
+  );
 }
 
 /**
@@ -784,18 +838,17 @@ async function retryAfterRefusal(
   task: TaskRow,
   message: string,
 ): Promise<boolean> {
-  if (task.attempts > MAX_AUTO_ATTEMPTS) return false;
-  if (!task.model) {
-    const fallback = await contentFallbackModel(env, config.model);
+  if (task.attempts > MAX_AUTO_ATTEMPTS + 1) return false;
+  if (!task.model || (isGoogleModel(task.model) && isGoogleModel(config.model))) {
+    const fallback = await contentFallbackModel(env, config.model, [task.model]);
     if (fallback) {
+      const from = task.model ?? config.model ?? "the batch engine";
       await run(env.DB, "UPDATE tasks SET model = ? WHERE id = ?", fallback, task.id);
-      console.log(
-        `[refused] task ${task.id}: ${config.model} refused the photo, moving to ${fallback}`,
-      );
+      console.log(`[refused] task ${task.id}: ${from} refused the photo, moving to ${fallback}`);
       await requeue(
         env,
         task,
-        `the content checker refused this photo on ${config.model ?? "the batch engine"}; trying ${fallback}. ${message}`,
+        `the content checker refused this photo on ${from}; trying ${fallback}. ${message}`,
       );
       return true;
     }
