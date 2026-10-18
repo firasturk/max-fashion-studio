@@ -474,14 +474,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   /** Re-run several finished images with one revision text (empty ids = every generated image). */
   async function reviseAll(ids: string[], edit: string): Promise<number> {
     if (!batch) return 0;
-    const res = await post<{ revised?: number }>("/api/studio/revise-all", {
-      batch: batch.id,
-      ids: ids.length ? ids : undefined,
-      edit,
-    });
+    // Through the batch action so the view applies the queued tasks at once and the tick
+    // keeps polling until the new images arrive; no refresh needed.
+    await action("revise-all", { ids: ids.length ? ids : undefined, edit });
     setSelection(new Set());
-    await loadState();
-    return res.revised ?? 0;
+    return ids.length || tasks.filter((t) => !!t.output).length;
   }
 
   /** Keep this image's skill prompt as a reusable look for its skill. */
