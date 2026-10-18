@@ -101,6 +101,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [tab, setTab] = useState("sources");
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportDone, setExportDone] = useState<[number, number] | null>(null);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<Task | null>(null);
@@ -616,7 +617,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const originalsIncluded = exportsOriginals(viewConfig);
       if (originalsIncluded)
         for (const s of sources) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
-      const parts = await buildZips(entries);
+      setExportDone([0, entries.length]);
+      const parts = await buildZips(entries, undefined, (d, t) => setExportDone([d, t]));
+      setExportDone(null);
       await saveZips(parts, `${safeArchiveName(batch.name)}-AI`);
       if (parts.length > 1)
         toast.success(`Export split into ${parts.length} ZIP files of up to 1.4 GB each.`);
@@ -625,6 +628,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       toast.error((e as Error).message);
     } finally {
       setExporting(false);
+      setExportDone(null);
     }
   }
 
@@ -1100,7 +1104,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                           ) : (
                             <Download size={17} />
                           )}
-                          Download ZIP
+                          {exportDone
+                            ? `Preparing ${exportDone[0]} of ${exportDone[1]}…`
+                            : exporting
+                              ? "Packing ZIP…"
+                              : "Download ZIP"}
                         </button>
                         <button
                           className="secondary danger"

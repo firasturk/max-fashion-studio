@@ -130,9 +130,24 @@ class ZipPart {
  * Builds the export as one or more ZIP files, each at most `partMax` bytes, split at product
  * folders (see shared/zip-parts.ts). Files are fetched and converted first, then packed.
  */
-export async function buildZips(entries: ZipEntry[], partMax = PART_MAX): Promise<Blob[]> {
-  const data: Uint8Array[] = [];
-  for (const e of entries) data.push(await prepare(e));
+export async function buildZips(
+  entries: ZipEntry[],
+  partMax = PART_MAX,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Blob[]> {
+  // Fetch and convert a few images at a time: hundreds of 2K results take minutes one by one.
+  const data: Uint8Array[] = new Array(entries.length);
+  let next = 0;
+  let done = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, entries.length) }, async () => {
+      while (next < entries.length) {
+        const i = next++;
+        data[i] = await prepare(entries[i]);
+        onProgress?.(++done, entries.length);
+      }
+    }),
+  );
   const plan = splitIntoParts(
     entries.map((e, i) => ({ name: e.name, size: data[i].length })),
     partMax,
