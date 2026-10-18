@@ -90,7 +90,8 @@ export default function ResultsTab({
   const finished = tasks.filter(
     (t) => !!t.output && t.status !== "processing" && t.status !== "queued",
   );
-  const offList = offColour ? finished.filter((t) => offColour.has(t.id)) : [];
+  // What the fix button re-runs: the images you ticked (the check ticks the ones it finds).
+  const offList = finished.filter((t) => selection.has(t.id));
   async function checkBackdrops() {
     if (finished.length === 0) return;
     setChecking({ done: 0, total: finished.length });
@@ -130,6 +131,7 @@ export default function ResultsTab({
         BACKDROP_FIX_EDIT,
       );
       setOffColour(null);
+      onClearSelection();
       toast.success(`${n} image${n === 1 ? "" : "s"} queued with the right colour.`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -258,10 +260,10 @@ export default function ResultsTab({
             <button
               type="button"
               className="primary small"
-              disabled={fixing || running || !!checking}
+              disabled={fixing || !!checking}
               onClick={() => void fixBackdrops()}
             >
-              Re-run {offList.length} with the right colour
+              Re-run {offList.length} selected with the right colour
             </button>
           )}
           {selection.size > 0 && (
