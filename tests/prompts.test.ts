@@ -306,7 +306,7 @@ describe("new-model skill campaign", () => {
     expect(
       buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "6" }, 1, BACKDROP_FIX_EDIT),
     ).toContain(
-      "Revision of the existing result: The background of the current result is the WRONG colour",
+      "Revision of the existing result: The previous attempt gave the background the WRONG colour",
     );
     expect(bp).toContain("TATTOOS:");
     expect(buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "2" }, 1)).not.toContain(

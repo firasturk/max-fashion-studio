@@ -102,7 +102,7 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   } else if (c.mode === "6") {
     const colour = backdropColors(c)[(card - 1) % backdropColors(c).length];
     parts.push(
-      `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
+      `New background: a flat, perfectly even, seamless solid ${colour} backdrop filling the whole frame behind the product: one single ${colour} tone edge to edge, wall and floor alike, every corner included, with no second colour, no grey or white area and no horizon line. Keep a soft, natural contact shadow under the product consistent with the original lighting; no gradients, textures, props or vignette unless the original had them. Edges of the product must stay clean with no halo or colour fringing.`,
     );
     if (c.prompt) parts.push(c.prompt);
   } else if (c.mode === "5" || c.mode === "8") {
@@ -174,7 +174,7 @@ export const COLOUR_RULE =
 
 /** Revision text for a packshot whose backdrop came out the wrong colour. */
 export const BACKDROP_FIX_EDIT =
-  "The background of the current result is the WRONG colour (for example grey or white instead of the colour requested). Replace the background with exactly the requested solid colour described above: flat, perfectly even, seamless, filling the whole frame behind the product, with the same soft contact shadow. The product stays pixel-identical";
+  "The previous attempt gave the background the WRONG colour (grey or white instead of the colour requested). This time the background is exactly the requested solid colour described above, and that one colour fills the ENTIRE frame: wall and floor alike, every corner and edge, one single tone with no second colour, no grey area, no white area, no gradient and no horizon line; only the soft contact shadow under the product remains. The product stays pixel-identical";
 
 /** Engine-facing rule for every approach: tattoos on the model never appear in the output. */
 export const TATTOO_RULE =

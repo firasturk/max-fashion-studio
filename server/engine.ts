@@ -1656,7 +1656,9 @@ async function submitTask(
     }
   }
   const edit = task.edit?.trim() ?? "";
-  if ((edit || task.recenter) && task.output) {
+  // A packshot recolour always restarts from the original: an attached wrong-colour result only
+  // tempts the engine to keep it.
+  if ((edit || task.recenter) && task.output && config.mode !== "6") {
     imageUrls.push(await outputEngineUrl(env, client, task));
     roles.revision = true;
   }
@@ -1767,7 +1769,9 @@ async function submitOpenAITask(
     }
   }
   const edit = task.edit?.trim() ?? "";
-  if ((edit || task.recenter) && task.output) {
+  // A packshot recolour always restarts from the original: an attached wrong-colour result only
+  // tempts the engine to keep it.
+  if ((edit || task.recenter) && task.output && config.mode !== "6") {
     images.push(await outputBytes(env, task));
     roles.revision = true;
   }
@@ -2167,7 +2171,9 @@ async function collectReferenceKeys(
     }
   }
   const edit = task.edit?.trim() ?? "";
-  if ((edit || task.recenter) && task.output) {
+  // A packshot recolour always restarts from the original: an attached wrong-colour result only
+  // tempts the engine to keep it.
+  if ((edit || task.recenter) && task.output && config.mode !== "6") {
     keys.push(task.output);
     roles.revision = true;
   }
