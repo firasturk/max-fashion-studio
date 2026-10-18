@@ -388,6 +388,10 @@ h2 {
   border-radius: 10px;
   overflow: hidden;
 }
+/* clip keeps the rounded corners without creating a scroll container, so the results toolbar can stick. */
+.media-panel {
+  overflow: clip;
+}
 .config-panel {
   padding: 22px;
 }
