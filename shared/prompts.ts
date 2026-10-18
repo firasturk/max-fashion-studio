@@ -172,9 +172,9 @@ export const IDENTITY_RULE =
 export const COLOUR_RULE =
   "COLOUR AND CONTRAST: the output keeps the full, true-to-life colour and tonal range of the original photo: real blacks, clean whites, natural warm skin, the garment in its exact original colours and print. The new background has its own real colours and daylight. No grey veil, no haze, no fog, no milky or faded film look, no desaturation, no lifted blacks, no flat low-contrast grade, even when the scene is overcast, pale or white.";
 
-/** Revision text that repairs a washed-out result; one click in the review and results views. */
-export const RESTORE_COLOUR_EDIT =
-  "Restore natural colour and contrast: the current result is washed out, grey and faded. Bring back full true-to-life saturation and a normal tonal range with real blacks and clean whites, exactly as in the original photo. The garment returns to its exact original colours and print, the skin tone is natural and warm, not grey, and the background keeps its real colours and daylight. Remove any grey veil, haze, fog, milky or faded film look. Keep the model, face, hair, pose, garment, framing and background exactly as they are";
+/** Revision text for a packshot whose backdrop came out the wrong colour. */
+export const BACKDROP_FIX_EDIT =
+  "The background of the current result is the WRONG colour (for example grey or white instead of the colour requested). Replace the background with exactly the requested solid colour described above: flat, perfectly even, seamless, filling the whole frame behind the product, with the same soft contact shadow. The product stays pixel-identical";
 
 /** Engine-facing rule for every approach: tattoos on the model never appear in the output. */
 export const TATTOO_RULE =

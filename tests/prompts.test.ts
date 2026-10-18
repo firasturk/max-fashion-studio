@@ -7,7 +7,7 @@ import {
   BLEND_RULE,
   IDENTITY_RULE,
   COLOUR_RULE,
-  RESTORE_COLOUR_EDIT,
+  BACKDROP_FIX_EDIT,
   NEW_MODEL_RULE,
   RECENTER_SUFFIX,
 } from "../shared/prompts";
@@ -304,12 +304,10 @@ describe("new-model skill campaign", () => {
     expect(bp).toContain(IDENTITY_RULE);
     expect(bp).toContain(COLOUR_RULE);
     expect(
-      buildPrompt(
-        { ...DEFAULT_CONFIG, input: "model" as const, mode: "4" },
-        1,
-        RESTORE_COLOUR_EDIT,
-      ),
-    ).toContain("Revision of the existing result: Restore natural colour");
+      buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "6" }, 1, BACKDROP_FIX_EDIT),
+    ).toContain(
+      "Revision of the existing result: The background of the current result is the WRONG colour",
+    );
     expect(bp).toContain("TATTOOS:");
     expect(buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "2" }, 1)).not.toContain(
       IDENTITY_RULE,

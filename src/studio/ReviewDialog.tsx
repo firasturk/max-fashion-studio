@@ -19,7 +19,6 @@ import {
 import type { QA, Source, Task } from "@shared/types";
 import Zoomable from "./Zoomable";
 import CompareSlider from "./CompareSlider";
-import { RESTORE_COLOUR_EDIT } from "@shared/prompts";
 
 /** One-click revision instructions; each appends to the edit box. */
 const REVISION_PRESETS: { label: string; text: string }[] = [
@@ -38,10 +37,6 @@ const REVISION_PRESETS: { label: string; text: string }[] = [
   {
     label: "Centre model",
     text: "Move the model to the exact horizontal centre of the frame with equal margins; keep everything else.",
-  },
-  {
-    label: "Restore colour",
-    text: RESTORE_COLOUR_EDIT,
   },
   {
     label: "Brighter",

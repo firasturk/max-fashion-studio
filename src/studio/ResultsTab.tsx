@@ -12,7 +12,9 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { productKey } from "@shared/naming";
-import { RESTORE_COLOUR_EDIT } from "@shared/prompts";
+import { BACKDROP_FIX_EDIT } from "@shared/prompts";
+import { findOffColour } from "@shared/backdrop";
+import { readAll } from "@/lib/backdrop";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { STATUS_LABEL } from "./constants";
@@ -81,30 +83,58 @@ export default function ResultsTab({
   /** Re-run finished images (the chosen ones, or all of them) with one revision text. */
   onReviseAll?: (ids: string[], edit: string) => Promise<number>;
 }) {
-  const [restoring, setRestoring] = useState(false);
-  const finished = tasks.filter((t) => !!t.output && t.status !== "processing");
-  const restoreIds = finished
-    .filter((t) => selection.size === 0 || selection.has(t.id))
-    .map((t) => t.id);
-  async function restoreColour() {
-    if (!onReviseAll || restoreIds.length === 0) return;
-    const scope = selection.size
-      ? `the ${restoreIds.length} selected images`
-      : `all ${restoreIds.length} generated images`;
-    if (
-      !window.confirm(
-        `Restore colour on ${scope}? Each one is generated again with its colours and contrast corrected; the current result stays until the new one arrives.`,
-      )
-    )
-      return;
-    setRestoring(true);
+  // Backdrop colour approach: find the results whose backdrop did not take the requested colour.
+  const [checking, setChecking] = useState<{ done: number; total: number } | null>(null);
+  const [offColour, setOffColour] = useState<Set<string> | null>(null);
+  const [fixing, setFixing] = useState(false);
+  const finished = tasks.filter(
+    (t) => !!t.output && t.status !== "processing" && t.status !== "queued",
+  );
+  const offList = offColour ? finished.filter((t) => offColour.has(t.id)) : [];
+  async function checkBackdrops() {
+    if (finished.length === 0) return;
+    setChecking({ done: 0, total: finished.length });
     try {
-      const n = await onReviseAll(selection.size ? restoreIds : [], RESTORE_COLOUR_EDIT);
-      toast.success(`${n} image${n === 1 ? "" : "s"} queued for colour restoration.`);
+      const reads = await readAll(finished, outputUrl, (done) =>
+        setChecking({ done, total: finished.length }),
+      );
+      const items = finished
+        .filter((t) => reads.has(t.id))
+        .map((t) => ({ id: t.id, group: t.card, read: reads.get(t.id)! }));
+      const off = new Set(findOffColour(items));
+      setOffColour(off);
+      for (const t of finished) onSelect(t.id, off.has(t.id));
+      toast[off.size ? "warning" : "success"](
+        off.size
+          ? `${off.size} image${off.size === 1 ? "" : "s"} did not take the requested colour. They are selected.`
+          : "Every backdrop matches its requested colour.",
+      );
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setRestoring(false);
+      setChecking(null);
+    }
+  }
+  async function fixBackdrops() {
+    if (!onReviseAll || offList.length === 0) return;
+    if (
+      !window.confirm(
+        `Re-run ${offList.length} image${offList.length === 1 ? "" : "s"} with the requested backdrop colour? The current result stays until the new one arrives.`,
+      )
+    )
+      return;
+    setFixing(true);
+    try {
+      const n = await onReviseAll(
+        offList.map((t) => t.id),
+        BACKDROP_FIX_EDIT,
+      );
+      setOffColour(null);
+      toast.success(`${n} image${n === 1 ? "" : "s"} queued with the right colour.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setFixing(false);
     }
   }
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -211,15 +241,27 @@ export default function ResultsTab({
             : "The ZIP includes every generated image. Approval is optional."}
         </p>
         <div className="results-toolbar-actions">
-          {onReviseAll && restoreIds.length > 0 && (
+          {mode === "6" && onReviseAll && finished.length > 0 && (
             <button
               className="text-button"
-              disabled={restoring || running}
-              title="Fix grey or faded results: re-generate them with the original colours and contrast"
-              onClick={() => void restoreColour()}
+              disabled={!!checking || fixing || running}
+              title="Read the backdrop of every result and select the ones that are not the requested colour"
+              onClick={() => void checkBackdrops()}
             >
-              <Palette size={13} /> Restore colour
-              {selection.size ? ` (${restoreIds.length})` : " on all"}
+              <Palette size={13} />
+              {checking
+                ? `Checking ${checking.done} of ${checking.total}…`
+                : "Find wrong backdrop colours"}
+            </button>
+          )}
+          {mode === "6" && offList.length > 0 && (
+            <button
+              type="button"
+              className="primary small"
+              disabled={fixing || running || !!checking}
+              onClick={() => void fixBackdrops()}
+            >
+              Re-run {offList.length} with the right colour
             </button>
           )}
           {selection.size > 0 && (
@@ -372,6 +414,9 @@ export default function ResultsTab({
                       </span>
                     </div>
                   </div>
+                )}
+                {offColour?.has(t.id) && (
+                  <span className="wrong-colour-badge">Wrong backdrop colour</span>
                 )}
                 {t.output && (t.status === "processing" || t.status === "queued") && (
                   <span className="redo-badge" aria-live="polite">
