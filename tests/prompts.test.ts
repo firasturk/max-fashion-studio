@@ -6,6 +6,8 @@ import {
   DETAIL_RULE,
   BLEND_RULE,
   IDENTITY_RULE,
+  COLOUR_RULE,
+  RESTORE_COLOUR_EDIT,
   NEW_MODEL_RULE,
   RECENTER_SUFFIX,
 } from "../shared/prompts";
@@ -300,6 +302,14 @@ describe("new-model skill campaign", () => {
     expect(p).not.toContain("changed hairstyle");
     const bp = buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "4" }, 1);
     expect(bp).toContain(IDENTITY_RULE);
+    expect(bp).toContain(COLOUR_RULE);
+    expect(
+      buildPrompt(
+        { ...DEFAULT_CONFIG, input: "model" as const, mode: "4" },
+        1,
+        RESTORE_COLOUR_EDIT,
+      ),
+    ).toContain("Revision of the existing result: Restore natural colour");
     expect(bp).toContain("TATTOOS:");
     expect(buildPrompt({ ...DEFAULT_CONFIG, input: "model" as const, mode: "2" }, 1)).not.toContain(
       IDENTITY_RULE,

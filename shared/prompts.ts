@@ -115,6 +115,7 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
   } else {
     parts.push(`New background for this image: ${sceneFor(c, card)} ${c.prompt}`);
     parts.push("Keep the model, pose, framing and garment exactly as in the source photo.");
+    parts.push(COLOUR_RULE);
   }
 
   parts.push(fidelity);
@@ -166,6 +167,14 @@ export const HAIR_RULE =
 /** Engine-facing identity rule: the person in the reference photo is the model in the output. */
 export const IDENTITY_RULE =
   "IDENTITY (highest priority): the model is the same person as in the reference photo (image 1), reproduced exactly: identical face and facial structure (face shape, jawline, nose, lips, eyes, eyebrows, cheekbones), identical skin tone, age and body; no identity change, no beautifying, no averaging, no different person. HAIRSTYLE: the same hairstyle as the reference photo, same length, colour, parting, texture and styling; do not restyle, cut, lengthen or recolour the hair. When the face is not visible in the reference photo, it is not visible in the output either.";
+
+/** Engine-facing colour rule for background swaps: the new scene never greys out the photo. */
+export const COLOUR_RULE =
+  "COLOUR AND CONTRAST: the output keeps the full, true-to-life colour and tonal range of the original photo: real blacks, clean whites, natural warm skin, the garment in its exact original colours and print. The new background has its own real colours and daylight. No grey veil, no haze, no fog, no milky or faded film look, no desaturation, no lifted blacks, no flat low-contrast grade, even when the scene is overcast, pale or white.";
+
+/** Revision text that repairs a washed-out result; one click in the review and results views. */
+export const RESTORE_COLOUR_EDIT =
+  "Restore natural colour and contrast: the current result is washed out, grey and faded. Bring back full true-to-life saturation and a normal tonal range with real blacks and clean whites, exactly as in the original photo. The garment returns to its exact original colours and print, the skin tone is natural and warm, not grey, and the background keeps its real colours and daylight. Remove any grey veil, haze, fog, milky or faded film look. Keep the model, face, hair, pose, garment, framing and background exactly as they are";
 
 /** Engine-facing rule for every approach: tattoos on the model never appear in the output. */
 export const TATTOO_RULE =

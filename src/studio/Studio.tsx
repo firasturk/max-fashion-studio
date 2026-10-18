@@ -471,6 +471,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     toast.info("Revision queued. The previous result stays until the new one arrives.");
   }
 
+  /** Re-run several finished images with one revision text (empty ids = every generated image). */
+  async function reviseAll(ids: string[], edit: string): Promise<number> {
+    if (!batch) return 0;
+    const res = await post<{ revised?: number }>("/api/studio/revise-all", {
+      batch: batch.id,
+      ids: ids.length ? ids : undefined,
+      edit,
+    });
+    setSelection(new Set());
+    await loadState();
+    return res.revised ?? 0;
+  }
+
   /** Keep this image's skill prompt as a reusable look for its skill. */
   async function saveLook(t: Task) {
     const name = window.prompt("Name this look (for example: Paris corner, golden hour)");
@@ -986,6 +999,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                         !!batch && viewConfig.mode === "7" && batch.state !== "running"
                       }
                       onAssignSkill={(ids, skill) => action("sources/skill", { ids, skill })}
+                      onReviseAll={reviseAll}
                     />
                   </TabsContent>
                 </Tabs>

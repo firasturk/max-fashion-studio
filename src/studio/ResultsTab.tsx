@@ -5,12 +5,14 @@ import {
   FileImage,
   FolderDown,
   LoaderCircle,
+  Palette,
   Pencil,
   RotateCcw,
   ScanLine,
   ZoomIn,
 } from "lucide-react";
 import { productKey } from "@shared/naming";
+import { RESTORE_COLOUR_EDIT } from "@shared/prompts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { STATUS_LABEL } from "./constants";
@@ -51,6 +53,7 @@ export default function ResultsTab({
   batchSkill,
   canAssignSkill = false,
   onAssignSkill,
+  onReviseAll,
 }: {
   tasks: Task[];
   sources: Source[];
@@ -75,7 +78,35 @@ export default function ResultsTab({
   batchSkill?: string;
   canAssignSkill?: boolean;
   onAssignSkill?: (sourceIds: string[], skill: string | null) => Promise<void>;
+  /** Re-run finished images (the chosen ones, or all of them) with one revision text. */
+  onReviseAll?: (ids: string[], edit: string) => Promise<number>;
 }) {
+  const [restoring, setRestoring] = useState(false);
+  const finished = tasks.filter((t) => !!t.output && t.status !== "processing");
+  const restoreIds = finished
+    .filter((t) => selection.size === 0 || selection.has(t.id))
+    .map((t) => t.id);
+  async function restoreColour() {
+    if (!onReviseAll || restoreIds.length === 0) return;
+    const scope = selection.size
+      ? `the ${restoreIds.length} selected images`
+      : `all ${restoreIds.length} generated images`;
+    if (
+      !window.confirm(
+        `Restore colour on ${scope}? Each one is generated again with its colours and contrast corrected; the current result stays until the new one arrives.`,
+      )
+    )
+      return;
+    setRestoring(true);
+    try {
+      const n = await onReviseAll(selection.size ? restoreIds : [], RESTORE_COLOUR_EDIT);
+      toast.success(`${n} image${n === 1 ? "" : "s"} queued for colour restoration.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRestoring(false);
+    }
+  }
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [assignTo, setAssignTo] = useState(moodBoardHidden ? (skills[0]?.id ?? "zaid") : "zaid");
   const [assigning, setAssigning] = useState(false);
@@ -179,11 +210,24 @@ export default function ResultsTab({
             ? `${selection.size} selected`
             : "The ZIP includes every generated image. Approval is optional."}
         </p>
-        {selection.size > 0 && (
-          <button className="text-button" onClick={onClearSelection}>
-            Clear selection
-          </button>
-        )}
+        <div className="results-toolbar-actions">
+          {onReviseAll && restoreIds.length > 0 && (
+            <button
+              className="text-button"
+              disabled={restoring || running}
+              title="Fix grey or faded results: re-generate them with the original colours and contrast"
+              onClick={() => void restoreColour()}
+            >
+              <Palette size={13} /> Restore colour
+              {selection.size ? ` (${restoreIds.length})` : " on all"}
+            </button>
+          )}
+          {selection.size > 0 && (
+            <button className="text-button" onClick={onClearSelection}>
+              Clear selection
+            </button>
+          )}
+        </div>
       </div>
       {canAssignSkill && (
         <div className="selection-bar skill-assign">

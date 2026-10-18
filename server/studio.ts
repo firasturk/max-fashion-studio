@@ -1319,6 +1319,40 @@ studioRoutes.post("/revise", async (c) => {
   return c.json(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id)));
 });
 
+/** Revise many finished images with one instruction: the chosen ones, or every generated image. */
+studioRoutes.post("/revise-all", async (c) => {
+  const { batch, ids, edit } = await body(
+    c,
+    batchRef.extend({
+      ids: z.array(z.string()).max(2000).optional(),
+      edit: z.string().trim().min(1).max(3000),
+    }),
+  );
+  const b = await ownedBatch(c.env, c.get("user"), batch);
+  const sql =
+    "UPDATE tasks SET status = 'queued', edit = ?, error = NULL, updated = ? WHERE batch = ? AND output IS NOT NULL AND status IN ('ready','review','approved','failed')";
+  let changed = 0;
+  if (ids?.length) {
+    for (const id of ids)
+      changed += await run(c.env.DB, `${sql} AND id = ?`, edit, now(), b.id, id);
+  } else changed = await run(c.env.DB, sql, edit, now(), b.id);
+  if (!changed) throw new StudioError("No finished image to revise.", 409);
+  await run(
+    c.env.DB,
+    "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",
+    now(),
+    b.id,
+  );
+  await advanceBatch(c.env, b.id, {
+    background: (p) => c.executionCtx.waitUntil(p),
+    deferSync: true,
+  });
+  return c.json({
+    ...(await batchPayload(c.env, await ownedBatch(c.env, c.get("user"), b.id))),
+    revised: changed,
+  });
+});
+
 /** Zaid creative direction: run some photos of a saved batch with another skill. */
 studioRoutes.post("/sources/skill", async (c) => {
   const { batch, ids, skill } = await body(
