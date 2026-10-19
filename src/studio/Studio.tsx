@@ -615,8 +615,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const entries = zipEntriesFor(chosen);
       // Originals sit next to their AI images, in the same product folder, under their own name.
       const originalsIncluded = exportsOriginals(viewConfig);
-      if (originalsIncluded)
-        for (const s of sources) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
+      if (originalsIncluded) {
+        // Only the originals of the images being exported: a selection never ships extra folders.
+        const wanted = new Set(chosen.map((t) => t.source));
+        for (const s of sources)
+          if (wanted.has(s.id)) entries.push({ name: s.name, url: sourceUrl(s.id, "original") });
+      }
+      if (selection.size)
+        toast.info(
+          `Exporting the ${chosen.length} selected image${chosen.length === 1 ? "" : "s"} only.`,
+        );
       setExportDone([0, entries.length]);
       const parts = await buildZips(entries, undefined, (d, t) => setExportDone([d, t]));
       setExportDone(null);
