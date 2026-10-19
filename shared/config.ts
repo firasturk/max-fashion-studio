@@ -54,6 +54,8 @@ export interface Config {
   outputQuality: number;
   /** "fit": each JPG/WebP export is re-encoded to land between 1 and 1.9 MB; "quality": use outputQuality as is. */
   outputSize: "fit" | "quality";
+  /** Export: ship the untouched uploads next to the AI images (not offered for approach 1). */
+  originals?: boolean;
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
   economy: boolean;
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
@@ -122,6 +124,7 @@ export const DEFAULT_CONFIG: Config = {
   output: "jpg",
   outputQuality: 90,
   outputSize: "fit",
+  originals: true,
   colors: "pure white, warm beige, light grey",
   modelDescription: "Adult model, natural proportions, understated fashion styling.",
   center: true,
@@ -146,5 +149,5 @@ export function createsTasks(_c: Config, role: "lead" | "supporting"): boolean {
 
 /** Modes that ship the untouched originals inside the export ZIP. */
 export function exportsOriginals(c: Config): boolean {
-  return c.mode !== "1";
+  return c.mode !== "1" && c.originals !== false;
 }

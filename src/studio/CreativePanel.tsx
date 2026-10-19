@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Pencil,
   PiggyBank,
+  FolderDown,
   ScanLine,
   Trash2,
   X,
@@ -836,6 +837,20 @@ export default function CreativePanel({
         hint={`${config.output === "png" && config.outputSize !== "quality" ? "JPG" : config.output.toUpperCase()}${config.outputSize === "quality" ? (config.output === "png" ? " · as generated" : ` ${config.outputQuality}%`) : " · 1 to 1.9 MB"} · ProductID_0_N`}
         defaultOpen={false}
       >
+        {config.mode !== "1" && (
+          <div className="centering">
+            <FolderDown size={21} />
+            <div>
+              <strong>Include original photos</strong>
+              <span>The untouched uploads next to the AI images, under their own names</span>
+            </div>
+            <Switch
+              checked={config.originals !== false}
+              onCheckedChange={(v) => onChange({ originals: v })}
+              aria-label="Include original photos in the export"
+            />
+          </div>
+        )}
         {config.mode !== "4" && config.mode !== "6" && (
           <>
             <div className="centering">

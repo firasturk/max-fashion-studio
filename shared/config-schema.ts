@@ -27,6 +27,8 @@ export const configSchema = z.object({
   outputQuality: z.number().int().min(50).max(100).default(90),
   /** Each JPG/WebP export fitted to 1-1.9 MB, or encoded at outputQuality. */
   outputSize: z.enum(["fit", "quality"]).default("fit"),
+  /** Export: ship the untouched uploads next to the AI images. */
+  originals: z.boolean().default(true),
   /** Economy mode: Google Flex tier at half price with slower, queued delivery. Google models only. */
   economy: z.boolean().default(false),
   /** Backdrop-colour mode: comma-separated colours, one image per colour. */
