@@ -240,7 +240,8 @@ export function buildNoPromptPrompt(
     );
     if (notes.pose) parts.push(`POSE READ (facts taken from the pose photo): ${notes.pose}`);
   } else parts.push(`POSE: keep the model's pose as in image ${model}, natural and relaxed.`);
-  if (!backView && framing !== "LOWER_BODY" && framing !== "MID_BODY") parts.push(eyesFor(model));
+  if (!backView && framing !== "LOWER_BODY" && framing !== "WAIST_TO_KNEE")
+    parts.push(eyesFor(model));
   parts.push(ANATOMY_RULE, FULL_FRAME_RULE);
   parts.push(
     framingRule(framing, handsInPockets).replace(
@@ -339,14 +340,14 @@ export function framingRule(framing?: string, handsInPockets = false): string {
       "FRAMING LOCK: lower body only, from the waist down exactly as the reference photo is cropped. Do not show or invent the face, the top garments or anything above that line; nothing outside the reference crop exists in this image. The hands are visible inside the frame, relaxed and natural, in a position that fits the scene and the body's movement; never cropped out or raised above the crop line." +
       hands
     );
-  if (framing === "HEAD_TO_BELLY")
+  if (framing === "HEAD_TO_WAIST")
     return (
-      "FRAMING LOCK: half body, from above the head down to the belly (the navel), exactly where the reference photo ends. Do not show or invent the waist line, hips, bottoms, legs or footwear; nothing outside the reference crop exists in this image." +
+      "FRAMING LOCK: half body, from above the head down to the waist line, exactly where the reference photo ends. Do not show or invent any lower garment, legs or footwear below that line; nothing outside the reference crop exists in this image." +
       hands
     );
-  if (framing === "MID_BODY")
+  if (framing === "WAIST_TO_KNEE")
     return (
-      "FRAMING LOCK: middle body only, from the belly (navel) down to the thighs, exactly as the reference photo is cropped. Do not show or invent the face, hair, shoulders, chest or any top above the navel, and nothing below the thighs: no knees, calves, feet or footwear. The hands are visible inside the frame, relaxed beside the hips or lightly touching the garment; never cropped out." +
+      "FRAMING LOCK: middle section only, from the waist line down to above the knees, exactly as the reference photo is cropped. Do not show or invent the face, hair, shoulders or any garment above the waist line, and nothing below the knee line: no knees, feet or footwear. The hands are visible inside the frame, relaxed at the sides or lightly touching the garment; never cropped out. Plain catalogue product shot." +
       hands
     );
   if (framing === "THREE_QUARTER")

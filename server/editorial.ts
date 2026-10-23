@@ -33,12 +33,12 @@ export interface EditorialBrief {
 }
 
 export type Framing =
-  "FULL_BODY" | "THREE_QUARTER" | "UPPER_BODY" | "LOWER_BODY" | "HEAD_TO_BELLY" | "MID_BODY";
+  "FULL_BODY" | "THREE_QUARTER" | "UPPER_BODY" | "LOWER_BODY" | "HEAD_TO_WAIST" | "WAIST_TO_KNEE";
 
 /** The crops every skill understands; the finer ones fold into these. */
 export type CoarseFraming = "FULL_BODY" | "THREE_QUARTER" | "UPPER_BODY" | "LOWER_BODY";
 
-/** Skills (by id) that keep the finer lingerie crops: head to belly, and belly to thighs. */
+/** Skills (by id) that keep the finer half-body crops: head to the waist line, and waist line to the knee line. */
 export const FINE_FRAMING_SKILLS = new Set(["evening"]); // "WW Lingerie"
 
 export const FRAMINGS: Framing[] = [
@@ -46,18 +46,18 @@ export const FRAMINGS: Framing[] = [
   "THREE_QUARTER",
   "UPPER_BODY",
   "LOWER_BODY",
-  "HEAD_TO_BELLY",
-  "MID_BODY",
+  "HEAD_TO_WAIST",
+  "WAIST_TO_KNEE",
 ];
 
 export function isFraming(v: unknown): v is Framing {
   return typeof v === "string" && (FRAMINGS as string[]).includes(v);
 }
 
-/** A head-to-belly crop is an upper-body crop and a belly-to-thighs crop a lower-body crop elsewhere. */
+/** A head-to-waist crop is an upper-body crop and a waist-to-knee crop a lower-body crop elsewhere. */
 export function coarseFraming(f: Framing | string | null | undefined): CoarseFraming {
-  if (f === "HEAD_TO_BELLY") return "UPPER_BODY";
-  if (f === "MID_BODY") return "LOWER_BODY";
+  if (f === "HEAD_TO_WAIST") return "UPPER_BODY";
+  if (f === "WAIST_TO_KNEE") return "LOWER_BODY";
   if (f === "THREE_QUARTER" || f === "UPPER_BODY" || f === "LOWER_BODY") return f;
   return "FULL_BODY";
 }
@@ -258,7 +258,7 @@ export function builderInstruction(req: EditorialRequest): string {
       ? `The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, English, all template sections). LENGTH: the prompt field must be ${ZAID_MIN_WORDS}-${ZAID_MAX_WORDS} words, never under ${ZAID_MIN_WORDS} and not over ${ZAID_MAX_WORDS}. Develop every section with several concrete sentences: name and describe each background element, surface and material, the exact light on each of them, every garment detail, and the pose joint by joint. A prompt under ${ZAID_MIN_WORDS} words is rejected.`
       : "The attached image is the model/outfit photo. Do Step 1 (analysis), Step 2 (fresh combination) and Step 3 (write the full prompt, 600-1100 words, English, all template sections).",
     req.expand,
-    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, THREE_QUARTER, UPPER_BODY, LOWER_BODY, HEAD_TO_BELLY or MID_BODY; repeat the verified one).",
+    "Return JSON with keys: subject, faceMode, garments (the full garment inventory as prose), scene (one line), pose (one line), light (one line), prompt (the full prompt text), negative (one line negative prompt), framing (FULL_BODY, THREE_QUARTER, UPPER_BODY, LOWER_BODY, HEAD_TO_WAIST or WAIST_TO_KNEE; repeat the verified one).",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -449,10 +449,10 @@ export function framingDirective(
     return `VERIFIED UPLOAD FRAMING: LOWER_BODY (waist down). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a LOWER-BODY image: it starts at the same crop line as the upload (waist or hips) and ends below the footwear. The head, face, hair and shoulders are NOT in the image at all. Do not describe a face, hair, expression, gaze, a top garment or anything above the crop line; the only upper garment that may be mentioned is the sliver visible at the top edge of the upload, exactly as shown. Pose and scene are written for a lower-body shot: legs, stance, footwear, ground surface and the lower part of the setting. HANDS IN FRAME: the hands are visible inside the lower-body crop, relaxed and natural, in a position that fits the setting and the movement (resting beside the thighs, brushing the garment, swinging mid-step); never cropped out of the frame and never raised above the crop line. Report framing as LOWER_BODY.${seen}${hands}${view}`;
   if (framing === "UPPER_BODY")
     return `VERIFIED UPLOAD FRAMING: UPPER_BODY. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is an UPPER-BODY image: from above the head down to the same crop line as the upload (waist or hips). Legs, trousers, skirts and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for an upper-body shot. Report framing as UPPER_BODY.${seen}${hands}${view}`;
-  if (framing === "HEAD_TO_BELLY")
-    return `VERIFIED UPLOAD FRAMING: HEAD_TO_BELLY (half body, head to the belly). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a HALF-BODY image from above the head down to the belly (the navel), exactly where the upload ends: the waist line, hips, legs, briefs or bottoms below the navel and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for a head-to-belly shot: shoulders, arms, hands near the torso, head angle and gaze. Report framing as HEAD_TO_BELLY.${seen}${hands}${view}`;
-  if (framing === "MID_BODY")
-    return `VERIFIED UPLOAD FRAMING: MID_BODY (middle body, belly to thighs). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a MID-BODY image: it starts at the belly (navel), just as the upload does, and ends at the thighs, above the knees. The head, face, hair, shoulders and chest are NOT in the image, and neither are the knees, calves, feet or footwear. Do not describe a face, hair, expression, gaze, a bra, a top or anything above the navel, and nothing below the thighs. Pose and scene are written for a mid-body shot: hips, the waist line, the garment at the hips and thighs, hands relaxed beside the hips or lightly touching the garment, always inside the frame. Report framing as MID_BODY.${seen}${hands}${view}`;
+  if (framing === "HEAD_TO_WAIST")
+    return `VERIFIED UPLOAD FRAMING: HEAD_TO_WAIST (half body, head to the waist line). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a HALF-BODY image from above the head down to the waist line, exactly where the upload ends: nothing below the waist line is in the image, no lower garment, legs or footwear; do not describe or invent them. Pose and scene are written for a head-to-waist shot: shoulders, arms, hands, head angle and gaze. Report framing as HEAD_TO_WAIST.${seen}${hands}${view}`;
+  if (framing === "WAIST_TO_KNEE")
+    return `VERIFIED UPLOAD FRAMING: WAIST_TO_KNEE (middle section, waist line to the knee line). This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a MIDDLE-SECTION image: it starts at the waist line, just as the upload does, and ends above the knees. The head, face, hair and shoulders are NOT in the image, and neither are the knees, feet or footwear. Do not describe a face, hair, expression, gaze or any garment above the waist line, and nothing below the knee line. Pose and scene are written for a middle-section product shot: the garment as worn between the waist line and the knee line, a calm upright stance, hands relaxed at the sides or lightly touching the garment, always inside the frame; plain catalogue wording only. Report framing as WAIST_TO_KNEE.${seen}${hands}${view}`;
   if (framing === "THREE_QUARTER")
     return `VERIFIED UPLOAD FRAMING: THREE_QUARTER. This is a fact, not a judgement call, and it overrides the skill, its template, its library and any reference photo. The output is a THREE-QUARTER image: from above the head down to the same crop line as the upload, between mid-thigh and just below the knees. Feet and footwear are NOT in the image; do not describe or invent them. Pose and scene are written for a three-quarter shot. Report framing as THREE_QUARTER.${seen}${hands}${view}`;
   return `VERIFIED UPLOAD FRAMING: FULL_BODY. The output is a full-body image, head to footwear completely inside the frame, as in the upload. Report framing as FULL_BODY.${seen}${hands}${view}`;
@@ -468,7 +468,16 @@ export const FRAMING_SCHEMA = {
     feetVisible: { type: "boolean" },
     cropLine: {
       type: "string",
-      enum: ["chest", "belly", "waist", "hips", "thighs", "knees", "shins", "feet"],
+      enum: [
+        "shoulders",
+        "mid-torso",
+        "waist",
+        "hip line",
+        "above the knees",
+        "knees",
+        "lower legs",
+        "feet",
+      ],
     },
     backView: { type: "boolean" },
     faceVisible: { type: "boolean" },
@@ -489,7 +498,7 @@ export const FRAMING_SCHEMA = {
 };
 
 export const FRAMING_CHECK_INSTRUCTION =
-  "Look at the attached product photo and answer with JSON only. headVisible: true only if the head (face or back of the head) is inside the picture. kneesVisible: true only if the knees are inside the picture. feetVisible: true only if the feet, shoes or ankles are inside the picture. backView: true only if the person is seen from behind (back of the head, back of the garments, no face). framing follows from those facts: FULL_BODY when head and feet are both inside; THREE_QUARTER when the head is inside, the feet are NOT inside, and the picture ends between mid-thigh and just below the knees; UPPER_BODY when the head is inside and the picture ends at the waist or hips with no legs below the hips; LOWER_BODY when the head is NOT inside and the picture shows legs and/or footwear from the waist, hips or chest down, even if a sliver of a top is visible at the top edge; HEAD_TO_BELLY when the head is inside and the picture ends at the belly (around the navel), above the waist line and the hips; MID_BODY when neither the head nor the feet are inside and the picture shows the middle of the body only, from about the belly down to the thighs. cropLine: where the bottom edge of the picture cuts the body: chest, belly, waist, hips, thighs, knees, shins or feet. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, headVisible, kneesVisible, feetVisible, backView, faceVisible, handsInPockets, garments.";
+  "Look at the attached product photo and answer with JSON only. headVisible: true only if the head (face or back of the head) is inside the picture. kneesVisible: true only if the knees are inside the picture. feetVisible: true only if the feet, shoes or ankles are inside the picture. backView: true only if the person is seen from behind (back of the head, back of the garments, no face). framing follows from those facts: FULL_BODY when head and feet are both inside; THREE_QUARTER when the head is inside, the feet are NOT inside, and the picture ends between mid-thigh and just below the knees; UPPER_BODY when the head is inside and the picture ends at the waist or hips with no legs below the hips; LOWER_BODY when the head is NOT inside and the picture shows legs and/or footwear from the waist, hips or chest down, even if a sliver of a top is visible at the top edge; HEAD_TO_WAIST when the head is inside and the picture ends at the mid-torso or the waist line, above the hip line; WAIST_TO_KNEE when neither the head nor the feet are inside and the picture shows the middle section only, from about the waist line down to above the knees. cropLine: where the bottom edge of the picture cuts the figure: shoulders, mid-torso, waist, hip line, above the knees, knees, lower legs or feet. Decide from what is actually inside the picture, never from what the garment would need. faceVisible: true only if a face is clearly visible. handsInPockets: true only if at least one hand is inside a pocket in the photo. garments: a short comma-separated list of the clothing, footwear and accessories actually visible. Keys: framing, headVisible, kneesVisible, feetVisible, backView, faceVisible, handsInPockets, garments.";
 
 /** Parse the framing check's answer; unknown answers are treated as full body. */
 export interface FramingCheck {
@@ -522,20 +531,21 @@ export function parseFramingCheck(text: string): FramingCheck {
     let framing: Framing = isFraming(d.framing) ? d.framing : "FULL_BODY";
     // What is inside the picture decides, not the label: no head but feet is a lower-body crop,
     // no head and no feet the middle of the body, head and feet a full body, head and knees but
-    // no feet a three-quarter crop, head down to the belly a head-to-belly crop, head alone an
+    // no feet a three-quarter crop, head down to the waist line a head-to-waist crop, head alone an
     // upper-body crop.
     if (typeof d.headVisible === "boolean" && typeof d.feetVisible === "boolean") {
       if (!d.headVisible && d.feetVisible) framing = "LOWER_BODY";
-      else if (!d.headVisible && !d.feetVisible) framing = "MID_BODY";
+      else if (!d.headVisible && !d.feetVisible) framing = "WAIST_TO_KNEE";
       else if (d.headVisible && d.feetVisible) framing = "FULL_BODY";
       else if (d.headVisible && !d.feetVisible)
         framing =
           d.kneesVisible === true || (d.kneesVisible === undefined && framing === "THREE_QUARTER")
             ? "THREE_QUARTER"
-            : d.cropLine === "belly" ||
-                d.cropLine === "chest" ||
-                (d.cropLine === undefined && framing === "HEAD_TO_BELLY")
-              ? "HEAD_TO_BELLY"
+            : d.cropLine === "mid-torso" ||
+                d.cropLine === "shoulders" ||
+                d.cropLine === "waist" ||
+                (d.cropLine === undefined && framing === "HEAD_TO_WAIST")
+              ? "HEAD_TO_WAIST"
               : "UPPER_BODY";
     }
     return {
