@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  coarseFraming,
   framingDirective,
+  framingForSkill,
   parseFramingCheck,
   parseSceneNotes,
   parsePoseNotes,
@@ -195,6 +197,23 @@ describe("verified framing", () => {
     expect(framingDirective("THREE_QUARTER", "knit dress", false, true)).toContain("BACK VIEW");
     expect(framingDirective("THREE_QUARTER", "knit dress")).toContain("THREE-QUARTER image");
     expect(parseFramingCheck("nonsense").framing).toBe("FULL_BODY");
+    // Lingerie crops: head to the belly, and the middle of the body with neither head nor feet.
+    expect(
+      parseFramingCheck(
+        '{"framing":"UPPER_BODY","headVisible":true,"kneesVisible":false,"feetVisible":false,"cropLine":"belly","backView":false,"faceVisible":true,"handsInPockets":false,"garments":"bra"}',
+      ).framing,
+    ).toBe("HEAD_TO_BELLY");
+    expect(
+      parseFramingCheck(
+        '{"framing":"LOWER_BODY","headVisible":false,"kneesVisible":false,"feetVisible":false,"cropLine":"thighs","backView":false,"faceVisible":false,"handsInPockets":false,"garments":"briefs"}',
+      ).framing,
+    ).toBe("MID_BODY");
+    expect(coarseFraming("HEAD_TO_BELLY")).toBe("UPPER_BODY");
+    expect(coarseFraming("MID_BODY")).toBe("LOWER_BODY");
+    expect(framingForSkill("MID_BODY", "evening")).toBe("MID_BODY");
+    expect(framingForSkill("MID_BODY", "editorial")).toBe("LOWER_BODY");
+    expect(framingDirective("HEAD_TO_BELLY", "bra")).toContain("down to the belly");
+    expect(framingDirective("MID_BODY", "briefs")).toContain("starts at the belly");
     // What is inside the picture overrides the label: no head but feet is lower body.
     expect(
       parseFramingCheck(

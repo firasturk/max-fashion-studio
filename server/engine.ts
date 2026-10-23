@@ -51,6 +51,10 @@ import {
   POSE_SCHEMA,
   parsePoseNotes,
   type Framing,
+  FINE_FRAMING_SKILLS,
+  coarseFraming,
+  framingForSkill,
+  isFraming,
   wordCount,
   ZAID_MAX_WORDS,
   ZAID_MIN_WORDS,
@@ -948,9 +952,14 @@ async function ensureBrief(
     );
   }
   const image = await sourceBytes(env, source);
+  // Zaid creative direction: the photo's own skill, else the batch's, else Zaid's own mood board.
+  const skillId =
+    config.mode === "7"
+      ? source.skill || config.skill || "zaid"
+      : source.skill || config.skill || "editorial";
   // Step 0, before any skill text is read: what does the upload actually show? Checked once per
   // upload with a tiny dedicated vision call and stored, so every card and retry uses the same fact.
-  const check = await uploadFraming(env, source, image);
+  const check = await uploadFraming(env, source, image, FINE_FRAMING_SKILLS.has(skillId));
   const siblings = await all<{ card: number; brief: string | null }>(
     env.DB,
     "SELECT card, brief FROM tasks WHERE batch = ? AND source = ? AND id != ? AND brief IS NOT NULL ORDER BY card",
@@ -986,11 +995,6 @@ async function ensureBrief(
   );
   const recentBriefs = recentRows.map((r) => JSON.parse(r.brief) as EditorialBrief);
   const recent = recentBriefs.map((b) => b.scene).filter(Boolean);
-  // Zaid creative direction: the photo's own skill, else the batch's, else Zaid's own mood board.
-  const skillId =
-    config.mode === "7"
-      ? source.skill || config.skill || "zaid"
-      : source.skill || config.skill || "editorial";
   const library = await all<{ id: string }>(
     env.DB,
     "SELECT id FROM refs WHERE skill = ? ORDER BY created",
@@ -1013,7 +1017,7 @@ async function ensureBrief(
     aspectRatio: config.ratio,
     used,
     newModel: config.mode === "8",
-    uploadFraming: check.framing,
+    uploadFraming: framingForSkill(check.framing, skillId),
     visibleGarments: check.garments,
     handsInPockets: check.handsInPockets,
     backView: check.backView,
@@ -1127,7 +1131,7 @@ async function ensureBrief(
   if (plan.mood) brief.mood = plan.mood;
   if (leader) brief.setOf = leader.id;
   // The verified crop is binding: the builder's own reading never replaces it.
-  brief.framing = check.framing;
+  brief.framing = framingForSkill(check.framing, skillId);
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
   return brief;
 }
@@ -1325,13 +1329,15 @@ async function noPromptPlan(
     "SELECT id, framing FROM refs WHERE skill = ? ORDER BY created",
     NP_POSES,
   );
-  const wanted = check.framing;
+  // The pose library and No prompt work with the four coarse crops.
+  const wanted = coarseFraming(check.framing);
   const fallback = wanted === "THREE_QUARTER" ? "FULL_BODY" : wanted;
+  const byFraming = (f: string) => poses.filter((p) => coarseFraming(p.framing) === f);
   const pool =
-    poses.filter((p) => p.framing === wanted).length > 0
-      ? poses.filter((p) => p.framing === wanted)
-      : poses.filter((p) => p.framing === fallback).length > 0
-        ? poses.filter((p) => p.framing === fallback)
+    byFraming(wanted).length > 0
+      ? byFraming(wanted)
+      : byFraming(fallback).length > 0
+        ? byFraming(fallback)
         : poses;
   // Random choice, spread evenly: a photo is picked at random among the ones used least so far
   // in this batch, so nothing repeats until the whole library has been used once.
@@ -1353,7 +1359,7 @@ async function noPromptPlan(
     np: true,
     bg: pickLeastUsed(backgrounds, used),
     pose: pool.length ? pickLeastUsed(pool, used) : null,
-    framing: check.framing,
+    framing: coarseFraming(check.framing),
     handsInPockets: check.handsInPockets,
     backView: check.backView,
   };
@@ -1494,20 +1500,21 @@ async function uploadFraming(
   env: Env,
   source: SourceRow,
   image: ImageBytes,
+  fine = false,
 ): Promise<FramingCheck> {
   if (source.framing) {
-    const [framing, face, third, fourth, ...rest] = source.framing.split("|");
-    // Current form: framing|face|pockets|back|garments. Older rows lack the back flag, or the
-    // pockets flag too; a flag is always "true"/"false", garments never are.
+    // Current form: v2|framing|face|pockets|back|garments ("v2" = the check knew the fine crops).
+    // Older rows start with the framing, and may lack the back flag, or the pockets flag too; a
+    // flag is always "true"/"false", garments never are.
+    const segments = source.framing.split("|");
+    const v2 = segments[0] === "v2";
+    const [framing, face, third, fourth, ...rest] = v2 ? segments.slice(1) : segments;
     const isFlag = (v: string | undefined) => v === "true" || v === "false";
     const hasPockets = isFlag(third);
     const hasBack = hasPockets && isFlag(fourth);
-    if (
-      framing === "FULL_BODY" ||
-      framing === "THREE_QUARTER" ||
-      framing === "UPPER_BODY" ||
-      framing === "LOWER_BODY"
-    )
+    // A skill that keeps the fine crops re-checks an older half-body reading once.
+    const stale = fine && !v2 && (framing === "UPPER_BODY" || framing === "LOWER_BODY");
+    if (isFraming(framing) && !stale)
       return {
         framing,
         faceVisible: face === "true",
@@ -1525,7 +1532,7 @@ async function uploadFraming(
   await run(
     env.DB,
     "UPDATE sources SET framing = ? WHERE id = ?",
-    `${result.framing}|${result.faceVisible}|${result.handsInPockets}|${result.backView}|${result.garments}`,
+    `v2|${result.framing}|${result.faceVisible}|${result.handsInPockets}|${result.backView}|${result.garments}`,
     source.id,
   );
   return result;
