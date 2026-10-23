@@ -351,7 +351,9 @@ export class VertexImageClient {
       const reason =
         d.candidates?.[0]?.finishReason ?? d.error?.message ?? "no image in the response";
       throw new StudioError(
-        `Google Cloud (Vertex) returned no image (${reason}). Adjust the prompt or check model restrictions.`,
+        reason === "IMAGE_SAFETY"
+          ? "Google Cloud (Vertex) refused the generated image (IMAGE_SAFETY): Google's output filter rejected the picture itself, not the prompt. Lingerie and swimwear trip it most; retry, or rephrase the brief in plainer product terms."
+          : `Google Cloud (Vertex) returned no image (${reason}). Adjust the prompt or check model restrictions.`,
         502,
       );
     }

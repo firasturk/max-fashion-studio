@@ -25,6 +25,15 @@ const SWAPS: [RegExp, string][] = [
   [/\b(see-through|sheer|transparent) (fabric|top|dress|blouse)\b/gi, "lightweight $2"],
   [/\b(wet look|wet hair and skin|dripping wet)\b/gi, "fresh look"],
   [/\b(intimate|intimately)\b/gi, "quiet"],
+  // Underwear and swimwear briefs: product words only, never how the garment sits on the body.
+  [/\b(body contours?|contours? of (?:her|his|the) (?:body|figure))\b/gi, "fabric drape"],
+  [
+    /\b(emphasi[sz]ing|emphasi[sz]es|accentuating|accentuates|highlighting|highlights|hugging|hugs|flattering|flatters) (?:her|his|the) (?:figure|body|shape|form|silhouette|waist|hips|bust|chest|legs)\b/gi,
+    "showing the garment clearly",
+  ],
+  [/\bleg openings?\b/gi, "hems"],
+  [/\b(skin|flesh)[- ]baring\b/gi, "light"],
+  [/\b(cleavage|d[ée]collet[ée]|bust line|bustline)\b/gi, "neckline"],
 ];
 
 export function sanitizePrompt(text: string): string {

@@ -128,6 +128,13 @@ describe("safe wording and framing", () => {
     expect(
       sanitizePrompt("A sexy pose with parted lips and bare shoulders in a skin-tight dress"),
     ).toBe("A elegant pose with a calm expression and the shoulders in a fitted dress");
+    expect(
+      sanitizePrompt(
+        "Gentle side lighting emphasizing the fabric textures and body contours naturally; lace trim around the leg openings, flattering her figure",
+      ),
+    ).toBe(
+      "Gentle side lighting emphasizing the fabric textures and fabric drape naturally; lace trim around the hems, showing the garment clearly",
+    );
     expect(sanitizePrompt("Child model, age 6, happy, natural child proportions")).toBe(
       "Child model, age 6, happy, natural child proportions",
     );
