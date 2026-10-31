@@ -75,7 +75,7 @@ jobs:
             -H "Authorization: Bearer $(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')")
           if [ "$cf" != "200" ]; then
             echo "CREDENTIAL_ERROR=The GitHub secret CLOUDFLARE_API_TOKEN is rejected by Cloudflare (HTTP $cf). Update it with a token created at dash.cloudflare.com/profile/api-tokens (template Edit Cloudflare Workers)." >> "$GITHUB_ENV"
-            echo "Cloudflare rejected the token (HTTP $cf)"; exit 1
+            echo "Cloudflare rejected the token (HTTP $cf), length $(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]' | wc -c)"; exit 1
           fi
           echo "Cloudflare token accepted"
       - name: Developer agent
