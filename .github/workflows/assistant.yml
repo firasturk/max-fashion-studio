@@ -98,7 +98,12 @@ jobs:
         if: steps.claim.outputs.has_job == 'true'
         working-directory: repo
         run: |
-          npx wrangler d1 migrations apply max-fashion-studio --remote
+          # Migrations run only when the change added one (D1 access is needed only then).
+          if git status --porcelain migrations/ | grep -q .; then
+            npx wrangler d1 migrations apply max-fashion-studio --remote
+          else
+            echo "no new migration"
+          fi
           pnpm run deploy
       - name: Commit and push
         if: steps.claim.outputs.has_job == 'true'
