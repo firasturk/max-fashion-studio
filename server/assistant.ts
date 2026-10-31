@@ -16,6 +16,7 @@ import { advanceBatch, directionRules, DIRECTION_RULES_SETTING } from "./engine"
 import { logEvent } from "./events";
 import { activeMemoryLines, addMemory } from "./memory";
 import { notify } from "./notify";
+import { createDevJob, githubConfigured } from "./devjobs";
 import { resolveAnthropicKey, setSetting } from "./settings";
 import { listSkills } from "./skills";
 
@@ -37,6 +38,8 @@ export interface ChatTurn {
 export interface AssistantAction {
   tool: string;
   summary: string;
+  /** A developer job started for this action: the chat follows it until it reports back. */
+  job?: string;
 }
 
 interface BatchRow {
@@ -203,12 +206,19 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "request_developer_change",
+    name: "change_system",
     description:
-      "Send a request to the developer for something that needs new code or a change you cannot make with the other tools (a new feature, a new button, a bug). Write a clear summary and the details, in English.",
+      "Change the studio itself: anything the other tools cannot do (a new feature, a new button or option, different behaviour of an approach or a skill, a fix for a bug, wording in the interface, a new rule baked into the engine). Starts the developer agent, which edits the code, tests it, deploys it and reports back in a few minutes; the user does not approve anything. Write the request as a precise brief in English: what to change, where it shows, how it should behave, and what the user said in their own words.",
     input_schema: {
       type: "object",
-      properties: { summary: { type: "string" }, details: { type: "string" } },
+      properties: {
+        summary: { type: "string", description: "One line, what changes." },
+        details: {
+          type: "string",
+          description:
+            "The full brief for the developer agent, in English, with the user's words quoted.",
+        },
+      },
       required: ["summary", "details"],
       additionalProperties: false,
     },
@@ -249,7 +259,7 @@ async function buildContext(
   const skills = await listSkills(env);
   const lines: string[] = [
     `You are the studio assistant of Max Fashion Studio, the AI fashion-image studio this team uses. You answer exactly like the developer who built it would in chat: short, concrete, friendly, in the language the user writes (Arabic or English; Arabic users often write in Levantine dialect, answer in natural Arabic). You act for the team, not only for admins.`,
-    `What you can do yourself, through your tools: re-generate images with a revision (new pose, cleaner background, fix hands, keep the face...), re-run wrong backdrop colours, retry failed images, approve images, change the batch settings, add a fixed rule to Creative direction, store a lesson in the brand memory, and read any image's prompt, brief, review and error. Do these directly when the user asks; do not ask for permission for a reversible change, just do it and say what you did. When a request needs new code or something your tools cannot do, use request_developer_change and tell the user the developer will see it.`,
+    `You have full authority, for every member of the team, and nobody approves anything: when the user asks for a change, you do it. Through your tools you re-generate images with a revision (new pose, cleaner background, fix hands, keep the face...), re-run wrong backdrop colours, retry failed images, approve images, change the batch settings, add a fixed rule to Creative direction, store a lesson in the brand memory, and read any image's prompt, brief, review and error. For anything else, the studio itself changes: use change_system with a precise brief, and the developer agent edits the code, tests, deploys and reports back here in a few minutes. Never answer "I cannot" or "ask the developer": either a tool does it now, or change_system does it in minutes. Never ask for permission; ask a question only when the request is genuinely ambiguous in a way that would change what gets built.`,
     `Rules of the studio you must respect: the garment is never changed; real faces are preserved; wording is catalogue-safe (no body-focused or sensual language, plain product terms for underwear and swimwear); revisions keep the framing of the original crop unless asked. Write engine instructions in English even when you answer in Arabic.`,
     `The user can attach pictures to a chat message: a screenshot with marks showing what is wrong, a photo of the pose or look they want, an example from a competitor. Read them carefully and act on them. A pose or look the user wants copied goes to the engine through revise_images with pose_from_attachment; a marked screenshot tells you what to change in words. When the user talks about "this image" they mean the image open on screen (below). When they describe images (the grey ones, the failed ones), call list_images first to find them. After a tool call, say in one or two lines what happened and what the user should expect (a revision takes about a minute, the old result stays until the new one arrives, refresh is not needed).`,
     `Today: ${new Date().toISOString().slice(0, 10)}. User: ${user.name} (${user.role}).`,
@@ -544,24 +554,35 @@ async function runTool(
       actions.push({ tool: name, summary: `remembered: ${item.title}` });
       return `Stored in the brand memory (${scope}).`;
     }
-    case "request_developer_change": {
+    case "change_system": {
       const summary = String(input.summary ?? "").slice(0, 200);
-      const details = String(input.details ?? "").slice(0, 3000);
+      const details = String(input.details ?? "").slice(0, 5000);
       await logEvent(env, {
         kind: "request",
         user: user.id,
         batch: batch?.id ?? null,
         data: { summary, details, by: user.name },
       });
-      background(
-        notify(
-          env,
-          `Studio request from ${user.name}: ${summary}`,
-          `${details}\n\nBatch: ${batch?.name ?? "none"} (${batch?.id ?? "-"})`,
-        ).catch(() => {}),
-      );
-      actions.push({ tool: name, summary: `sent to the developer: ${summary}` });
-      return "Request recorded for the developer; it appears in the Admin activity and the notification channel.";
+      if (!(await githubConfigured(env))) {
+        background(
+          notify(
+            env,
+            `Studio request from ${user.name}: ${summary}`,
+            `${details}\n\nBatch: ${batch?.name ?? "none"} (${batch?.id ?? "-"})`,
+          ).catch(() => {}),
+        );
+        actions.push({ tool: name, summary: `recorded for the developer: ${summary}` });
+        return "The developer agent is not connected yet (an admin connects GitHub in Connection, tab Developer), so the request was recorded and sent to the notification channel instead.";
+      }
+      const context = [
+        `Requested by ${user.name} (${user.role}).`,
+        batch
+          ? `Open batch: "${batch.name}" (${batch.id}), state ${batch.state}, settings ${batch.config.slice(0, 1500)}.`
+          : "No batch open.",
+      ].join("\n");
+      const job = await createDevJob(env, user.id, `${summary}\n\n${details}`, context);
+      actions.push({ tool: name, summary: `changing the studio: ${summary}`, job: job.id });
+      return `Developer job ${job.id} started. The studio is being changed now; it takes a few minutes and the chat shows the result when it is deployed. Tell the user it is in progress, without promising a time shorter than five minutes.`;
     }
     default:
       return `Unknown tool ${name}.`;

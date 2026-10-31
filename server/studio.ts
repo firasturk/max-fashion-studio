@@ -3,6 +3,13 @@ import { z } from "zod";
 import type { Env } from "./env";
 import { insertEvents, logEvent } from "./events";
 import { batchForAssistant, chat, verifyAnthropicKey } from "./assistant";
+import {
+  GITHUB_TOKEN_SETTING,
+  devHookToken,
+  githubConfigured,
+  listDevJobs,
+  verifyGithubToken,
+} from "./devjobs";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
 import {
@@ -206,6 +213,29 @@ studioRoutes.post("/assistant/chat", async (c) => {
   return c.json(result);
 });
 
+/** Developer jobs of the signed-in user (admins see everyone's), newest first. */
+studioRoutes.get("/assistant/jobs", async (c) => {
+  const user = c.get("user");
+  return c.json({ jobs: await listDevJobs(c.env, user.id, user.role === "admin") });
+});
+
+/** GitHub connection for the developer agent (admin). */
+studioRoutes.post("/engine/github", async (c) => {
+  if (c.get("user").role !== "admin") throw new StudioError("Admin only.", 403);
+  const { token } = await body(c, z.object({ token: z.string().trim().min(10).max(400) }));
+  const check = await verifyGithubToken(token);
+  if (!check.ok) throw new StudioError(`GitHub rejected this token: ${check.message}`, 400);
+  await setSetting(c.env, GITHUB_TOKEN_SETTING, token);
+  await devHookToken(c.env);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/github", async (c) => {
+  if (c.get("user").role !== "admin") throw new StudioError("Admin only.", 403);
+  await deleteSetting(c.env, GITHUB_TOKEN_SETTING);
+  return c.json({ ok: true });
+});
+
 studioRoutes.post("/engine/anthropic-key", async (c) => {
   if (c.env.ANTHROPIC_API_KEY)
     throw new StudioError("The Claude key is managed as a Worker secret on this deployment.", 409);
@@ -266,6 +296,7 @@ studioRoutes.get("/state", async (c) => {
       source: engineKey.source,
       openai: (await resolveOpenAIKey(c.env)).source,
       anthropic: (await resolveAnthropicKey(c.env)).source,
+      github: await githubConfigured(c.env),
       google: (await resolveGoogleKey(c.env)).source,
       fal: (await resolveFalKey(c.env)).source,
       review: !!(await resolveGoogleAuth(c.env)).auth,

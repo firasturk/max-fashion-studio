@@ -10,3 +10,6 @@ tsconfig.tsbuildinfo
 test-results
 server/generated/assets.ts
 wrangler.deploy.json
+
+# Working files of the developer agent (GitHub Actions)
+.assistant/run/

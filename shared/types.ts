@@ -150,6 +150,8 @@ export interface StateResponse {
     openai: "secret" | "stored" | "none";
     /** Claude key for the in-app assistant. */
     anthropic?: "secret" | "stored" | "none";
+    /** GitHub is connected: the chat can change the studio itself through the developer agent. */
+    github?: boolean;
     google: "secret" | "stored" | "none";
     fal: "secret" | "stored" | "none";
     review: boolean;
@@ -210,8 +212,20 @@ export interface AssistantTurn {
   role: "user" | "assistant";
   text: string;
   /** What the assistant did for this reply (tool calls), shown under the message. */
-  actions?: { tool: string; summary: string }[];
+  actions?: { tool: string; summary: string; job?: string }[];
   /** How many pictures the user attached (the pictures themselves are not persisted). */
   attachments?: number;
   at: number;
+}
+
+/** A change to the studio itself, carried out by the developer agent. */
+export interface DevJobInfo {
+  id: string;
+  user: string;
+  status: "queued" | "running" | "done" | "failed";
+  request: string;
+  result: string | null;
+  run_url: string | null;
+  created: number;
+  updated: number;
 }

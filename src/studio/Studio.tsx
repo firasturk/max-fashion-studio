@@ -74,7 +74,7 @@ import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
-import AssistantChat from "./AssistantChat";
+import AssistantPage from "./AssistantPage";
 const ReviewDialog = lazyScreen(() => import("./ReviewDialog"));
 import type { EngineInfo } from "./ConnectionDialog";
 const ConnectionDialog = lazyScreen(() => import("./ConnectionDialog"));
@@ -111,7 +111,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
-  const [page, setPage] = useState<"studio" | "batches" | "admin">("studio");
+  const [page, setPage] = useState<"studio" | "batches" | "admin" | "chat">("studio");
+  /** The image the user opened last: what "this image" means in the chat. */
+  const [lastTask, setLastTask] = useState<Task | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -322,6 +324,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }
 
   useEffect(() => saveLastBatch(batch?.id ?? null), [batch?.id]);
+  useEffect(() => {
+    if (selected) setLastTask(selected);
+  }, [selected]);
+  useEffect(() => setLastTask(null), [batch?.id]);
   // Every recorded click carries the batch, approach and skill on screen.
   useEffect(() => {
     setTrackContext({ batch: batch?.id ?? null, mode: viewConfig.mode, skill: viewConfig.skill });
@@ -716,6 +722,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
             Batches <span>{batches.length}</span>
           </button>
+          <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
+            Chat
+          </button>
           {user.role === "admin" && (
             <button className={page === "admin" ? "active" : ""} onClick={() => setPage("admin")}>
               Admin
@@ -753,8 +762,22 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </div>
       </header>
 
-      <main>
-        {page === "admin" ? (
+      <main className={page === "chat" ? "main-chat" : undefined}>
+        {page === "chat" ? (
+          <AssistantPage
+            userId={user.id}
+            batchId={batch?.id ?? null}
+            batchName={batch?.name}
+            taskId={lastTask?.id ?? null}
+            taskName={lastTask ? sources.find((s) => s.id === lastTask.source)?.name : undefined}
+            configured={(engine.anthropic ?? "none") !== "none"}
+            github={!!engine.github}
+            onChanged={async () => {
+              await loadState();
+              if (batch) await open(batch.id);
+            }}
+          />
+        ) : page === "admin" ? (
           <>
             <div className="page-heading">
               <div>
@@ -1185,17 +1208,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           onChanged={async () => {
             await loadState();
             await loadModels();
-          }}
-        />
-        <AssistantChat
-          batchId={batch?.id ?? null}
-          batchName={batch?.name}
-          taskId={selected?.id ?? null}
-          taskName={selected ? sources.find((s) => s.id === selected.source)?.name : undefined}
-          configured={(engine.anthropic ?? "none") !== "none"}
-          onChanged={async () => {
-            await loadState();
-            if (batch) await open(batch.id);
           }}
         />
         <ReviewDialog

@@ -16,6 +16,7 @@ export interface EngineInfo {
   source: "secret" | "stored" | "none";
   openai: "secret" | "stored" | "none";
   anthropic?: "secret" | "stored" | "none";
+  github?: boolean;
   google: "secret" | "stored" | "none";
   fal: "secret" | "stored" | "none";
   review: boolean;
@@ -39,6 +40,8 @@ export default function ConnectionDialog({
   const [model, setModel] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
+  const [githubToken, setGithubToken] = useState("");
+  const [savingGithub, setSavingGithub] = useState(false);
   const [savingAnthropic, setSavingAnthropic] = useState(false);
   const [googleKey, setGoogleKey] = useState("");
   const [savingGoogle, setSavingGoogle] = useState(false);
@@ -81,12 +84,15 @@ export default function ConnectionDialog({
     }
   }
   const [falKey, setFalKey] = useState("");
-  type Vendor = "higgsfield" | "google" | "vertex" | "openai" | "fal" | "claude";
+  type Vendor = "higgsfield" | "google" | "vertex" | "openai" | "fal" | "claude" | "developer";
   // Opens on the tab last used in this browser, else on the vendor of the current image model.
   const [vendor, setVendorState] = useState<Vendor>(() => {
     try {
       const saved = localStorage.getItem("connection-tab") as Vendor | null;
-      if (saved && ["higgsfield", "google", "vertex", "openai", "fal", "claude"].includes(saved))
+      if (
+        saved &&
+        ["higgsfield", "google", "vertex", "openai", "fal", "claude", "developer"].includes(saved)
+      )
         return saved;
     } catch {
       /* private mode */
@@ -265,6 +271,35 @@ export default function ConnectionDialog({
     }
   }
 
+  async function saveGithub() {
+    setSavingGithub(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/github", {
+        token: githubToken,
+      });
+      setGithubToken("");
+      setResult(r);
+      await onChanged();
+      toast.success("GitHub connected. The chat can now change the studio itself.");
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSavingGithub(false);
+    }
+  }
+
+  async function removeGithub() {
+    if (!window.confirm("Disconnect GitHub? The chat can no longer change the studio's code."))
+      return;
+    try {
+      await del("/api/studio/engine/github");
+      setResult(null);
+      await onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   async function saveModel() {
     setSavingModel(true);
     try {
@@ -314,6 +349,7 @@ export default function ConnectionDialog({
               ["openai", "OpenAI", engine.openai !== "none"],
               ["fal", "fal.ai", engine.fal !== "none"],
               ["claude", "Claude", (engine.anthropic ?? "none") !== "none"],
+              ["developer", "Developer", !!engine.github],
             ] as const
           ).map(([k, label, on]) => (
             <button
@@ -603,6 +639,62 @@ export default function ConnectionDialog({
               Images run one at a time per request on Vertex; Economy mode (Flex) is an AI Studio
               feature and is ignored while Vertex is connected.
             </p>
+          </>
+        )}
+        {vendor === "developer" && (
+          <>
+            <div className="qa-heading" style={{ marginTop: 12 }}>
+              <KeyRound size={18} />
+              <strong>Developer agent (GitHub)</strong>
+            </div>
+            {engine.github ? (
+              <div className="success-note">
+                <Check size={19} />
+                GitHub is connected. A request in the chat that needs new code starts the developer
+                agent: it edits the code, runs the checks, deploys and reports back in the chat.
+              </div>
+            ) : (
+              <p className="quality-note">
+                Lets the chat change the studio itself. Needs a GitHub fine-grained token for the
+                repository firasturk/max-fashion-studio with{" "}
+                <strong>Contents: read and write</strong>, and these repository secrets (Settings →
+                Secrets and variables → Actions): <code>ANTHROPIC_API_KEY</code>,{" "}
+                <code>CLOUDFLARE_API_TOKEN</code> (Workers Scripts edit + D1 edit) and{" "}
+                <code>CLOUDFLARE_ACCOUNT_ID</code>.
+              </p>
+            )}
+            <div className="footer-actions">
+              <input
+                id="github-token"
+                type="password"
+                autoComplete="off"
+                placeholder="github_pat_..."
+                aria-label="GitHub token"
+                value={githubToken}
+                onChange={(e) => setGithubToken(e.target.value.trim())}
+              />
+              <button
+                className="primary"
+                onClick={() => void saveGithub()}
+                disabled={!githubToken || savingGithub}
+              >
+                {savingGithub ? (
+                  <LoaderCircle className="spinning" size={16} />
+                ) : (
+                  <Check size={16} />
+                )}
+                Connect
+              </button>
+              {engine.github && (
+                <button
+                  className="secondary"
+                  onClick={() => void removeGithub()}
+                  disabled={savingGithub}
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
           </>
         )}
         {vendor === "claude" && (

@@ -8,8 +8,9 @@ import { verifyObjectToken } from "./signed";
 import { adminRoutes, cleanupOldBatches } from "./admin";
 import { advanceBatch, activeBatchIds, readPendingReferences, runLearning } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
-import { pruneEvents } from "./events";
-import { setSetting } from "./settings";
+import { logEvent, pruneEvents } from "./events";
+import { DEV_HOOK_TOKEN_SETTING, getDevJob, updateDevJob } from "./devjobs";
+import { getSetting, setSetting } from "./settings";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
 
@@ -74,6 +75,39 @@ app.post("/api/hooks/engine", async (c) => {
     advanceBatch(c.env, batch, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true }),
   );
   return c.json({ ok: true });
+});
+
+/** The developer agent (GitHub Actions) reporting a job's progress or result. */
+app.post("/api/hooks/dev-job", async (c) => {
+  const d = (await c.req.json().catch(() => ({}))) as {
+    job?: string;
+    token?: string;
+    status?: string;
+    result?: string;
+    run_url?: string;
+  };
+  const expected = await getSetting(c.env, DEV_HOOK_TOKEN_SETTING);
+  if (!expected || !d.token || d.token !== expected || !d.job) return c.json({ ok: false }, 403);
+  const status =
+    d.status === "running" || d.status === "done" || d.status === "failed" ? d.status : null;
+  if (!status) return c.json({ ok: false }, 400);
+  const ok = await updateDevJob(
+    c.env,
+    d.job,
+    status,
+    typeof d.result === "string" ? d.result.slice(0, 6000) : null,
+    typeof d.run_url === "string" ? d.run_url.slice(0, 300) : null,
+  );
+  if (ok && status !== "running") {
+    const job = await getDevJob(c.env, d.job);
+    await logEvent(c.env, {
+      kind: "dev-job",
+      actor: "engine",
+      user: job?.user ?? null,
+      data: { status, request: job?.request.slice(0, 200), result: (d.result ?? "").slice(0, 300) },
+    });
+  }
+  return c.json({ ok });
 });
 
 app.use("/api/admin/*", async (c, next) => {
