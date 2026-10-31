@@ -4,8 +4,12 @@ import type { Env } from "./env";
 import { insertEvents, logEvent } from "./events";
 import { batchForAssistant, chat, verifyAnthropicKey } from "./assistant";
 import {
+  CLOUDFLARE_ACCOUNT_ID,
+  DEV_REPO,
   GITHUB_TOKEN_SETTING,
   devHookToken,
+  devLastPoll,
+  developerReady,
   githubConfigured,
   listDevJobs,
   verifyGithubToken,
@@ -219,6 +223,19 @@ studioRoutes.get("/assistant/jobs", async (c) => {
   return c.json({ jobs: await listDevJobs(c.env, user.id, user.role === "admin") });
 });
 
+/** Developer agent set-up (admin): what is in place, and the secret to paste into GitHub. */
+studioRoutes.get("/engine/developer", async (c) => {
+  if (c.get("user").role !== "admin") throw new StudioError("Admin only.", 403);
+  return c.json({
+    repo: DEV_REPO,
+    accountId: CLOUDFLARE_ACCOUNT_ID,
+    claude: (await resolveAnthropicKey(c.env)).source !== "none",
+    github: await githubConfigured(c.env),
+    hookToken: await devHookToken(c.env),
+    lastPoll: await devLastPoll(c.env),
+  });
+});
+
 /** GitHub connection for the developer agent (admin). */
 studioRoutes.post("/engine/github", async (c) => {
   if (c.get("user").role !== "admin") throw new StudioError("Admin only.", 403);
@@ -297,6 +314,7 @@ studioRoutes.get("/state", async (c) => {
       openai: (await resolveOpenAIKey(c.env)).source,
       anthropic: (await resolveAnthropicKey(c.env)).source,
       github: await githubConfigured(c.env),
+      developer: await developerReady(c.env),
       google: (await resolveGoogleKey(c.env)).source,
       fal: (await resolveFalKey(c.env)).source,
       review: !!(await resolveGoogleAuth(c.env)).auth,

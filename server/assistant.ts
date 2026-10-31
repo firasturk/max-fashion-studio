@@ -16,7 +16,7 @@ import { advanceBatch, directionRules, DIRECTION_RULES_SETTING } from "./engine"
 import { logEvent } from "./events";
 import { activeMemoryLines, addMemory } from "./memory";
 import { notify } from "./notify";
-import { createDevJob, githubConfigured } from "./devjobs";
+import { createDevJob, developerReady } from "./devjobs";
 import { resolveAnthropicKey, setSetting } from "./settings";
 import { listSkills } from "./skills";
 
@@ -563,7 +563,7 @@ async function runTool(
         batch: batch?.id ?? null,
         data: { summary, details, by: user.name },
       });
-      if (!(await githubConfigured(env))) {
+      if (!(await developerReady(env))) {
         background(
           notify(
             env,
@@ -572,7 +572,7 @@ async function runTool(
           ).catch(() => {}),
         );
         actions.push({ tool: name, summary: `recorded for the developer: ${summary}` });
-        return "The developer agent is not connected yet (an admin connects GitHub in Connection, tab Developer), so the request was recorded and sent to the notification channel instead.";
+        return "The developer agent is not set up yet (an admin finishes the two steps in Connection, tab Developer), so the request was recorded and sent to the notification channel instead.";
       }
       const context = [
         `Requested by ${user.name} (${user.role}).`,

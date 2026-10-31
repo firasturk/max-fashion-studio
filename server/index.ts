@@ -9,7 +9,7 @@ import { adminRoutes, cleanupOldBatches } from "./admin";
 import { advanceBatch, activeBatchIds, readPendingReferences, runLearning } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
 import { logEvent, pruneEvents } from "./events";
-import { DEV_HOOK_TOKEN_SETTING, getDevJob, updateDevJob } from "./devjobs";
+import { DEV_HOOK_TOKEN_SETTING, claimNextDevJob, getDevJob, updateDevJob } from "./devjobs";
 import { getSetting, setSetting } from "./settings";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
@@ -75,6 +75,23 @@ app.post("/api/hooks/engine", async (c) => {
     advanceBatch(c.env, batch, { background: (p) => c.executionCtx.waitUntil(p), deferSync: true }),
   );
   return c.json({ ok: true });
+});
+
+async function devHookOk(c: { env: Env }, token: unknown): Promise<boolean> {
+  const expected = await getSetting(c.env, DEV_HOOK_TOKEN_SETTING);
+  return !!expected && typeof token === "string" && token === expected;
+}
+
+/** The Actions run asking for work: the oldest queued job, now running, or nothing (204). */
+app.post("/api/hooks/dev-jobs/next", async (c) => {
+  const d = (await c.req.json().catch(() => ({}))) as { token?: string; run_url?: string };
+  if (!(await devHookOk(c, d.token))) return c.json({ ok: false }, 403);
+  const job = await claimNextDevJob(
+    c.env,
+    typeof d.run_url === "string" ? d.run_url.slice(0, 300) : null,
+  );
+  if (!job) return c.body(null, 204);
+  return c.json({ id: job.id, request: job.request, context: job.context });
 });
 
 /** The developer agent (GitHub Actions) reporting a job's progress or result. */

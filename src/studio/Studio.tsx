@@ -771,7 +771,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             taskId={lastTask?.id ?? null}
             taskName={lastTask ? sources.find((s) => s.id === lastTask.source)?.name : undefined}
             configured={(engine.anthropic ?? "none") !== "none"}
-            github={!!engine.github}
+            github={!!engine.developer}
             onChanged={async () => {
               await loadState();
               if (batch) await open(batch.id);

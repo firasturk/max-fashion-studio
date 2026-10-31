@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, KeyRound, LoaderCircle, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -17,6 +17,7 @@ export interface EngineInfo {
   openai: "secret" | "stored" | "none";
   anthropic?: "secret" | "stored" | "none";
   github?: boolean;
+  developer?: boolean;
   google: "secret" | "stored" | "none";
   fal: "secret" | "stored" | "none";
   review: boolean;
@@ -41,6 +42,20 @@ export default function ConnectionDialog({
   const [openaiKey, setOpenaiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
+  const [dev, setDev] = useState<{
+    repo: string;
+    accountId: string;
+    claude: boolean;
+    github: boolean;
+    hookToken: string;
+    lastPoll: number;
+  } | null>(null);
+  const checkedIn = !!dev?.lastPoll && Date.now() - dev.lastPoll < 20 * 60_000;
+  const loadDev = () =>
+    get<NonNullable<typeof dev>>("/api/studio/engine/developer")
+      .then(setDev)
+      .catch(() => setDev(null));
+
   const [savingGithub, setSavingGithub] = useState(false);
   const [savingAnthropic, setSavingAnthropic] = useState(false);
   const [googleKey, setGoogleKey] = useState("");
@@ -103,6 +118,10 @@ export default function ConnectionDialog({
     if (/^fal\//.test(m)) return "fal";
     return "higgsfield";
   });
+  useEffect(() => {
+    if (open && vendor === "developer") void loadDev();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, vendor]);
   const setVendor = (v: Vendor) => {
     setVendorState(v);
     try {
@@ -349,7 +368,7 @@ export default function ConnectionDialog({
               ["openai", "OpenAI", engine.openai !== "none"],
               ["fal", "fal.ai", engine.fal !== "none"],
               ["claude", "Claude", (engine.anthropic ?? "none") !== "none"],
-              ["developer", "Developer", !!engine.github],
+              ["developer", "Developer", !!engine.developer],
             ] as const
           ).map(([k, label, on]) => (
             <button
@@ -645,56 +664,121 @@ export default function ConnectionDialog({
           <>
             <div className="qa-heading" style={{ marginTop: 12 }}>
               <KeyRound size={18} />
-              <strong>Developer agent (GitHub)</strong>
+              <strong>Developer agent</strong>
             </div>
-            {engine.github ? (
-              <div className="success-note">
-                <Check size={19} />
-                GitHub is connected. A request in the chat that needs new code starts the developer
-                agent: it edits the code, runs the checks, deploys and reports back in the chat.
+            <p className="quality-note">
+              Lets the chat change the studio itself: the request becomes a run on GitHub that edits
+              the code, tests, deploys and reports back in the chat. Two copy-pastes set it up;
+              everything else is already in place.
+            </p>
+            {dev && (
+              <div className="dev-steps">
+                <div className={`dev-step ${dev.claude ? "done" : ""}`}>
+                  <span className="dev-step-mark">{dev.claude ? "✓" : "1"}</span>
+                  <div>
+                    <strong>Claude key in the studio</strong>
+                    <span>{dev.claude ? "Saved (tab Claude)." : "Add it in the Claude tab."}</span>
+                  </div>
+                </div>
+                <div className={`dev-step ${checkedIn ? "done" : ""}`}>
+                  <span className="dev-step-mark">{checkedIn ? "✓" : "2"}</span>
+                  <div>
+                    <strong>Three secrets in GitHub</strong>
+                    <span>
+                      Open{" "}
+                      <a
+                        href={`https://github.com/${dev.repo}/settings/secrets/actions/new`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-link"
+                      >
+                        github.com/{dev.repo}/settings/secrets/actions/new
+                      </a>{" "}
+                      three times, one secret each (Name, then Secret, then Add secret):
+                    </span>
+                    <ol className="dev-secrets">
+                      <li>
+                        <code>ANTHROPIC_API_KEY</code>: the same Claude key you saved in the Claude
+                        tab.
+                      </li>
+                      <li>
+                        <code>CLOUDFLARE_API_TOKEN</code>: from{" "}
+                        <a
+                          href="https://dash.cloudflare.com/profile/api-tokens"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-link"
+                        >
+                          dash.cloudflare.com/profile/api-tokens
+                        </a>
+                        : Create Token, template <strong>Edit Cloudflare Workers</strong>, add{" "}
+                        <strong>Account → D1 → Edit</strong>, Continue, Create Token, copy it.
+                      </li>
+                      <li>
+                        <code>STUDIO_HOOK_TOKEN</code>: this value
+                        <span className="footer-actions">
+                          <input readOnly value={dev.hookToken} aria-label="Studio hook token" />
+                          <button
+                            className="secondary"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(dev.hookToken);
+                              toast.success("Copied.");
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </span>
+                      </li>
+                    </ol>
+                    <span>
+                      {checkedIn
+                        ? `The agent last checked in ${Math.max(1, Math.round((Date.now() - dev.lastPoll) / 60_000))} min ago.`
+                        : "After the third secret, the agent checks in within about five minutes and this step turns green."}
+                    </span>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <p className="quality-note">
-                Lets the chat change the studio itself. Needs a GitHub fine-grained token for the
-                repository firasturk/max-fashion-studio with{" "}
-                <strong>Contents: read and write</strong>, and these repository secrets (Settings →
-                Secrets and variables → Actions): <code>ANTHROPIC_API_KEY</code>,{" "}
-                <code>CLOUDFLARE_API_TOKEN</code> (Workers Scripts edit + D1 edit) and{" "}
-                <code>CLOUDFLARE_ACCOUNT_ID</code>.
-              </p>
             )}
-            <div className="footer-actions">
-              <input
-                id="github-token"
-                type="password"
-                autoComplete="off"
-                placeholder="github_pat_..."
-                aria-label="GitHub token"
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value.trim())}
-              />
-              <button
-                className="primary"
-                onClick={() => void saveGithub()}
-                disabled={!githubToken || savingGithub}
-              >
-                {savingGithub ? (
-                  <LoaderCircle className="spinning" size={16} />
-                ) : (
-                  <Check size={16} />
-                )}
-                Connect
-              </button>
-              {engine.github && (
+            <details className="prompt-details" style={{ marginTop: 12 }}>
+              <summary>Optional: start runs instantly (GitHub token)</summary>
+              <p className="quality-note">
+                Without it, a change starts within about five minutes. With a fine-grained GitHub
+                token for {dev?.repo ?? "the repository"} (Contents: read and write) it starts at
+                once.
+              </p>
+              <div className="footer-actions">
+                <input
+                  id="github-token"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="github_pat_..."
+                  aria-label="GitHub token"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value.trim())}
+                />
                 <button
-                  className="secondary"
-                  onClick={() => void removeGithub()}
-                  disabled={savingGithub}
+                  className="primary"
+                  onClick={() => void saveGithub()}
+                  disabled={!githubToken || savingGithub}
                 >
-                  Disconnect
+                  {savingGithub ? (
+                    <LoaderCircle className="spinning" size={16} />
+                  ) : (
+                    <Check size={16} />
+                  )}
+                  Connect
                 </button>
-              )}
-            </div>
+                {engine.github && (
+                  <button
+                    className="secondary"
+                    onClick={() => void removeGithub()}
+                    disabled={savingGithub}
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </details>
           </>
         )}
         {vendor === "claude" && (

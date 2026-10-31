@@ -152,6 +152,8 @@ export interface StateResponse {
     anthropic?: "secret" | "stored" | "none";
     /** GitHub is connected: the chat can change the studio itself through the developer agent. */
     github?: boolean;
+    /** The developer agent is set up and checking in: the chat can change the studio itself. */
+    developer?: boolean;
     google: "secret" | "stored" | "none";
     fal: "secret" | "stored" | "none";
     review: boolean;

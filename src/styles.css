@@ -4316,3 +4316,67 @@ main.main-chat {
 .chat-hint {
   margin: 6px 0 0;
 }
+
+/* --- Developer agent set-up steps --- */
+.dev-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+.dev-step {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.dev-step > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.dev-step span {
+  color: var(--ink-400);
+  line-height: 1.5;
+}
+.dev-step-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--ink-700) !important;
+  font-weight: 700;
+  font-size: 12px;
+}
+.dev-step.done .dev-step-mark {
+  background: var(--success-soft);
+  color: var(--success) !important;
+}
+.dev-step .footer-actions {
+  margin-top: 4px;
+}
+.dev-step input[readonly] {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.dev-secrets {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-700);
+}
+.dev-secrets .footer-actions {
+  display: flex;
+  margin-top: 6px;
+}

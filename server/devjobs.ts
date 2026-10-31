@@ -10,8 +10,11 @@ import { getSetting, setSetting } from "./settings";
 
 export const GITHUB_TOKEN_SETTING = "github_token";
 export const DEV_HOOK_TOKEN_SETTING = "dev_hook_token";
+export const DEV_LAST_POLL_SETTING = "dev_last_poll";
 export const DEV_REPO = "firasturk/max-fashion-studio";
 export const DEV_EVENT = "assistant-change";
+/** The account the studio is deployed in (not a secret; the Actions run deploys into it). */
+export const CLOUDFLARE_ACCOUNT_ID = "e7331236c05517364ee6a02c2c19a6fd";
 
 export interface DevJob {
   id: string;
@@ -27,6 +30,34 @@ export interface DevJob {
 
 export async function githubConfigured(env: Env): Promise<boolean> {
   return !!(await getSetting(env, GITHUB_TOKEN_SETTING));
+}
+
+/** When the Actions run last asked for work (the sign that the GitHub secret is in place). */
+export async function devLastPoll(env: Env): Promise<number> {
+  return Number((await getSetting(env, DEV_LAST_POLL_SETTING)) ?? 0);
+}
+
+/** The developer agent is usable once its GitHub run has checked in recently. */
+export async function developerReady(env: Env): Promise<boolean> {
+  return Date.now() - (await devLastPoll(env)) < 20 * 60_000;
+}
+
+/** Oldest queued job becomes running and is handed to the Actions run. */
+export async function claimNextDevJob(env: Env, runUrl: string | null): Promise<DevJob | null> {
+  await setSetting(env, DEV_LAST_POLL_SETTING, String(now()));
+  const next = await first<DevJob>(
+    env.DB,
+    "SELECT * FROM dev_jobs WHERE status = 'queued' ORDER BY created LIMIT 1",
+  );
+  if (!next) return null;
+  const changed = await run(
+    env.DB,
+    "UPDATE dev_jobs SET status = 'running', run_url = ?, updated = ? WHERE id = ? AND status = 'queued'",
+    runUrl,
+    now(),
+    next.id,
+  );
+  return changed ? { ...next, status: "running", run_url: runUrl } : null;
 }
 
 /** The secret the Actions run presents when it reports back; created on first use. */
@@ -90,7 +121,10 @@ export async function getDevJob(env: Env, id: string): Promise<DevJob | null> {
   return (await first<DevJob>(env.DB, "SELECT * FROM dev_jobs WHERE id = ?", id)) ?? null;
 }
 
-/** Records the job and starts the Actions run. Throws when GitHub refuses. */
+/**
+ * Records the job. The Actions run picks it up on its next poll (every few minutes); when a
+ * GitHub token is saved, the run is also started at once.
+ */
 export async function createDevJob(
   env: Env,
   userId: string,
@@ -98,8 +132,12 @@ export async function createDevJob(
   context: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DevJob> {
+  if (!(await developerReady(env)))
+    throw new StudioError(
+      "The developer agent is not set up yet (Connection, tab Developer).",
+      428,
+    );
   const token = await getSetting(env, GITHUB_TOKEN_SETTING);
-  if (!token) throw new StudioError("GitHub is not connected (Connection, tab Developer).", 428);
   const job: DevJob = {
     id: uuid(),
     user: userId,
@@ -121,35 +159,15 @@ export async function createDevJob(
     job.created,
     job.updated,
   );
-  const hook = env.PUBLIC_BASE_URL
-    ? `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/hooks/dev-job`
-    : "";
+  if (!token) return job;
   const r = await fetchImpl(`${GH}/repos/${DEV_REPO}/dispatches`, {
     method: "POST",
     headers: { ...ghHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      event_type: DEV_EVENT,
-      client_payload: {
-        job: job.id,
-        request: job.request,
-        context: job.context,
-        hook,
-        token: await devHookToken(env),
-      },
-    }),
+    body: JSON.stringify({ event_type: DEV_EVENT, client_payload: { job: job.id } }),
     signal: AbortSignal.timeout(20_000),
   });
-  if (r.status !== 204) {
-    const text = (await r.text().catch(() => "")).slice(0, 200);
-    await run(
-      env.DB,
-      "UPDATE dev_jobs SET status = 'failed', result = ?, updated = ? WHERE id = ?",
-      `GitHub refused to start the run (${r.status}): ${text}`,
-      now(),
-      job.id,
-    );
-    throw new StudioError(`GitHub refused to start the run (${r.status}).`, 502);
-  }
+  // A refused dispatch is not fatal: the scheduled poll still picks the job up.
+  if (r.status !== 204) console.error(`[dev-job] dispatch refused (${r.status})`);
   return job;
 }
 
