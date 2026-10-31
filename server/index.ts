@@ -106,7 +106,9 @@ app.post("/api/hooks/dev-job", async (c) => {
   const expected = await getSetting(c.env, DEV_HOOK_TOKEN_SETTING);
   if (!expected || !d.token || d.token !== expected || !d.job) return c.json({ ok: false }, 403);
   const status =
-    d.status === "running" || d.status === "done" || d.status === "failed" ? d.status : null;
+    d.status === "running" || d.status === "done" || d.status === "failed" || d.status === "queued"
+      ? d.status
+      : null;
   if (!status) return c.json({ ok: false }, 400);
   const ok = await updateDevJob(
     c.env,

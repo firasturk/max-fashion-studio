@@ -175,7 +175,7 @@ export async function createDevJob(
 export async function updateDevJob(
   env: Env,
   id: string,
-  status: DevJob["status"],
+  status: DevJob["status"] | "queued",
   result: string | null,
   runUrl: string | null,
 ): Promise<boolean> {
