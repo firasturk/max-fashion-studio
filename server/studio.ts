@@ -179,7 +179,21 @@ studioRoutes.post("/assistant/chat", async (c) => {
       batch: z.string().max(80).nullable().optional(),
       task: z.string().max(80).nullable().optional(),
       messages: z
-        .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(6000) }))
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            text: z.string().max(6000),
+            images: z
+              .array(
+                z.object({
+                  media_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+                  data: z.string().max(2_800_000),
+                }),
+              )
+              .max(4)
+              .optional(),
+          }),
+        )
         .min(1)
         .max(40),
     }),

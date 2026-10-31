@@ -211,5 +211,7 @@ export interface AssistantTurn {
   text: string;
   /** What the assistant did for this reply (tool calls), shown under the message. */
   actions?: { tool: string; summary: string }[];
+  /** How many pictures the user attached (the pictures themselves are not persisted). */
+  attachments?: number;
   at: number;
 }

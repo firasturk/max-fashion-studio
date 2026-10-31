@@ -158,6 +158,10 @@ export function buildPrompt(c: Config, card: number, edit = "", images: PromptIm
     roles.push(
       "Image 3 is card 2: copy its backdrop colour, floor, lighting direction and softness exactly so the studio set looks like one shoot.",
     );
+  if (images.pose)
+    roles.push(
+      "One attached image is a POSE REFERENCE chosen by the team: copy only its body pose (stance, weight, torso angle, each arm and hand, legs, head angle and gaze) onto the model from image 1; never its clothing, face, hair, body shape, background, props or accessories.",
+    );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   if (roles.length > 1) parts.push(roles.join(" "));
   return parts.filter(Boolean).join("\n\n");
@@ -435,6 +439,10 @@ export function buildEditorialPrompt(
   if (images.set)
     roles.push(
       `Image ${idx++} is an already generated image of the same product: reproduce its background, lighting, colour grade and camera distance exactly so both images read as one shoot. Only the crop follows image 1; the pose is the one written in the prompt, which differs from the sibling's pose and from image 1's stance.`,
+    );
+  if (images.pose)
+    roles.push(
+      `Image ${idx++} is a POSE REFERENCE chosen by the team: copy only its body pose (stance, weight, torso angle, each arm and hand, legs, head angle and gaze) onto the model from image 1, adapted to the locked framing; never its clothing, face, hair, body shape, background, props or accessories. This pose replaces the pose written in the prompt.`,
     );
   if (images.revision) roles.push("The LAST image is the existing result to revise.");
   // The image-1 rule stands alone when the person is being replaced; otherwise only with extra images.

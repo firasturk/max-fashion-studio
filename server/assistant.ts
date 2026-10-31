@@ -22,9 +22,16 @@ import { listSkills } from "./skills";
 export const ASSISTANT_MODEL = "claude-opus-5-5";
 const MAX_ROUNDS = 6;
 
+export interface ChatImage {
+  media_type: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+
 export interface ChatTurn {
   role: "user" | "assistant";
   text: string;
+  /** Pictures the user attached to this message (base64). */
+  images?: ChatImage[];
 }
 
 export interface AssistantAction {
@@ -114,6 +121,11 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         task_ids: { type: "array", items: { type: "string" }, minItems: 1 },
         instruction: { type: "string" },
+        pose_from_attachment: {
+          type: "integer",
+          description:
+            "When the user attached a photo of the pose they want in their LAST message: its number among the attachments (1 = first). The engine then copies only that photo's body pose. Omit when no attachment should be used.",
+        },
       },
       required: ["task_ids", "instruction"],
       additionalProperties: false,
@@ -239,7 +251,7 @@ async function buildContext(
     `You are the studio assistant of Max Fashion Studio, the AI fashion-image studio this team uses. You answer exactly like the developer who built it would in chat: short, concrete, friendly, in the language the user writes (Arabic or English; Arabic users often write in Levantine dialect, answer in natural Arabic). You act for the team, not only for admins.`,
     `What you can do yourself, through your tools: re-generate images with a revision (new pose, cleaner background, fix hands, keep the face...), re-run wrong backdrop colours, retry failed images, approve images, change the batch settings, add a fixed rule to Creative direction, store a lesson in the brand memory, and read any image's prompt, brief, review and error. Do these directly when the user asks; do not ask for permission for a reversible change, just do it and say what you did. When a request needs new code or something your tools cannot do, use request_developer_change and tell the user the developer will see it.`,
     `Rules of the studio you must respect: the garment is never changed; real faces are preserved; wording is catalogue-safe (no body-focused or sensual language, plain product terms for underwear and swimwear); revisions keep the framing of the original crop unless asked. Write engine instructions in English even when you answer in Arabic.`,
-    `When the user talks about "this image" they mean the image open on screen (below). When they describe images (the grey ones, the failed ones), call list_images first to find them. After a tool call, say in one or two lines what happened and what the user should expect (a revision takes about a minute, the old result stays until the new one arrives, refresh is not needed).`,
+    `The user can attach pictures to a chat message: a screenshot with marks showing what is wrong, a photo of the pose or look they want, an example from a competitor. Read them carefully and act on them. A pose or look the user wants copied goes to the engine through revise_images with pose_from_attachment; a marked screenshot tells you what to change in words. When the user talks about "this image" they mean the image open on screen (below). When they describe images (the grey ones, the failed ones), call list_images first to find them. After a tool call, say in one or two lines what happened and what the user should expect (a revision takes about a minute, the old result stays until the new one arrives, refresh is not needed).`,
     `Today: ${new Date().toISOString().slice(0, 10)}. User: ${user.name} (${user.role}).`,
     `Skills (id: title): ${skills.map((s) => `${s.id}: ${s.title}`).join("; ")}. Approaches: 1 Mannequin to model, 2 New face lifestyle, 3 New poses, 4 Fresh backgrounds, 5 Skill campaign, 6 Backdrop colour, 7 Creative direction, 8 Skill campaign new model, 9 No prompt.`,
   ];
@@ -311,6 +323,13 @@ async function buildContext(
   return { system: lines.join("\n\n"), images };
 }
 
+function fromBase64(data: string): ArrayBuffer {
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
 function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let s = "";
@@ -328,6 +347,7 @@ async function runTool(
   input: Record<string, unknown>,
   actions: AssistantAction[],
   background: (p: Promise<unknown>) => void,
+  attachments: ChatImage[] = [],
 ): Promise<string> {
   const need = (): BatchRow => {
     if (!batch) throw new StudioError("No batch is open.");
@@ -374,12 +394,24 @@ async function runTool(
           ? BACKDROP_FIX_EDIT
           : String(input.instruction ?? "").trim();
       if (!instruction) return "An instruction is required.";
+      // A pose photo attached in the chat is stored once and handed to the engine with the revision.
+      let editRef: string | null = null;
+      const n = Number(input.pose_from_attachment);
+      if (name === "revise_images" && n >= 1) {
+        const img = attachments[n - 1];
+        if (!img) return `There is no attachment number ${n} in the last message.`;
+        editRef = `assistant/${b.id}/${crypto.randomUUID()}.${img.media_type === "image/png" ? "png" : img.media_type === "image/webp" ? "webp" : "jpg"}`;
+        await env.BUCKET.put(editRef, fromBase64(img.data), {
+          httpMetadata: { contentType: img.media_type },
+        });
+      }
       let changed = 0;
       for (const id of ids(input.task_ids))
         changed += await run(
           env.DB,
-          "UPDATE tasks SET status = 'queued', edit = ?, error = NULL, updated = ? WHERE id = ? AND batch = ? AND output IS NOT NULL AND status IN ('ready','review','approved','failed')",
+          "UPDATE tasks SET status = 'queued', edit = ?, edit_ref = ?, error = NULL, updated = ? WHERE id = ? AND batch = ? AND output IS NOT NULL AND status IN ('ready','review','approved','failed')",
           instruction.slice(0, 3000),
+          editRef,
           now(),
           id,
           b.id,
@@ -549,11 +581,21 @@ export async function chat(
   const client = new Anthropic({ apiKey: key, maxRetries: 2, timeout: 120_000 });
   const { system, images } = await buildContext(env, user, batch, taskId);
   const turns = history.slice(-20);
-  const messages: Anthropic.MessageParam[] = turns.map((t, i) =>
-    i === turns.length - 1 && t.role === "user" && images.length
-      ? { role: "user", content: [...images, { type: "text", text: t.text }] }
-      : { role: t.role, content: t.text },
-  );
+  const last = turns.at(-1);
+  const attachments = last?.role === "user" ? (last.images ?? []).slice(0, 4) : [];
+  const messages: Anthropic.MessageParam[] = turns.map((t, i) => {
+    const own: Anthropic.ImageBlockParam[] = (t.images ?? []).slice(0, 4).map((img) => ({
+      type: "image",
+      source: { type: "base64", media_type: img.media_type, data: img.data },
+    }));
+    const context = i === turns.length - 1 && t.role === "user" ? images : [];
+    if (t.role === "assistant" || (!own.length && !context.length))
+      return { role: t.role, content: t.text };
+    const label = own.length
+      ? `\n\n(The user attached ${own.length} picture${own.length === 1 ? "" : "s"} to this message: ${own.length === 1 ? "it is" : "they are"} the last ${own.length === 1 ? "image" : own.length + " images"} above, numbered 1 to ${own.length} in order.)`
+      : "";
+    return { role: "user", content: [...context, ...own, { type: "text", text: t.text + label }] };
+  });
   const actions: AssistantAction[] = [];
   let reply = "";
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -588,6 +630,7 @@ export async function chat(
           (t.input ?? {}) as Record<string, unknown>,
           actions,
           background,
+          attachments,
         );
       } catch (e) {
         content = `Failed: ${errorMessage(e)}`;
@@ -596,7 +639,6 @@ export async function chat(
     }
     messages.push({ role: "user", content: results });
   }
-  const last = turns.at(-1);
   await logEvent(env, {
     kind: "assistant",
     user: user.id,

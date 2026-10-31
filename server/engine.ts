@@ -116,6 +116,8 @@ interface TaskRow {
   error: string | null;
   output_engine_url: string | null;
   edit: string | null;
+  /** R2 key of a pose reference attached in the assistant chat for the pending revision. */
+  edit_ref: string | null;
   attempts: number;
   recenter: number;
   request_id: string | null;
@@ -418,7 +420,7 @@ async function storeResultBytes(
   // result; the review then upgrades the status if it is still waiting for it.
   await run(
     env.DB,
-    "UPDATE tasks SET status = 'review', output = ?, output_engine_url = ?, qa = ?, edit = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, error = NULL, updated = ? WHERE id = ? AND status = 'finalizing'",
+    "UPDATE tasks SET status = 'review', output = ?, output_engine_url = ?, qa = ?, edit = NULL, edit_ref = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, error = NULL, updated = ? WHERE id = ? AND status = 'finalizing'",
     key,
     url,
     JSON.stringify(manualQA("Automatic review still running. Check manually.")),
@@ -514,7 +516,7 @@ async function failTask(
   const status = previousOutput ? "review" : "failed";
   await run(
     env.DB,
-    "UPDATE tasks SET status = ?, error = ?, edit = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, updated = ? WHERE id = ? AND status IN ('processing','finalizing')",
+    "UPDATE tasks SET status = ?, error = ?, edit = NULL, edit_ref = NULL, recenter = 0, request_id = NULL, lease = NULL, leased_at = NULL, updated = ? WHERE id = ? AND status IN ('processing','finalizing')",
     status,
     message.slice(0, 500),
     now(),
@@ -1825,6 +1827,11 @@ async function submitTask(
   const edit = task.edit?.trim() ?? "";
   // A packshot recolour always restarts from the original: an attached wrong-colour result only
   // tempts the engine to keep it.
+  if (edit && task.edit_ref) {
+    const ref = await objectBytes(env, task.edit_ref, "image/jpeg");
+    imageUrls.push(await client.upload(ref.bytes, ref.mime));
+    roles.pose = true;
+  }
   if ((edit || task.recenter) && task.output && config.mode !== "6") {
     imageUrls.push(await outputEngineUrl(env, client, task));
     roles.revision = true;
@@ -1944,6 +1951,10 @@ async function submitOpenAITask(
   const edit = task.edit?.trim() ?? "";
   // A packshot recolour always restarts from the original: an attached wrong-colour result only
   // tempts the engine to keep it.
+  if (edit && task.edit_ref) {
+    images.push(await objectBytes(env, task.edit_ref, "image/jpeg"));
+    roles.pose = true;
+  }
   if ((edit || task.recenter) && task.output && config.mode !== "6") {
     images.push(await outputBytes(env, task));
     roles.revision = true;
@@ -2352,6 +2363,10 @@ async function collectReferenceKeys(
   const edit = task.edit?.trim() ?? "";
   // A packshot recolour always restarts from the original: an attached wrong-colour result only
   // tempts the engine to keep it.
+  if (edit && task.edit_ref) {
+    keys.push(task.edit_ref);
+    roles.pose = true;
+  }
   if ((edit || task.recenter) && task.output && config.mode !== "6") {
     keys.push(task.output);
     roles.revision = true;

@@ -1,7 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { LoaderCircle, MessageCircle, Paperclip, Send, Sparkles, X } from "lucide-react";
+import { makeReference } from "@/lib/image";
 import { post } from "@/api";
 import type { AssistantTurn } from "@shared/types";
+
+interface Attachment {
+  media_type: "image/jpeg";
+  data: string;
+  /** Data URL for the thumbnail. */
+  preview: string;
+}
+
+/** A picture from the team, downsized in the browser so the chat stays fast. */
+async function prepareAttachment(file: File): Promise<Attachment> {
+  const small = await makeReference(file, 1280, 0.85).catch(() => file);
+  const buf = await small.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const data = btoa(bin);
+  return { media_type: "image/jpeg", data, preview: `data:image/jpeg;base64,${data}` };
+}
 
 /**
  * The studio assistant: a chat button for the whole team. It knows the batch and the image on
@@ -28,8 +48,12 @@ export default function AssistantChat({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
+  const [pending, setPending] = useState<Attachment[]>([]);
+  // Pictures of the last few messages stay in memory for the conversation; they are not persisted.
+  const pictures = useRef<Map<number, Attachment[]>>(new Map());
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const storageKey = `assistant-chat:${batchId ?? "none"}`;
 
   useEffect(() => {
@@ -52,11 +76,37 @@ export default function AssistantChat({
     if (open) input.current?.focus();
   }, [open]);
 
+  async function addFiles(files: FileList | File[] | null) {
+    if (!files) return;
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (!images.length) return;
+    try {
+      const prepared = await Promise.all(images.slice(0, 4).map(prepareAttachment));
+      setPending((l) => [...l, ...prepared].slice(0, 4));
+    } catch (e) {
+      setTurns((l) => [
+        ...l,
+        {
+          role: "assistant",
+          text: `Could not read that picture: ${(e as Error).message}`,
+          at: Date.now(),
+        },
+      ]);
+    }
+  }
+
   async function send() {
     const asked = text.trim();
-    if (!asked || busy) return;
+    if ((!asked && !pending.length) || busy) return;
     setText("");
-    const next: AssistantTurn[] = [...turns, { role: "user", text: asked, at: Date.now() }];
+    const at = Date.now();
+    const attached = pending;
+    setPending([]);
+    if (attached.length) pictures.current.set(at, attached);
+    const next: AssistantTurn[] = [
+      ...turns,
+      { role: "user", text: asked || "(picture)", at, attachments: attached.length },
+    ];
     setTurns(next);
     setBusy(true);
     try {
@@ -65,7 +115,15 @@ export default function AssistantChat({
         {
           batch: batchId,
           task: taskId,
-          messages: next.slice(-20).map((t) => ({ role: t.role, text: t.text })),
+          messages: next.slice(-20).map((t) => ({
+            role: t.role,
+            text: t.text,
+            // Only the pictures of the message being sent travel; earlier ones were already seen.
+            images:
+              t.at === at
+                ? attached.map((a) => ({ media_type: a.media_type, data: a.data }))
+                : undefined,
+          })),
         },
       );
       setTurns((l) => [
@@ -140,6 +198,15 @@ export default function AssistantChat({
             )}
             {turns.map((t, i) => (
               <div key={i} className={`assistant-turn ${t.role}`}>
+                {pictures.current.get(t.at)?.length || t.attachments ? (
+                  <div className="assistant-pictures">
+                    {pictures.current
+                      .get(t.at)
+                      ?.map((a, j) => (
+                        <img key={j} src={a.preview} alt={`Attachment ${j + 1}`} />
+                      )) ?? <span className="assistant-hint">{t.attachments} picture(s) sent</span>}
+                  </div>
+                ) : null}
                 <div className="assistant-bubble">{t.text}</div>
                 {t.actions && t.actions.length > 0 && (
                   <ul className="assistant-actions">
@@ -158,20 +225,73 @@ export default function AssistantChat({
               </div>
             )}
           </div>
+          {pending.length > 0 && (
+            <div className="assistant-pending">
+              {pending.map((a, i) => (
+                <span key={i}>
+                  <img src={a.preview} alt={`Picture ${i + 1}`} />
+                  <button
+                    type="button"
+                    aria-label="Remove picture"
+                    onClick={() => setPending((l) => l.filter((_, j) => j !== i))}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <form
             className="assistant-compose"
             onSubmit={(e) => {
               e.preventDefault();
               void send();
             }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void addFiles(e.dataTransfer.files);
+            }}
           >
+            <input
+              ref={picker}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="secondary assistant-attach"
+              disabled={!configured || busy}
+              aria-label="Attach pictures"
+              title="Attach pictures (or paste / drop them)"
+              onClick={() => picker.current?.click()}
+            >
+              <Paperclip size={16} />
+            </button>
             <textarea
               ref={input}
               value={text}
               rows={2}
-              placeholder={configured ? "What should I change?" : "Add the Claude key first"}
+              placeholder={
+                configured
+                  ? "What should I change? Paste or attach pictures too."
+                  : "Add the Claude key first"
+              }
               disabled={!configured || busy}
               onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData.files ?? []);
+                if (files.length) {
+                  e.preventDefault();
+                  void addFiles(files);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

@@ -4053,3 +4053,51 @@ textarea:focus {
   align-self: flex-end;
   padding: 10px 12px;
 }
+
+.assistant-pictures {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.assistant-pictures img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.assistant-pending {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+.assistant-pending span {
+  position: relative;
+}
+.assistant-pending img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.assistant-pending button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ink-900);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.assistant-attach {
+  align-self: flex-end;
+  padding: 10px 12px;
+}
