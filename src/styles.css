@@ -2760,7 +2760,7 @@ textarea {
 .topbar .nav-tabs button span {
   display: inline-block;
   min-width: 18px;
-  margin-left: 6px;
+  margin-inline-start: 6px;
   padding: 1px 6px;
   border-radius: 999px;
   font-size: 11px;
@@ -2772,6 +2772,23 @@ textarea {
 .topbar .nav-tabs button.active span {
   background: #ecebff;
   color: #4737ff;
+}
+.topbar .nav-tabs button .nav-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+  background: var(--accent-glow);
+  color: #1b1464;
+}
+.topbar .nav-tabs button.active .nav-badge {
+  background: #4737ff;
+  color: #fff;
+}
+@media (max-width: 420px) {
+  .topbar .nav-tabs button {
+    padding: 7px 10px;
+  }
 }
 :root[data-theme="dark"] .topbar .nav-tabs button.active {
   background: #4737ff;

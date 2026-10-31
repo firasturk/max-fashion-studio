@@ -723,7 +723,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             Batches <span>{batches.length}</span>
           </button>
           <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
-            Chat
+            Chat <span className="nav-badge">Beta</span>
           </button>
           {user.role === "admin" && (
             <button className={page === "admin" ? "active" : ""} onClick={() => setPage("admin")}>
