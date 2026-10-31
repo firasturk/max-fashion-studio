@@ -159,16 +159,35 @@ export async function createDevJob(
     job.created,
     job.updated,
   );
-  if (!token) return job;
+  if (token) await dispatchRun(env, token, fetchImpl);
+  return job;
+}
+
+/** Starts an Actions run now. A refused dispatch is not fatal: the scheduled poll remains. */
+export async function dispatchRun(
+  env: Env,
+  token?: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const t = token ?? (await getSetting(env, GITHUB_TOKEN_SETTING));
+  if (!t) return false;
   const r = await fetchImpl(`${GH}/repos/${DEV_REPO}/dispatches`, {
     method: "POST",
-    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ event_type: DEV_EVENT, client_payload: { job: job.id } }),
+    headers: { ...ghHeaders(t), "Content-Type": "application/json" },
+    body: JSON.stringify({ event_type: DEV_EVENT, client_payload: { at: now() } }),
     signal: AbortSignal.timeout(20_000),
   });
-  // A refused dispatch is not fatal: the scheduled poll still picks the job up.
   if (r.status !== 204) console.error(`[dev-job] dispatch refused (${r.status})`);
-  return job;
+  return r.status === 204;
+}
+
+/** True when a job is still waiting (a finished run starts the next one at once). */
+export async function hasQueuedDevJob(env: Env): Promise<boolean> {
+  const row = await first<{ n: number }>(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM dev_jobs WHERE status = 'queued'",
+  );
+  return (row?.n ?? 0) > 0;
 }
 
 /** The Actions run reporting its progress or result. */

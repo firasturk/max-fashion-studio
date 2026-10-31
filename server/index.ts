@@ -9,7 +9,14 @@ import { adminRoutes, cleanupOldBatches } from "./admin";
 import { advanceBatch, activeBatchIds, readPendingReferences, runLearning } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
 import { logEvent, pruneEvents } from "./events";
-import { DEV_HOOK_TOKEN_SETTING, claimNextDevJob, getDevJob, updateDevJob } from "./devjobs";
+import {
+  DEV_HOOK_TOKEN_SETTING,
+  claimNextDevJob,
+  dispatchRun,
+  getDevJob,
+  hasQueuedDevJob,
+  updateDevJob,
+} from "./devjobs";
 import { getSetting, setSetting } from "./settings";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
@@ -125,6 +132,9 @@ app.post("/api/hooks/dev-job", async (c) => {
       user: job?.user ?? null,
       data: { status, request: job?.request.slice(0, 200), result: (d.result ?? "").slice(0, 300) },
     });
+    // Another request is waiting: start the next run without waiting for the schedule.
+    if (status !== "queued" && (await hasQueuedDevJob(c.env)))
+      c.executionCtx.waitUntil(dispatchRun(c.env).catch(() => false));
   }
   return c.json({ ok });
 });
