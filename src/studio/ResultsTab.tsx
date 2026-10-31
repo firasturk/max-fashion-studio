@@ -347,6 +347,8 @@ export default function ResultsTab({
               className={`image-card result-card ${t.status} ${setSize > 1 ? "in-set" : ""}`}
               key={t.id}
               data-set={setSize > 1 ? key : undefined}
+              data-task={t.id}
+              data-source={t.source}
             >
               {firstOfSet && (
                 <span className="set-caption" title="Images of one product generate as one shoot">

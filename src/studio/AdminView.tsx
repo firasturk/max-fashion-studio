@@ -9,8 +9,12 @@ import {
   Trash2,
   UserX,
   UserCheck,
+  Activity,
+  Brain,
+  Sparkles,
 } from "lucide-react";
-import { del, get, post, postForm } from "@/api";
+import { del, get, post, postForm, put } from "@/api";
+import type { MemoryItem, StudioEvent } from "@shared/types";
 
 interface AdminUser {
   id: string;
@@ -23,6 +27,28 @@ interface AdminUser {
   batches: number;
   images: number;
   spent: number;
+}
+
+interface ActivitySummary {
+  since: number;
+  total: number;
+  byKind: { kind: string; n: number }[];
+  byUser: { user: string | null; n: number }[];
+  recent: StudioEvent[];
+}
+
+function eventLine(e: StudioEvent): string {
+  let d: Record<string, unknown> = {};
+  try {
+    d = JSON.parse(e.data) as Record<string, unknown>;
+  } catch {
+    /* unreadable */
+  }
+  return Object.entries(d)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "" && v !== false)
+    .slice(0, 5)
+    .map(([k, v]) => `${k}: ${typeof v === "string" ? v.slice(0, 70) : String(v)}`)
+    .join(" · ");
 }
 
 interface AdminSettings {
@@ -41,6 +67,72 @@ export default function AdminView({ me }: { me: string }) {
   const [saving, setSaving] = useState(false);
   const [hero, setHero] = useState<string>("");
   const [heroBusy, setHeroBusy] = useState(false);
+  const [activity, setActivity] = useState<ActivitySummary | null>(null);
+  const [activityDays, setActivityDays] = useState(7);
+  const [memory, setMemory] = useState<MemoryItem[]>([]);
+  const [lastLearn, setLastLearn] = useState(0);
+  const [learning, setLearning] = useState(false);
+  const [newRule, setNewRule] = useState({ scope: "global", title: "", text: "" });
+  useEffect(() => {
+    get<ActivitySummary>(`/api/admin/activity?days=${activityDays}`)
+      .then(setActivity)
+      .catch(() => setActivity(null));
+  }, [activityDays]);
+  useEffect(() => {
+    get<{ items: MemoryItem[]; lastLearn: number }>("/api/admin/memory")
+      .then((d) => {
+        setMemory(d.items);
+        setLastLearn(d.lastLearn);
+      })
+      .catch(() => {});
+  }, []);
+  const learnNow = async () => {
+    setLearning(true);
+    try {
+      const r = await post<{ added: number; updated: number; events: number; items: MemoryItem[] }>(
+        "/api/admin/memory/learn",
+      );
+      setMemory(r.items);
+      setLastLearn(Date.now());
+      toast.success(
+        r.events < 20
+          ? `Only ${r.events} events so far; the studio needs more activity before it can learn.`
+          : `${r.added} new lesson${r.added === 1 ? "" : "s"} suggested, ${r.updated} strengthened, from ${r.events} events.`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLearning(false);
+    }
+  };
+  const setStatus = async (item: MemoryItem, status: MemoryItem["status"]) => {
+    try {
+      await put(`/api/admin/memory/${item.id}`, { status });
+      setMemory((l) => l.map((m) => (m.id === item.id ? { ...m, status } : m)));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const removeMemory = async (item: MemoryItem) => {
+    if (!window.confirm("Delete this lesson from the brand memory?")) return;
+    try {
+      await del(`/api/admin/memory/${item.id}`);
+      setMemory((l) => l.filter((m) => m.id !== item.id));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const addRule = async () => {
+    if (!newRule.text.trim()) return;
+    try {
+      const r = await post<{ item: MemoryItem }>("/api/admin/memory", { ...newRule, kind: "rule" });
+      setMemory((l) => [r.item, ...l]);
+      setNewRule({ scope: "global", title: "", text: "" });
+      toast.success("Lesson added and active.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   useEffect(() => {
     get<{ hero?: string }>("/api/studio/state")
       .then((d) => setHero(d.hero ?? ""))
@@ -229,6 +321,175 @@ export default function AdminView({ me }: { me: string }) {
               </button>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="batches-page">
+        <div className="panel-heading" style={{ padding: "8px 16px 0" }}>
+          <Activity size={18} />
+          <h2>Activity</h2>
+          <span className="quality-note" style={{ marginLeft: "auto" }}>
+            {activity ? `${activity.total} events` : "…"} in the last
+            <select
+              value={activityDays}
+              onChange={(e) => setActivityDays(Number(e.target.value))}
+              style={{ margin: "0 6px" }}
+            >
+              <option value={1}>day</option>
+              <option value={7}>7 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+            </select>
+          </span>
+        </div>
+        <p className="quality-note" style={{ padding: "0 16px" }}>
+          Every click and decision in the studio, and every engine result, is recorded here. The
+          brand memory learns from this record.
+        </p>
+        {activity && activity.byKind.length > 0 && (
+          <div className="activity-kinds">
+            {activity.byKind.map((k) => (
+              <span key={k.kind} className="activity-chip">
+                <strong>{k.n}</strong> {k.kind}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="activity-list">
+          {(activity?.recent ?? []).slice(0, 120).map((e) => (
+            <div key={e.id} className={`activity-row actor-${e.actor}`}>
+              <span className="activity-time">
+                {new Date(e.at).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+              <span className="activity-kind">{e.kind}</span>
+              <span className="activity-detail">
+                {[e.skill, e.mode ? `approach ${e.mode}` : null, eventLine(e)]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </div>
+          ))}
+          {activity && activity.recent.length === 0 && (
+            <p className="quality-note" style={{ padding: "0 16px" }}>
+              Nothing recorded yet. Use the studio and come back.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="batches-page">
+        <div className="panel-heading" style={{ padding: "8px 16px 0" }}>
+          <Brain size={18} />
+          <h2>Brand memory</h2>
+          <span className="quality-note" style={{ marginLeft: "auto" }}>
+            {lastLearn
+              ? `Last learning run ${new Date(lastLearn).toLocaleDateString()}`
+              : "Not run yet"}
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            disabled={learning}
+            onClick={() => void learnNow()}
+          >
+            {learning ? <LoaderCircle className="spinning" size={16} /> : <Sparkles size={16} />}
+            Learn now
+          </button>
+        </div>
+        <p className="quality-note" style={{ padding: "0 16px" }}>
+          Once a week the studio reads the activity record and proposes lessons: corrections the
+          team keeps making, things to avoid for a skill, what the engines fail on. Accept a lesson
+          and every later prompt follows it; dismiss what is wrong. You can also write a lesson
+          yourself.
+        </p>
+        <div className="memory-add">
+          <select
+            value={newRule.scope}
+            onChange={(e) => setNewRule({ ...newRule, scope: e.target.value })}
+            aria-label="Scope"
+          >
+            <option value="global">Every skill</option>
+            {[...new Set(memory.map((m) => m.scope).filter((x) => x.startsWith("skill:")))].map(
+              (x) => (
+                <option key={x} value={x}>
+                  {x.replace("skill:", "Skill: ")}
+                </option>
+              ),
+            )}
+          </select>
+          <input
+            placeholder="Short title"
+            value={newRule.title}
+            onChange={(e) => setNewRule({ ...newRule, title: e.target.value })}
+          />
+          <input
+            placeholder="The lesson, as an instruction the prompt writer follows"
+            value={newRule.text}
+            onChange={(e) => setNewRule({ ...newRule, text: e.target.value })}
+          />
+          <button
+            type="button"
+            className="secondary"
+            disabled={!newRule.text.trim()}
+            onClick={() => void addRule()}
+          >
+            Add
+          </button>
+        </div>
+        <div className="memory-list">
+          {memory.map((m) => (
+            <div key={m.id} className={`memory-row status-${m.status}`}>
+              <div className="memory-head">
+                <span className={`memory-badge kind-${m.kind}`}>{m.kind}</span>
+                <span className="memory-scope">
+                  {m.scope === "global" ? "every skill" : m.scope.replace("skill:", "skill: ")}
+                </span>
+                <strong>{m.title || "(untitled)"}</strong>
+                <span className="memory-evidence" title="Supporting events">
+                  {m.evidence} events
+                </span>
+                <span className="memory-status">{m.status}</span>
+              </div>
+              <p className="memory-text">{m.text}</p>
+              <div className="memory-actions">
+                {m.status !== "active" && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => void setStatus(m, "active")}
+                  >
+                    <Check size={13} /> Accept
+                  </button>
+                )}
+                {m.status !== "dismissed" && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => void setStatus(m, "dismissed")}
+                  >
+                    Dismiss
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-button danger"
+                  onClick={() => void removeMemory(m)}
+                >
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {memory.length === 0 && (
+            <p className="quality-note" style={{ padding: "0 16px 12px" }}>
+              No lessons yet. Press "Learn now" after a few days of work, or add one yourself.
+            </p>
+          )}
         </div>
       </section>
 

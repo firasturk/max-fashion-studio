@@ -7,6 +7,8 @@
  */
 import type { Env } from "./env";
 import { colourHex } from "@shared/colours";
+import { logEvent } from "./events";
+import { activeMemoryLines, learn } from "./memory";
 import { solidPng } from "@shared/png";
 import { concurrency } from "./env";
 import { all, first, run, now, uuid } from "./db";
@@ -91,7 +93,7 @@ import {
   sanitizePrompt,
 } from "@shared/safety";
 import { productKey, shotNumber } from "@shared/naming";
-import { resolveSkill } from "./skills";
+import { listSkills, resolveSkill } from "./skills";
 import { centeringApplies } from "@shared/prompts";
 import { OpenAIImageClient, isOpenAIModel, type ImageBytes } from "./openai";
 
@@ -483,6 +485,23 @@ async function storeResultBytes(
     task.id,
     key,
   );
+  await logEvent(env, {
+    kind: "engine.result",
+    actor: "engine",
+    batch: batch.id,
+    task: task.id,
+    source: task.source,
+    skill: config.skill,
+    mode: config.mode,
+    data: {
+      status,
+      model: task.model || config.model,
+      attempts: task.attempts,
+      revision: !!task.edit,
+      concern: qa.productConcern || (qa.sameFace === false ? "different face" : "") || "",
+      centered: qa.centered,
+    },
+  });
 }
 
 async function failTask(
@@ -501,6 +520,14 @@ async function failTask(
     now(),
     task.id,
   );
+  await logEvent(env, {
+    kind: "engine.failed",
+    actor: "engine",
+    batch: task.batch,
+    task: task.id,
+    source: task.source,
+    data: { error: message.slice(0, 300), model: task.model, attempts: task.attempts },
+  });
 }
 
 /**
@@ -853,6 +880,15 @@ async function retryAfterRefusal(
     if (fallback) {
       const from = task.model ?? config.model ?? "the batch engine";
       await run(env.DB, "UPDATE tasks SET model = ? WHERE id = ?", fallback, task.id);
+      await logEvent(env, {
+        kind: "engine.moved",
+        actor: "engine",
+        batch: task.batch,
+        task: task.id,
+        source: task.source,
+        mode: config.mode,
+        data: { from, to: fallback, reason: message.slice(0, 200) },
+      });
       console.log(`[refused] task ${task.id}: ${from} refused the photo, moving to ${fallback}`);
       await requeue(
         env,
@@ -1018,6 +1054,7 @@ async function ensureBrief(
     used,
     newModel: config.mode === "8",
     uploadFraming: framingForSkill(check.framing, skillId),
+    memory: await activeMemoryLines(env, skillId),
     visibleGarments: check.garments,
     handsInPockets: check.handsInPockets,
     backView: check.backView,
@@ -1446,7 +1483,7 @@ export async function readPendingReferences(env: Env, limit = 4): Promise<number
  * OpenAI answers instead. A rejected OpenAI key is never the verdict: Google's own error is kept
  * (and logged) so the batch shows what actually went wrong.
  */
-async function askVision(
+export async function askVision(
   env: Env,
   instruction: string,
   images: ImageBytes[],
@@ -1472,6 +1509,17 @@ async function askVision(
       throw e2;
     }
   }
+}
+
+/** One brand-memory learning run: the text model reads the recent events and proposes lessons. */
+export async function runLearning(
+  env: Env,
+): Promise<{ added: number; updated: number; events: number }> {
+  const skills = await listSkills(env);
+  return learn(env, (instruction, schema) => askVision(env, instruction, [], schema), [
+    "zaid",
+    ...skills.map((s) => s.id),
+  ]);
 }
 
 /** Runs the scene or pose read on an image and returns the sentences for the engine ("" if unreadable). */

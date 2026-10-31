@@ -3811,3 +3811,128 @@ textarea:focus {
   vertical-align: -2px;
   margin-right: 3px;
 }
+
+/* --- Admin: activity record and brand memory --- */
+.activity-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 16px 10px;
+}
+.activity-chip {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-700);
+}
+.activity-chip strong {
+  color: var(--primary);
+}
+.activity-list {
+  max-height: 420px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.activity-row {
+  display: grid;
+  grid-template-columns: 110px 120px 1fr;
+  gap: 10px;
+  padding: 5px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-700);
+}
+.activity-row.actor-engine .activity-kind {
+  color: var(--primary);
+}
+.activity-row.actor-learn .activity-kind {
+  color: var(--success);
+}
+.activity-time {
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+.activity-kind {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.activity-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memory-add {
+  display: grid;
+  grid-template-columns: 160px 200px 1fr auto;
+  gap: 8px;
+  padding: 6px 16px 12px;
+}
+.memory-add input,
+.memory-add select {
+  min-width: 0;
+}
+.memory-list {
+  border-top: 1px solid var(--border);
+}
+.memory-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.memory-row.status-dismissed {
+  opacity: 0.55;
+}
+.memory-row.status-suggested {
+  background: var(--blue-soft);
+}
+.memory-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.memory-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.memory-badge.kind-avoid {
+  background: #fde8e4;
+  color: #b4231a;
+}
+.memory-scope,
+.memory-evidence,
+.memory-status {
+  color: var(--ink-400);
+  font-size: 12px;
+}
+.memory-text {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+.memory-actions {
+  display: flex;
+  gap: 14px;
+}
+.memory-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@media (max-width: 760px) {
+  .memory-add {
+    grid-template-columns: 1fr;
+  }
+  .activity-row {
+    grid-template-columns: 90px 1fr;
+  }
+  .activity-detail {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+}

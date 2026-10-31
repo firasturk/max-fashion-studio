@@ -17,6 +17,9 @@ import {
   heroStamp,
 } from "./settings";
 import { notify } from "./notify";
+import { activitySummary, logEvent } from "./events";
+import { addMemory, deleteMemory, LEARN_LAST_RUN, listMemory, setMemoryStatus } from "./memory";
+import { runLearning } from "./engine";
 import type { User } from "@shared/types";
 
 type Variables = { user: User };
@@ -46,6 +49,66 @@ export async function readAdminSettings(env: Env): Promise<AdminSettings> {
     resendConfigured: !!(await getSetting(env, RESEND_KEY_SETTING)),
   };
 }
+
+/** Activity: what the team and the engines did over the last days, for the Admin page. */
+adminRoutes.get("/activity", async (c) => {
+  const days = Math.min(90, Math.max(1, Number(c.req.query("days") ?? 7) || 7));
+  return c.json(await activitySummary(c.env, days));
+});
+
+adminRoutes.get("/memory", async (c) => {
+  const lastLearn = Number((await getSetting(c.env, LEARN_LAST_RUN)) ?? 0);
+  return c.json({ items: await listMemory(c.env), lastLearn });
+});
+
+adminRoutes.post("/memory/learn", async (c) => {
+  const result = await runLearning(c.env);
+  return c.json({ ok: true, ...result, items: await listMemory(c.env) });
+});
+
+adminRoutes.post("/memory", async (c) => {
+  const item = memoryBody.parse(await c.req.json());
+  const row = await addMemory(c.env, { ...item, status: "active" });
+  await logEvent(c.env, {
+    kind: "memory",
+    user: c.get("user").id,
+    data: { action: "added", title: row.title, scope: row.scope },
+  });
+  return c.json({ ok: true, item: row });
+});
+
+adminRoutes.put("/memory/:id", async (c) => {
+  const { status, text } = z
+    .object({
+      status: z.enum(["suggested", "active", "dismissed"]),
+      text: z.string().trim().min(1).max(600).optional(),
+    })
+    .parse(await c.req.json());
+  const ok = await setMemoryStatus(c.env, c.req.param("id"), status, text);
+  if (!ok) throw new StudioError("Memory item not found.", 404);
+  await logEvent(c.env, {
+    kind: "memory",
+    user: c.get("user").id,
+    data: { action: status, id: c.req.param("id") },
+  });
+  return c.json({ ok: true });
+});
+
+adminRoutes.delete("/memory/:id", async (c) => {
+  if (!(await deleteMemory(c.env, c.req.param("id"))))
+    throw new StudioError("Memory item not found.", 404);
+  return c.json({ ok: true });
+});
+
+const memoryBody = z.object({
+  scope: z
+    .string()
+    .trim()
+    .regex(/^(global|skill:[a-z0-9-]{1,60}|mode:\d)$/),
+  kind: z.enum(["rule", "avoid", "insight"]).default("rule"),
+  title: z.string().trim().max(80).default(""),
+  text: z.string().trim().min(1).max(600),
+});
 
 adminRoutes.get("/users", async (c) => {
   const users = await all(

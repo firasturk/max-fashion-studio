@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
 import { toast } from "sonner";
+import { track } from "@/lib/track";
 import { del, get } from "@/api";
 import { makeReference } from "@/lib/image";
 
@@ -73,6 +74,7 @@ export default function ReferenceLibrary({
         throw new Error(((await r.json()) as { error?: string }).error || "Upload failed.");
       await load();
       toast.success(`${files.length} reference${files.length > 1 ? "s" : ""} added.`);
+      track("reference", { action: "added", count: files.length, library: skill });
       await onChanged?.(items.length + files.length);
     } catch (e) {
       toast.error((e as Error).message);
@@ -86,6 +88,7 @@ export default function ReferenceLibrary({
     if (!window.confirm("Remove this reference photo from the library?")) return;
     try {
       await del(`/api/studio/references/${id}`);
+      track("reference", { action: "removed", library: skill, id });
       setItems((l) => l.filter((r) => r.id !== id));
       await onChanged?.(items.length - 1);
     } catch (e) {

@@ -173,3 +173,32 @@ export interface BatchSummary {
 }
 
 export type { Config };
+
+/** One recorded click, decision or engine outcome (Admin: Activity). */
+export interface StudioEvent {
+  id: string;
+  at: number;
+  user: string | null;
+  actor: "user" | "engine" | "learn";
+  kind: string;
+  batch: string | null;
+  task: string | null;
+  source: string | null;
+  skill: string | null;
+  mode: string | null;
+  data: string;
+}
+
+/** One lesson in the brand memory (Admin: Brand memory). */
+export interface MemoryItem {
+  id: string;
+  scope: string;
+  kind: "rule" | "avoid" | "insight";
+  title: string;
+  text: string;
+  evidence: number;
+  examples: string;
+  status: "suggested" | "active" | "dismissed";
+  created: number;
+  updated: number;
+}

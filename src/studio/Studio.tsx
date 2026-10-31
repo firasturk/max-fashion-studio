@@ -32,6 +32,7 @@ import { loadLastBatch, loadSavedConfig, saveConfig, saveLastBatch } from "./per
 import { makeReference } from "@/lib/image";
 import { folderCount, isCampaignShot } from "@shared/paths";
 import { buildZips, convertImage, saveBlob, saveZips, type ZipEntry, fitImage } from "@/lib/zip";
+import { setTrackContext, track } from "@/lib/track";
 import {
   DEFAULT_PROMPT,
   cardsPerSource,
@@ -320,6 +321,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   }
 
   useEffect(() => saveLastBatch(batch?.id ?? null), [batch?.id]);
+  // Every recorded click carries the batch, approach and skill on screen.
+  useEffect(() => {
+    setTrackContext({ batch: batch?.id ?? null, mode: viewConfig.mode, skill: viewConfig.skill });
+  }, [batch?.id, viewConfig.mode, viewConfig.skill]);
   const restoredBatch = useRef(false);
   useEffect(() => {
     if (restoredBatch.current || !batches.length) return;
@@ -463,6 +468,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       }
     }
     setTab("results");
+    track("start", {
+      mode: viewConfig.mode,
+      skill: viewConfig.skill,
+      model: viewConfig.model,
+      size: viewConfig.size,
+      ratio: viewConfig.ratio,
+      count: viewConfig.count,
+      sources: sources.length,
+    });
     await runAction("start");
   }
 
@@ -480,6 +494,20 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     await action("revise-all", { ids: ids.length ? ids : undefined, edit });
     setSelection(new Set());
     return ids.length || tasks.filter((t) => !!t.output).length;
+  }
+
+  /** Settings changes, recorded once per field per moment (typing is not spelled out). */
+  const lastConfigTrack = useRef<Record<string, number>>({});
+  function trackConfig(patch: Partial<Config>) {
+    const at = Date.now();
+    for (const [key, value] of Object.entries(patch)) {
+      if (at - (lastConfigTrack.current[key] ?? 0) < 1500) continue;
+      lastConfigTrack.current[key] = at;
+      track("config", {
+        field: key,
+        value: typeof value === "string" && value.length > 60 ? `${value.slice(0, 60)}…` : value,
+      });
+    }
   }
 
   /** Keep this image's skill prompt as a reusable look for its skill. */
@@ -530,6 +558,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       : undefined;
 
   async function deleteBatch() {
+    track("delete-batch", { images: tasks.length });
     if (!batch || active) return;
     if (
       !window.confirm(
@@ -629,6 +658,13 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       const parts = await buildZips(entries, undefined, (d, t) => setExportDone([d, t]));
       setExportDone(null);
       await saveZips(parts, `${safeArchiveName(batch.name)}-AI`);
+      track("export", {
+        images: chosen.length,
+        selected: selection.size > 0,
+        parts: parts.length,
+        originals: originalsIncluded,
+        format: exportFormat(viewConfig) ?? "as generated",
+      });
       if (parts.length > 1)
         toast.success(`Export split into ${parts.length} ZIP files of up to 1.4 GB each.`);
       toast.success(`${chosen.length} results exported.`);
@@ -868,11 +904,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                 saved={!!batch}
                 models={models}
                 defaultModel={engine.model}
-                onChange={(patch) =>
-                  draft
-                    ? setDraft((d) => (d ? { ...d, ...patch } : d))
-                    : setConfig((c) => ({ ...c, ...patch }))
-                }
+                onChange={(patch) => {
+                  trackConfig(patch);
+                  if (draft) setDraft((d) => (d ? { ...d, ...patch } : d));
+                  else setConfig((c) => ({ ...c, ...patch }));
+                }}
                 editing={!!draft}
                 canEdit={canEditBatch}
                 saving={savingDraft}

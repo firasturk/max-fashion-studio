@@ -6,7 +6,10 @@ import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
 import { verifyObjectToken } from "./signed";
 import { adminRoutes, cleanupOldBatches } from "./admin";
-import { advanceBatch, activeBatchIds, readPendingReferences } from "./engine";
+import { advanceBatch, activeBatchIds, readPendingReferences, runLearning } from "./engine";
+import { LEARN_LAST_RUN, learnDue } from "./memory";
+import { pruneEvents } from "./events";
+import { setSetting } from "./settings";
 import type { User } from "@shared/types";
 import { serveStatic } from "./static";
 
@@ -113,5 +116,14 @@ export default {
     const ids = await activeBatchIds(env);
     for (const id of ids)
       ctx.waitUntil(advanceBatch(env, id).catch((e) => console.error("[cron]", id, e)));
+    // Brand memory: one learning run a week over the event stream, plus pruning of old events.
+    ctx.waitUntil(
+      (async () => {
+        if (!(await learnDue(env))) return;
+        await setSetting(env, LEARN_LAST_RUN, String(Date.now()));
+        await runLearning(env);
+        await pruneEvents(env);
+      })().catch((e) => console.error("[learn]", errorMessage(e))),
+    );
   },
 } satisfies ExportedHandler<Env>;

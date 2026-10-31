@@ -19,6 +19,7 @@ import {
 import type { QA, Source, Task } from "@shared/types";
 import Zoomable from "./Zoomable";
 import CompareSlider from "./CompareSlider";
+import { track } from "@/lib/track";
 
 /** One-click revision instructions; each appends to the edit box. */
 const REVISION_PRESETS: { label: string; text: string }[] = [
@@ -313,7 +314,10 @@ export default function ReviewDialog({
                   key={p.label}
                   type="button"
                   disabled={busy}
-                  onClick={() => setEdit((e) => (e ? `${e} ${p.text}` : p.text))}
+                  onClick={() => {
+                    track("preset", { label: p.label }, { task: task?.id, source: task?.source });
+                    setEdit((e) => (e ? `${e} ${p.text}` : p.text));
+                  }}
                 >
                   {p.label}
                 </button>

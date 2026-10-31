@@ -6,9 +6,11 @@ import App from "./App";
 import ErrorBoundary from "./ErrorBoundary";
 import { markLoadedCleanly } from "./lib/lazy";
 import { initTheme } from "./theme";
+import { startTracking } from "./lib/track";
 
 initTheme();
 markLoadedCleanly();
+startTracking();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

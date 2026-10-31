@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Env } from "./env";
+import { insertEvents, logEvent } from "./events";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
 import {
@@ -106,6 +107,65 @@ async function batchPayload(env: Env, b: BatchRow) {
   const { owner: _owner, ...batch } = b;
   void _owner;
   return { batch, sources, tasks };
+}
+
+/** Browser events: clicks and decisions, up to 200 per call. Never fails the page. */
+studioRoutes.post("/events", async (c) => {
+  const { events } = await body(
+    c,
+    z.object({
+      events: z
+        .array(
+          z.object({
+            kind: z.string().trim().min(1).max(60),
+            at: z.number().optional(),
+            batch: z.string().max(80).nullable().optional(),
+            task: z.string().max(80).nullable().optional(),
+            source: z.string().max(80).nullable().optional(),
+            skill: z.string().max(80).nullable().optional(),
+            mode: z.string().max(4).nullable().optional(),
+            data: z.record(z.unknown()).optional(),
+          }),
+        )
+        .max(200),
+    }),
+  );
+  const user = c.get("user");
+  try {
+    await insertEvents(
+      c.env,
+      events.map((e) => ({ ...e, user: user.id, actor: "user" as const })),
+    );
+  } catch (e) {
+    console.error("[events]", errorMessage(e));
+  }
+  return c.json({ ok: true });
+});
+
+/** A decision taken through the API, recorded with the batch's skill and approach. */
+async function recordDecision(
+  env: Env,
+  user: User,
+  b: BatchRow,
+  kind: string,
+  data: Record<string, unknown>,
+  task?: string | null,
+): Promise<void> {
+  let cfg: Partial<Config> = {};
+  try {
+    cfg = JSON.parse(b.config) as Config;
+  } catch {
+    /* unreadable config: the event still records the batch */
+  }
+  await logEvent(env, {
+    kind,
+    user: user.id,
+    batch: b.id,
+    task: task ?? null,
+    skill: cfg.skill ?? null,
+    mode: cfg.mode ?? null,
+    data,
+  });
 }
 
 studioRoutes.get("/state", async (c) => {
@@ -315,12 +375,39 @@ const rulesBody = z.object({
 
 studioRoutes.put("/direction-rules", async (c) => {
   const { rules } = await body(c, rulesBody);
+  const before = await directionRules(c.env);
   await setSetting(c.env, DIRECTION_RULES_SETTING, JSON.stringify(storeDirectionRules(rules)));
+  const summary = [
+    ...rules
+      .filter((r) => !before.some((b) => b.key === r.key))
+      .map((r) => `added "${r.title || r.key}": ${r.text.slice(0, 120)}`),
+    ...before
+      .filter((b) => !rules.some((r) => r.key === b.key))
+      .map((b) => `removed "${b.title || b.key}"`),
+    ...rules
+      .filter((r) =>
+        before.some((b) => b.key === r.key && (b.enabled !== r.enabled || b.text !== r.text)),
+      )
+      .map((r) => {
+        const b = before.find((x) => x.key === r.key)!;
+        return b.enabled !== r.enabled
+          ? `${r.enabled ? "switched on" : "switched off"} "${r.title || r.key}"`
+          : `edited "${r.title || r.key}": ${r.text.slice(0, 120)}`;
+      }),
+  ].join("; ");
+  if (summary)
+    await logEvent(c.env, { kind: "rule", user: c.get("user").id, mode: "7", data: { summary } });
   return c.json({ ok: true, rules });
 });
 
 studioRoutes.delete("/direction-rules", async (c) => {
   await deleteSetting(c.env, DIRECTION_RULES_SETTING);
+  await logEvent(c.env, {
+    kind: "rule",
+    user: c.get("user").id,
+    mode: "7",
+    data: { summary: "restored the original rules" },
+  });
   return c.json({ ok: true, rules: DEFAULT_DIRECTION_RULES });
 });
 
@@ -1306,6 +1393,7 @@ studioRoutes.post("/revise", async (c) => {
     b.id,
   );
   if (!changed) throw new StudioError("This image cannot be revised right now.", 409);
+  await recordDecision(c.env, c.get("user"), b, "revise", { edit: edit.slice(0, 500) }, id);
   await run(
     c.env.DB,
     "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",
@@ -1337,6 +1425,11 @@ studioRoutes.post("/revise-all", async (c) => {
       changed += await run(c.env.DB, `${sql} AND id = ?`, edit, now(), b.id, id);
   } else changed = await run(c.env.DB, sql, edit, now(), b.id);
   if (!changed) throw new StudioError("No finished image to revise.", 409);
+  await recordDecision(c.env, c.get("user"), b, "revise-all", {
+    edit: edit.slice(0, 500),
+    count: changed,
+    selected: !!ids?.length,
+  });
   await run(
     c.env.DB,
     "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",
@@ -1390,6 +1483,7 @@ studioRoutes.post("/approve", async (c) => {
     b.id,
   );
   if (!changed) throw new StudioError("Image is not ready for approval.", 409);
+  await recordDecision(c.env, c.get("user"), b, "approve", {}, id);
   return c.json({ ok: true });
 });
 
@@ -1402,6 +1496,7 @@ studioRoutes.post("/approve-all", async (c) => {
     now(),
     b.id,
   );
+  await recordDecision(c.env, c.get("user"), b, "approve-all", { count: changed });
   return c.json({ ok: true, approved: changed });
 });
 
@@ -1453,6 +1548,7 @@ studioRoutes.post("/task/retry", async (c) => {
     b.id,
   );
   if (!changed) throw new StudioError("Only failed images can be retried.", 409);
+  await recordDecision(c.env, c.get("user"), b, "retry", {}, id);
   await run(
     c.env.DB,
     "UPDATE batches SET state = 'running', last_error = NULL, updated = ? WHERE id = ?",

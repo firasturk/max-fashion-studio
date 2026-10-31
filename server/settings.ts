@@ -137,9 +137,7 @@ export async function resolveVertex(env: Env): Promise<VertexCreds | null> {
  * How Google is reached: the Vertex service account when one is saved (the project's credits pay),
  * otherwise the AI Studio key. Nothing connected gives null.
  */
-export async function resolveGoogleAuth(
-  env: Env,
-): Promise<{
+export async function resolveGoogleAuth(env: Env): Promise<{
   auth: GoogleAuth | null;
   vertex: VertexCreds | null;
   source: EngineKeySource | "vertex";
