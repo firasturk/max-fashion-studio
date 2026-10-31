@@ -109,6 +109,17 @@ export async function resolveOpenAIKey(
   return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
 }
 
+export const ANTHROPIC_KEY_SETTING = "anthropic_api_key";
+
+/** Anthropic credential for the in-app assistant: a Worker secret wins, otherwise the saved key. */
+export async function resolveAnthropicKey(
+  env: Env,
+): Promise<{ key: string | null; source: EngineKeySource }> {
+  if (env.ANTHROPIC_API_KEY) return { key: env.ANTHROPIC_API_KEY, source: "secret" };
+  const stored = await getSetting(env, ANTHROPIC_KEY_SETTING);
+  return stored ? { key: stored, source: "stored" } : { key: null, source: "none" };
+}
+
 export const GOOGLE_KEY_SETTING = "google_api_key";
 
 /** Google AI Studio credential: the GEMINI_API_KEY secret wins, otherwise the key saved from the app. */

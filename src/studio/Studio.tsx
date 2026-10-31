@@ -74,6 +74,7 @@ import { MODES } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
+import AssistantChat from "./AssistantChat";
 const ReviewDialog = lazyScreen(() => import("./ReviewDialog"));
 import type { EngineInfo } from "./ConnectionDialog";
 const ConnectionDialog = lazyScreen(() => import("./ConnectionDialog"));
@@ -1184,6 +1185,17 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           onChanged={async () => {
             await loadState();
             await loadModels();
+          }}
+        />
+        <AssistantChat
+          batchId={batch?.id ?? null}
+          batchName={batch?.name}
+          taskId={selected?.id ?? null}
+          taskName={selected ? sources.find((s) => s.id === selected.source)?.name : undefined}
+          configured={(engine.anthropic ?? "none") !== "none"}
+          onChanged={async () => {
+            await loadState();
+            if (batch) await open(batch.id);
           }}
         />
         <ReviewDialog

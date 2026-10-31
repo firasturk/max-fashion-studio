@@ -7,6 +7,7 @@ export interface Env {
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
   FAL_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
   INVITE_CODE?: string;
   SESSION_SECRET?: string;
   WEBHOOK_TOKEN?: string;

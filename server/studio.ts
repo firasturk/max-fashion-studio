@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Env } from "./env";
 import { insertEvents, logEvent } from "./events";
+import { batchForAssistant, chat, verifyAnthropicKey } from "./assistant";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, run, now, uuid } from "./db";
 import {
@@ -35,6 +36,8 @@ import {
   resolveGoogleAuth,
   MODES_SETTING,
   OPENAI_KEY_SETTING,
+  ANTHROPIC_KEY_SETTING,
+  resolveAnthropicKey,
   ZAID_DIRECTION_SETTING,
   deleteSetting,
   getSetting,
@@ -168,6 +171,42 @@ async function recordDecision(
   });
 }
 
+/** The in-app assistant: a chat for the whole team that makes team-level changes itself. */
+studioRoutes.post("/assistant/chat", async (c) => {
+  const { batch, task, messages } = await body(
+    c,
+    z.object({
+      batch: z.string().max(80).nullable().optional(),
+      task: z.string().max(80).nullable().optional(),
+      messages: z
+        .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(6000) }))
+        .min(1)
+        .max(40),
+    }),
+  );
+  const user = c.get("user");
+  const b = await batchForAssistant(c.env, user, batch ?? null);
+  const result = await chat(c.env, user, b, task ?? null, messages, (p) =>
+    c.executionCtx.waitUntil(p),
+  );
+  return c.json(result);
+});
+
+studioRoutes.post("/engine/anthropic-key", async (c) => {
+  if (c.env.ANTHROPIC_API_KEY)
+    throw new StudioError("The Claude key is managed as a Worker secret on this deployment.", 409);
+  const { key } = await body(c, z.object({ key: z.string().trim().min(10).max(400) }));
+  const check = await verifyAnthropicKey(key);
+  if (!check.ok) throw new StudioError(`Anthropic rejected this key: ${check.message}`, 400);
+  await setSetting(c.env, ANTHROPIC_KEY_SETTING, key);
+  return c.json({ ok: true, message: check.message });
+});
+
+studioRoutes.delete("/engine/anthropic-key", async (c) => {
+  await deleteSetting(c.env, ANTHROPIC_KEY_SETTING);
+  return c.json({ ok: true });
+});
+
 studioRoutes.get("/state", async (c) => {
   const user = c.get("user");
   const batches = await all<
@@ -212,6 +251,7 @@ studioRoutes.get("/state", async (c) => {
       configured: keyLooksValid(engineKey.key),
       source: engineKey.source,
       openai: (await resolveOpenAIKey(c.env)).source,
+      anthropic: (await resolveAnthropicKey(c.env)).source,
       google: (await resolveGoogleKey(c.env)).source,
       fal: (await resolveFalKey(c.env)).source,
       review: !!(await resolveGoogleAuth(c.env)).auth,

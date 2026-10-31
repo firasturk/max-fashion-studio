@@ -148,6 +148,8 @@ export interface StateResponse {
     configured: boolean;
     source: "secret" | "stored" | "none";
     openai: "secret" | "stored" | "none";
+    /** Claude key for the in-app assistant. */
+    anthropic?: "secret" | "stored" | "none";
     google: "secret" | "stored" | "none";
     fal: "secret" | "stored" | "none";
     review: boolean;
@@ -201,4 +203,13 @@ export interface MemoryItem {
   status: "suggested" | "active" | "dismissed";
   created: number;
   updated: number;
+}
+
+/** One message in the in-app assistant chat. */
+export interface AssistantTurn {
+  role: "user" | "assistant";
+  text: string;
+  /** What the assistant did for this reply (tool calls), shown under the message. */
+  actions?: { tool: string; summary: string }[];
+  at: number;
 }

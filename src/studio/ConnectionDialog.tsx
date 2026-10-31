@@ -15,6 +15,7 @@ export interface EngineInfo {
   configured: boolean;
   source: "secret" | "stored" | "none";
   openai: "secret" | "stored" | "none";
+  anthropic?: "secret" | "stored" | "none";
   google: "secret" | "stored" | "none";
   fal: "secret" | "stored" | "none";
   review: boolean;
@@ -37,6 +38,8 @@ export default function ConnectionDialog({
   const [key, setKey] = useState("");
   const [model, setModel] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [savingAnthropic, setSavingAnthropic] = useState(false);
   const [googleKey, setGoogleKey] = useState("");
   const [savingGoogle, setSavingGoogle] = useState(false);
   const [vertexJson, setVertexJson] = useState("");
@@ -78,12 +81,12 @@ export default function ConnectionDialog({
     }
   }
   const [falKey, setFalKey] = useState("");
-  type Vendor = "higgsfield" | "google" | "vertex" | "openai" | "fal";
+  type Vendor = "higgsfield" | "google" | "vertex" | "openai" | "fal" | "claude";
   // Opens on the tab last used in this browser, else on the vendor of the current image model.
   const [vendor, setVendorState] = useState<Vendor>(() => {
     try {
       const saved = localStorage.getItem("connection-tab") as Vendor | null;
-      if (saved && ["higgsfield", "google", "vertex", "openai", "fal"].includes(saved))
+      if (saved && ["higgsfield", "google", "vertex", "openai", "fal", "claude"].includes(saved))
         return saved;
     } catch {
       /* private mode */
@@ -229,6 +232,39 @@ export default function ConnectionDialog({
     }
   }
 
+  async function saveAnthropic() {
+    setSavingAnthropic(true);
+    try {
+      const r = await post<{ ok: boolean; message: string }>("/api/studio/engine/anthropic-key", {
+        key: anthropicKey,
+      });
+      setAnthropicKey("");
+      setResult(r);
+      await onChanged();
+      toast.success("Claude key saved and verified. The chat button is live.");
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setSavingAnthropic(false);
+    }
+  }
+
+  async function removeAnthropic() {
+    if (
+      !window.confirm(
+        "Remove the saved Claude key? The studio assistant stops until a new key is added.",
+      )
+    )
+      return;
+    try {
+      await del("/api/studio/engine/anthropic-key");
+      setResult(null);
+      await onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   async function saveModel() {
     setSavingModel(true);
     try {
@@ -277,6 +313,7 @@ export default function ConnectionDialog({
               ["vertex", "Google Cloud", !!engine.vertex],
               ["openai", "OpenAI", engine.openai !== "none"],
               ["fal", "fal.ai", engine.fal !== "none"],
+              ["claude", "Claude", (engine.anthropic ?? "none") !== "none"],
             ] as const
           ).map(([k, label, on]) => (
             <button
@@ -566,6 +603,69 @@ export default function ConnectionDialog({
               Images run one at a time per request on Vertex; Economy mode (Flex) is an AI Studio
               feature and is ignored while Vertex is connected.
             </p>
+          </>
+        )}
+        {vendor === "claude" && (
+          <>
+            <div className="qa-heading" style={{ marginTop: 12 }}>
+              <KeyRound size={18} />
+              <strong>Claude (studio assistant)</strong>
+            </div>
+            {(engine.anthropic ?? "none") !== "none" ? (
+              <div className="success-note">
+                <Check size={19} />
+                {engine.anthropic === "secret"
+                  ? "A Claude key is configured as a server secret."
+                  : "A Claude key is saved on the server. The chat button is live for the whole team."}
+              </div>
+            ) : (
+              <p className="quality-note">
+                The chat button in the studio runs on Claude. Add an Anthropic API key from{" "}
+                <a
+                  href="https://platform.claude.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link"
+                >
+                  platform.claude.com
+                </a>
+                . It is used only for the assistant, never for image generation.
+              </p>
+            )}
+            {engine.anthropic !== "secret" && (
+              <div className="footer-actions">
+                <input
+                  id="anthropic-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="sk-ant-..."
+                  aria-label="Claude API key"
+                  value={anthropicKey}
+                  onChange={(e) => setAnthropicKey(e.target.value.trim())}
+                />
+                <button
+                  className="primary"
+                  onClick={() => void saveAnthropic()}
+                  disabled={!anthropicKey || savingAnthropic}
+                >
+                  {savingAnthropic ? (
+                    <LoaderCircle className="spinning" size={16} />
+                  ) : (
+                    <Check size={16} />
+                  )}
+                  Save key
+                </button>
+                {engine.anthropic === "stored" && (
+                  <button
+                    className="secondary"
+                    onClick={() => void removeAnthropic()}
+                    disabled={savingAnthropic}
+                  >
+                    Remove key
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
         {vendor === "openai" && (
