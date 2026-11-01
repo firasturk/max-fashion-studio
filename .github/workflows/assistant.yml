@@ -94,18 +94,7 @@ jobs:
         if: steps.claim.outputs.has_job == 'true'
         working-directory: repo
         run: pnpm check
-      - name: Migrate and deploy
-        if: steps.claim.outputs.has_job == 'true'
-        working-directory: repo
-        run: |
-          # Migrations run only when the change added one (D1 access is needed only then).
-          if git status --porcelain migrations/ | grep -q .; then
-            npx wrangler d1 migrations apply max-fashion-studio --remote
-          else
-            echo "no new migration"
-          fi
-          pnpm run deploy
-      - name: Commit and push
+      - name: Commit on top of the latest main
         if: steps.claim.outputs.has_job == 'true'
         working-directory: repo
         run: |
@@ -115,9 +104,29 @@ jobs:
           git reset -q -- .assistant/run server/generated wrangler.deploy.json || true
           if git diff --cached --quiet; then echo "nothing to commit"; else
             SUMMARY=$(head -c 72 .assistant/run/result.txt | tr '\n' ' ')
-            git commit -m "Assistant: ${SUMMARY:-change requested in the studio chat}" -m "$(cat ../request.md)"
-            git push origin HEAD:main
+            git commit -q -m "Assistant: ${SUMMARY:-change requested in the studio chat}" -m "$(cat ../request.md)"
           fi
+          # Someone may have pushed meanwhile: rebase, and re-check when anything changed underneath.
+          git fetch -q origin main
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)" ]; then
+            git rebase origin/main
+            pnpm check
+          fi
+      - name: Migrate and deploy
+        if: steps.claim.outputs.has_job == 'true'
+        working-directory: repo
+        run: |
+          # Migrations run only when the change added one (D1 access is needed only then).
+          if git diff --name-only origin/main HEAD -- migrations/ | grep -q .; then
+            npx wrangler d1 migrations apply max-fashion-studio --remote
+          else
+            echo "no new migration"
+          fi
+          pnpm run deploy
+      - name: Push
+        if: steps.claim.outputs.has_job == 'true'
+        working-directory: repo
+        run: git push origin HEAD:main
       - name: Report done
         if: success() && steps.claim.outputs.has_job == 'true'
         run: |
