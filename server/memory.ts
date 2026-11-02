@@ -155,7 +155,12 @@ export function digestEvents(events: EventRow[]): string {
         if (d.concern) bump(concerns, String(d.concern).slice(0, 120));
         bump(concerns, `status ${String(d.status)}`);
       }
-      if (e.kind === "click") bump(clicks, String(d.label ?? "").slice(0, 60));
+      if (e.kind === "click") {
+        const label = String(d.label ?? "").slice(0, 60);
+        // The team rarely presses Approve: a download is the real sign an image was liked.
+        if (/^download this image$/i.test(label)) bump(kinds, "download (liked)");
+        bump(clicks, label);
+      }
       if (e.kind === "rule" && rules.length < 12) rules.push(String(d.summary ?? "").slice(0, 200));
     }
     sections.push(
@@ -203,7 +208,7 @@ export const LEARN_SCHEMA = {
 export function learnInstruction(digest: string, skillIds: string[]): string {
   return [
     "You are the studio's memory. Below is a digest of what the team did in Max Fashion Studio over the last two weeks: which images they sent back for revision and with what words, which presets they used, what the engines failed on, what the automatic review flagged, which rules they changed and which buttons they pressed most.",
-    "Find the lessons behind these actions: recurring corrections that a prompt rule could prevent next time, things to avoid for a given skill, and insights about what the team wants. Each lesson must be supported by several events, not one. Write them as short, concrete, catalogue-safe instructions a prompt writer can follow (no body-focused or sensual wording). Never invent facts not in the digest.",
+    "Find the lessons behind these actions: recurring corrections that a prompt rule could prevent next time, things to avoid for a given skill, and insights about what the team wants. Read the signals this way: a downloaded image was liked; a retried, re-generated or deleted image was not; a revision text says exactly what was wrong; a review concern from the engine is a defect the team had to deal with; a changed setting or rule shows a preference. Each lesson must be supported by several events, not one. Write them as short, concrete, catalogue-safe instructions a prompt writer can follow (no body-focused or sensual wording). Never invent facts not in the digest.",
     `Scopes: "global" when a lesson applies to every skill, otherwise "skill:<id>" with one of these ids: ${skillIds.join(", ")}.`,
     "Return at most 8 lessons, best first, as JSON {insights:[{scope, kind (rule|avoid|insight), title (max 8 words), text (one or two sentences), evidence (number of supporting events), examples (up to 3 short quotes from the digest)}]}. Return an empty list when the digest holds nothing worth keeping.",
     "",
