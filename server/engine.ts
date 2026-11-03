@@ -588,6 +588,7 @@ async function settleFailedAttempt(
   // A vendor rate limit is not the image's fault: wait as asked (at least 15 s), keep the image
   // queued and give the attempt back, so a throttled project never fails images one by one.
   if (isRateLimit(e)) {
+    console.error("[rate limit]", message.slice(0, 400));
     const wait = Math.max(15_000, retryAfterMs(e));
     enginePausedUntil = Math.max(enginePausedUntil, now() + wait);
     if (/vertex/i.test(message)) await narrowVertex(env);

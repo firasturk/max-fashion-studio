@@ -259,8 +259,16 @@ export async function vertexText(
         120_000,
         fetchImpl,
       );
-      const text = (d.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-      if (!text) throw new StudioError("Google Cloud (Vertex) returned no text.", 502);
+      const candidate = d.candidates?.[0];
+      const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+      if (!text) {
+        // An empty answer names its cause (a safety stop, a token limit): the next model, with
+        // different filters and limits, often answers the same instruction.
+        const reason =
+          d.promptFeedback?.blockReason ?? candidate?.finishReason ?? d.error?.message ?? "empty";
+        last = new StudioError(`Google Cloud (Vertex) returned no text (${reason}, ${model}).`, 502);
+        continue;
+      }
       return text;
     } catch (e) {
       if (e instanceof StudioError && /\(404\)/.test(e.message)) {
