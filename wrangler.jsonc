@@ -40,11 +40,25 @@
     },
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "max-fashion-studio" }],
+  // Generations on synchronous engines (Vertex, OpenAI) fan out one per consumer invocation.
+  "queues": {
+    "producers": [{ "binding": "IMAGES", "queue": "max-fashion-studio-images" }],
+    "consumers": [
+      {
+        "queue": "max-fashion-studio-images",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 40,
+        "max_retries": 0,
+      },
+    ],
+  },
   "limits": { "cpu_ms": 300000 },
   "vars": {
     "HIGGSFIELD_MODEL": "nano-banana-pro",
     "HIGGSFIELD_BASE_URL": "https://api.higgsfield.ai",
     "MAX_CONCURRENT_GENERATIONS": "6",
+    "VERTEX_PARALLEL": "12",
     "PUBLIC_BASE_URL": "https://max-fashion-studio.max-fashion-studio.workers.dev",
   },
 }

@@ -10,7 +10,7 @@ import { colourHex } from "@shared/colours";
 import { logEvent } from "./events";
 import { activeMemoryLines, learn } from "./memory";
 import { solidPng } from "@shared/png";
-import { concurrency } from "./env";
+import { concurrency, vertexWidth, type ImageJob } from "./env";
 import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
@@ -121,6 +121,7 @@ interface TaskRow {
   attempts: number;
   recenter: number;
   request_id: string | null;
+  lease: string | null;
   leased_at: number | null;
   updated: number;
   prompt: string;
@@ -148,6 +149,7 @@ const WRITING_STALE_MS = 4 * 60 * 1000; // a prompt "being written" this long be
 const ENGINE_TIMEOUT_MS = 45 * 60 * 1000; // engine still pending after this = give up
 const OPENAI_TIMEOUT_MS = 12 * 60 * 1000; // a synchronous OpenAI edit is lost after this
 const FINALIZE_TIMEOUT_MS = 2 * 60 * 1000; // finalizing this long = the saving job was cut off
+const QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // a queued generation no consumer picked up by then is sent again
 const GOOGLE_TIMEOUT_MS = 20 * 60 * 1000; // a standard-tier Google generation still pending after this = give up
 const MAX_AUTO_ATTEMPTS = 2; // one automatic retry for transient engine failures / off-centre
 
@@ -326,6 +328,15 @@ async function finalizeInFlight(env: Env, batch: BatchRow, config: Config): Prom
     }
     if (task.request_id.startsWith("fal:")) {
       await finalizeFal(env, batch, config, task);
+      continue;
+    }
+    if (task.request_id.startsWith("queue:")) {
+      // Handed to the queue; the consumer takes it over within seconds. Much longer means the
+      // message was lost, so the image goes back to the queue without losing an attempt.
+      if (age > QUEUE_TIMEOUT_MS) {
+        await run(env.DB, "UPDATE tasks SET attempts = MAX(0, attempts - 1) WHERE id = ?", task.id);
+        await requeue(env, task, "the queued generation never started, sending again");
+      }
       continue;
     }
     if (task.request_id.startsWith("openai:") || task.request_id.startsWith("sync:")) {
@@ -574,12 +585,12 @@ async function settleFailedAttempt(
   }
   if (isContentPolicyError(message) && (await retryAfterRefusal(env, config, task, message)))
     return;
-  // A vendor rate limit is not the image's fault: wait as asked (at least 30 s), keep the image
+  // A vendor rate limit is not the image's fault: wait as asked (at least 15 s), keep the image
   // queued and give the attempt back, so a throttled project never fails images one by one.
   if (isRateLimit(e)) {
-    const wait = Math.max(30_000, retryAfterMs(e));
+    const wait = Math.max(15_000, retryAfterMs(e));
     enginePausedUntil = Math.max(enginePausedUntil, now() + wait);
-    if (/vertex/i.test(message)) vertexThrottledUntil = now() + VERTEX_THROTTLE_MS;
+    if (/vertex/i.test(message)) await narrowVertex(env);
     await run(env.DB, "UPDATE tasks SET attempts = MAX(0, attempts - 1) WHERE id = ?", task.id);
     await requeue(env, task, `Engine rate limited; retrying in ${Math.round(wait / 1000)} s.`);
     return;
@@ -591,14 +602,24 @@ async function settleFailedAttempt(
 }
 
 let enginePausedUntil = 0; // after a vendor rate limit, no image is submitted before this time (per isolate)
-let vertexThrottledUntil = 0; // after a Vertex rate limit, only a couple of images at a time for a while
-/** Images in flight at once on Vertex while its quota is being hit (a trial project allows ~2 a minute). */
-const VERTEX_THROTTLED_PARALLEL = 2;
-const VERTEX_THROTTLE_MS = 10 * 60 * 1000;
+/** After a Vertex rate limit the width is halved for this long (shared through a setting, since
+ * the queue consumers and the cron run in different isolates). */
+const VERTEX_THROTTLE_MS = 2 * 60 * 1000;
+const VERTEX_THROTTLED_UNTIL = "vertex_throttled_until";
 
-/** Vertex runs at full width until Google throttles it, then narrows for ten minutes. */
-function vertexParallel(env: Env): number {
-  return now() < vertexThrottledUntil ? VERTEX_THROTTLED_PARALLEL : concurrency(env);
+async function narrowVertex(env: Env): Promise<void> {
+  await setSetting(env, VERTEX_THROTTLED_UNTIL, String(now() + VERTEX_THROTTLE_MS));
+}
+
+/**
+ * Vertex runs at full width until Google throttles it, then at half width for a couple of
+ * minutes. With the queue every image has its own invocation, so the width is the quota's; without
+ * it the isolate's six connections cap it.
+ */
+async function vertexParallel(env: Env): Promise<number> {
+  const full = env.IMAGES ? vertexWidth(env) : concurrency(env);
+  const until = Number((await getSetting(env, VERTEX_THROTTLED_UNTIL)) ?? 0);
+  return now() < until ? Math.max(3, Math.floor(full / 2)) : full;
 }
 
 async function requeue(env: Env, task: TaskRow, message: string): Promise<void> {
@@ -684,7 +705,9 @@ async function submitNext(
   const google = isGoogleModel(config.model);
   const fal = isFalModel(config.model);
   const sync = openai || (google && !config.economy);
-  if (sync && deferSync) return;
+  // Without the queue a synchronous engine holds this request open, so HTTP drivers leave it to
+  // the cron; with the queue the submission is a message and any driver may send it.
+  if (sync && deferSync && !env.IMAGES) return;
   if (fal) {
     if (!(await resolveFalKey(env)).key) {
       await pauseBatch(
@@ -720,16 +743,21 @@ async function submitNext(
     );
     return;
   }
-  const processing = await first<{ n: number }>(
-    env.DB,
-    "SELECT COUNT(*) AS n FROM tasks WHERE batch = ? AND status IN ('processing','finalizing')",
-    batch.id,
-  );
   if (now() < enginePausedUntil) return; // a vendor asked us to wait
   const vertexActive = google ? !!(await resolveGoogleAuth(env)).vertex : false;
+  // Vertex's quota is per project, so with the queue the width is shared by every running batch
+  // (ten people at once share it; one person alone gets all of it). Other engines are capped per batch.
+  const shared = vertexActive && !!env.IMAGES;
+  const processing = await first<{ n: number }>(
+    env.DB,
+    shared
+      ? "SELECT COUNT(*) AS n FROM tasks WHERE status IN ('processing','finalizing') AND (request_id IS NULL OR request_id LIKE 'queue:%' OR request_id LIKE 'sync:%')"
+      : "SELECT COUNT(*) AS n FROM tasks WHERE batch = ? AND status IN ('processing','finalizing')",
+    ...(shared ? [] : [batch.id]),
+  );
   // Synchronous engines hold a connection per image, so they are capped; fal.ai queues on its side.
   const slots =
-    (fal ? FAL_PARALLEL : vertexActive ? vertexParallel(env) : concurrency(env)) -
+    (fal ? FAL_PARALLEL : vertexActive ? await vertexParallel(env) : concurrency(env)) -
     (processing?.n ?? 0);
   if (slots <= 0) return;
   // Prompts are written ahead of submission: every set leader first, then the followers whose
@@ -748,7 +776,8 @@ async function submitNext(
     const tOpenai = isOpenAIModel(cfg.model);
     // Economy (Flex, background) exists on the AI Studio path only; Vertex always runs synchronously.
     const economy = !!cfg.economy && !vertexActive;
-    if (deferSync && (tOpenai || (tGoogle && !economy))) continue;
+    const syncEngine = tOpenai || (tGoogle && !economy);
+    if (deferSync && syncEngine && !env.IMAGES) continue;
     const token = uuid();
     const claimed = await run(
       env.DB,
@@ -768,7 +797,9 @@ async function submitNext(
         ? await submitFalTask(env, batch, cfg, task)
         : tGoogle && economy
           ? await submitGoogleBackgroundTask(env, batch, cfg, task)
-          : tOpenai || tGoogle
+          : syncEngine && env.IMAGES
+            ? await enqueueImage(env, batch, task, token)
+            : tOpenai || tGoogle
             ? await submitOpenAITask(env, batch, cfg, task, token, background)
             : await submitTask(
                 env,
@@ -1863,6 +1894,62 @@ async function outputBytes(env: Env, task: Pick<TaskRow, "output">): Promise<Ima
   const obj = await env.BUCKET.get(task.output);
   if (!obj) throw new StudioError("Result unavailable.", 404);
   return { bytes: await obj.arrayBuffer(), mime: obj.httpMetadata?.contentType || "image/png" };
+}
+
+/**
+ * Hands a claimed task to the queue: one consumer invocation per image, so the number of images in
+ * flight is the engine's width rather than the six connections one invocation may hold.
+ */
+async function enqueueImage(
+  env: Env,
+  batch: BatchRow,
+  task: TaskRow,
+  lease: string,
+): Promise<string> {
+  const requestId = `queue:${lease}`;
+  await run(
+    env.DB,
+    "UPDATE tasks SET request_id = ?, error = 'Queued for the engine…', updated = ? WHERE id = ? AND lease = ?",
+    requestId,
+    now(),
+    task.id,
+    lease,
+  );
+  await env.IMAGES!.send({ batch: batch.id, task: task.id, lease });
+  return requestId;
+}
+
+/**
+ * The queue consumer: runs one claimed generation to the end (prompt, engine call, saved result)
+ * and then refills the batch, so the next image starts as soon as this one is done rather than
+ * on the next cron tick. A stale message (the task was retried, reset or finished meanwhile) is dropped.
+ */
+export async function runImageJob(env: Env, job: ImageJob): Promise<void> {
+  const task = await first<TaskRow>(env.DB, "SELECT * FROM tasks WHERE id = ?", job.task);
+  if (
+    !task ||
+    task.status !== "processing" ||
+    task.lease !== job.lease ||
+    task.request_id !== `queue:${job.lease}`
+  )
+    return;
+  const batch = await first<BatchRow>(
+    env.DB,
+    "SELECT id, owner, config, state FROM batches WHERE id = ?",
+    job.batch,
+  );
+  if (!batch) return;
+  const config = JSON.parse(batch.config) as Config;
+  if (!config.model) config.model = await resolveEngineModel(env);
+  const cfg = taskConfig(config, task);
+  // The submit functions take the row as it was before the claim counted this attempt.
+  const claimed = { ...task, attempts: task.attempts - 1 };
+  try {
+    await submitOpenAITask(env, batch, cfg, claimed, job.lease);
+  } catch (e) {
+    await settleFailedAttempt(env, batch, cfg, { ...task, request_id: `queue:${job.lease}` }, e);
+  }
+  await advanceBatch(env, batch.id).catch((e) => console.error("[queue refill]", batch.id, e));
 }
 
 /**

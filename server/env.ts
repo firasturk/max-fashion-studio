@@ -13,10 +13,30 @@ export interface Env {
   WEBHOOK_TOKEN?: string;
   PUBLIC_BASE_URL?: string;
   MAX_CONCURRENT_GENERATIONS?: string;
+  VERTEX_PARALLEL?: string;
+  /** Image generations fanned out one per consumer invocation (synchronous engines). */
+  IMAGES?: Queue<ImageJob>;
+}
+
+/** One queued generation: the task was claimed by the driver; the consumer runs it. */
+export interface ImageJob {
+  batch: string;
+  task: string;
+  lease: string;
 }
 
 export function concurrency(env: Env): number {
   // Workers hold at most six outgoing connections open at once; more would just queue inside the isolate.
   const n = Number(env.MAX_CONCURRENT_GENERATIONS ?? 6);
   return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 6) : 6;
+}
+
+/**
+ * Images in flight on Vertex at once when generations are fanned out over the queue: each one
+ * runs in its own consumer invocation, so the six-connection rule no longer applies. The quota
+ * Google grants per minute is the real ceiling; a rate limit halves this for a while.
+ */
+export function vertexWidth(env: Env): number {
+  const n = Number(env.VERTEX_PARALLEL ?? 12);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 100) : 12;
 }

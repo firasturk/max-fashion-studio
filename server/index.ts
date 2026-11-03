@@ -1,12 +1,18 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import type { Env } from "./env";
+import type { Env, ImageJob } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { authRoutes, currentUser, SESSION_COOKIE } from "./auth";
 import { studioRoutes } from "./studio";
 import { verifyObjectToken } from "./signed";
 import { adminRoutes, cleanupOldBatches } from "./admin";
-import { advanceBatch, activeBatchIds, readPendingReferences, runLearning } from "./engine";
+import {
+  advanceBatch,
+  activeBatchIds,
+  readPendingReferences,
+  runImageJob,
+  runLearning,
+} from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
 import { logEvent, pruneEvents } from "./events";
 import {
@@ -171,6 +177,17 @@ app.onError((e, c) => {
 
 export default {
   fetch: app.fetch,
+  // One image per message: each generation runs in its own invocation (see enqueueImage).
+  async queue(batch: MessageBatch<ImageJob>, env: Env) {
+    for (const message of batch.messages) {
+      try {
+        await runImageJob(env, message.body);
+      } catch (e) {
+        console.error("[queue]", message.body.task, errorMessage(e));
+      }
+      message.ack();
+    }
+  },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
     ctx.waitUntil(
@@ -189,4 +206,4 @@ export default {
       })().catch((e) => console.error("[learn]", errorMessage(e))),
     );
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env, ImageJob>;
