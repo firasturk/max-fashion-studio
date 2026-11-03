@@ -272,7 +272,9 @@ export async function vertexText(
       return text;
     } catch (e) {
       if (e instanceof StudioError && /\(404\)/.test(e.message)) {
-        last = e;
+        // A model this project cannot see is skipped; an earlier model's empty answer stays the
+        // reason reported (a 404 is fatal for the whole batch, an empty answer is not).
+        last ??= e;
         continue;
       }
       throw e;
