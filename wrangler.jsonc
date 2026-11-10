@@ -40,7 +40,10 @@
     },
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "max-fashion-studio" }],
-  // Generations on synchronous engines (Vertex, OpenAI) fan out one per consumer invocation.
+  // One Durable Object per image generation: a batch's whole width starts at once.
+  "durable_objects": { "bindings": [{ "name": "RUNNER", "class_name": "ImageRunner" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ImageRunner"] }],
+  // The queue is the fallback fan-out (it scales its consumers up slowly).
   "queues": {
     "producers": [{ "binding": "IMAGES", "queue": "max-fashion-studio-images" }],
     "consumers": [

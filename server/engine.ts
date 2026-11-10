@@ -10,7 +10,7 @@ import { colourHex } from "@shared/colours";
 import { logEvent } from "./events";
 import { activeMemoryLines, learn } from "./memory";
 import { solidPng } from "@shared/png";
-import { concurrency, googleWidth, vertexWidth, type ImageJob } from "./env";
+import { concurrency, fansOut, googleWidth, vertexWidth, type ImageJob } from "./env";
 import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
@@ -560,6 +560,9 @@ async function settleFailedAttempt(
     ]).total + (task.edit || task.recenter ? 0.008 : 0);
   await run(env.DB, "UPDATE tasks SET cost = MAX(0, cost - ?) WHERE id = ?", refund, task.id);
   const message = errorMessage(e, "Generation failed.");
+  console.error(
+    `[attempt failed] ${task.id} attempt=${task.attempts} ${e instanceof Error ? e.name : ""} ${message.slice(0, 300)}`,
+  );
   // The engine an image was moved to after a refusal is not usable (disabled, or out of credits):
   // try the next one, and never pause the whole batch over it.
   if (task.model && (isModelUnavailable(message) || isCreditsDepleted(e))) {
@@ -618,7 +621,7 @@ async function narrowVertex(env: Env): Promise<void> {
  * it the isolate's six connections cap it.
  */
 async function googleParallel(env: Env, vertex: boolean): Promise<number> {
-  const full = !env.IMAGES ? concurrency(env) : vertex ? vertexWidth(env) : googleWidth(env);
+  const full = !fansOut(env) ? concurrency(env) : vertex ? vertexWidth(env) : googleWidth(env);
   const until = Number((await getSetting(env, VERTEX_THROTTLED_UNTIL)) ?? 0);
   return now() < until ? Math.max(3, Math.floor(full / 2)) : full;
 }
@@ -708,7 +711,7 @@ async function submitNext(
   const sync = openai || (google && !config.economy);
   // Without the queue a synchronous engine holds this request open, so HTTP drivers leave it to
   // the cron; with the queue the submission is a message and any driver may send it.
-  if (sync && deferSync && !env.IMAGES) return;
+  if (sync && deferSync && !fansOut(env)) return;
   if (fal) {
     if (!(await resolveFalKey(env)).key) {
       await pauseBatch(
@@ -748,7 +751,7 @@ async function submitNext(
   const vertexActive = google ? !!(await resolveGoogleAuth(env)).vertex : false;
   // Google's limits are per project, so with the queue the width is shared by every running batch
   // (ten people at once share it; one person alone gets all of it). Other engines are capped per batch.
-  const shared = google && !!env.IMAGES;
+  const shared = google && fansOut(env);
   const processing = await first<{ n: number }>(
     env.DB,
     shared
@@ -765,10 +768,10 @@ async function submitNext(
   // leader already has a prompt, so a follower only waits for the leader's image, not its text.
   // Without the queue the briefs are written ahead here (a few at a time, inside this invocation);
   // with it, every consumer writes the brief for its own image, so nothing waits on the builder.
-  if (SKILL_MODES.has(config.mode) && !env.IMAGES)
+  if (SKILL_MODES.has(config.mode) && !fansOut(env))
     await prepareBriefs(env, batch, config, await briefPool(env, batch));
   let candidates = await eligibleQueued(env, batch, config, slots);
-  if (SKILL_MODES.has(config.mode) && !env.IMAGES)
+  if (SKILL_MODES.has(config.mode) && !fansOut(env))
     candidates = candidates.filter((t) => !!t.brief);
   const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
@@ -781,7 +784,7 @@ async function submitNext(
     // Economy (Flex, background) exists on the AI Studio path only; Vertex always runs synchronously.
     const economy = !!cfg.economy && !vertexActive;
     const syncEngine = tOpenai || (tGoogle && !economy);
-    if (deferSync && syncEngine && !env.IMAGES) continue;
+    if (deferSync && syncEngine && !fansOut(env)) continue;
     const token = uuid();
     const claimed = await run(
       env.DB,
@@ -801,7 +804,7 @@ async function submitNext(
         ? await submitFalTask(env, batch, cfg, task)
         : tGoogle && economy
           ? await submitGoogleBackgroundTask(env, batch, cfg, task)
-          : syncEngine && env.IMAGES
+          : syncEngine && fansOut(env)
             ? await enqueueImage(env, batch, task, token)
             : tOpenai || tGoogle
             ? await submitOpenAITask(env, batch, cfg, task, token, background)
@@ -1919,7 +1922,13 @@ async function enqueueImage(
     task.id,
     lease,
   );
-  await env.IMAGES!.send({ batch: batch.id, task: task.id, lease });
+  const job: ImageJob = { batch: batch.id, task: task.id, lease };
+  if (env.RUNNER) {
+    // A fresh object per attempt, so a retry never meets the previous attempt's state.
+    const stub = env.RUNNER.get(env.RUNNER.idFromName(`${task.id}:${lease}`));
+    const r = await stub.fetch("https://runner/run", { method: "POST", body: JSON.stringify(job) });
+    if (!r.ok) throw new StudioError(`The image runner did not take the job (${r.status}).`, 502);
+  } else await env.IMAGES!.send(job);
   return requestId;
 }
 
@@ -2051,7 +2060,9 @@ async function submitOpenAITask(
     roles.revision = true;
   }
 
+  const t0 = now();
   const prompt = await promptFor(env, batch, config, task, source, edit, roles);
+  const promptMs = now() - t0;
 
   const requestId = `sync:${uuid()}`;
   // Record the id before the slow call so a concurrent driver sees the task as in flight.
@@ -2069,6 +2080,7 @@ async function submitOpenAITask(
     : await makeOpenAIClient(env);
   const job = (async () => {
     try {
+      const t1 = now();
       const result = await client.edit({
         model: config.model!,
         prompt,
@@ -2076,6 +2088,7 @@ async function submitOpenAITask(
         aspectRatio: config.ratio,
         size: config.size,
       });
+      const editMs = now() - t1;
       const claimed = await run(
         env.DB,
         "UPDATE tasks SET status = 'finalizing', updated = ? WHERE id = ? AND status = 'processing' AND request_id = ?",
@@ -2084,6 +2097,7 @@ async function submitOpenAITask(
         requestId,
       );
       if (!claimed) return;
+      const t2 = now();
       await storeResultBytes(
         env,
         batch,
@@ -2092,6 +2106,8 @@ async function submitOpenAITask(
         result,
         null,
       );
+      // Where the seconds go, per image: prompt (brief, references), the engine, review and saving.
+      console.log(`[timing] ${task.id} prompt=${promptMs}ms engine=${editMs}ms store=${now() - t2}ms`);
     } catch (e) {
       await settleFailedAttempt(
         env,

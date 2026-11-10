@@ -19,6 +19,13 @@ export interface Env {
   GOOGLE_PREFER?: string;
   /** Image generations fanned out one per consumer invocation (synchronous engines). */
   IMAGES?: Queue<ImageJob>;
+  /** One object per image generation (see server/runner.ts); preferred over the queue. */
+  RUNNER?: DurableObjectNamespace;
+}
+
+/** True when generations run outside the driver's invocation (an object or a queue message each). */
+export function fansOut(env: Env): boolean {
+  return !!(env.RUNNER || env.IMAGES);
 }
 
 /** One queued generation: the task was claimed by the driver; the consumer runs it. */

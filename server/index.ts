@@ -175,6 +175,8 @@ app.onError((e, c) => {
   return c.json({ error: "Studio request failed. Retry shortly." }, 500);
 });
 
+export { ImageRunner } from "./runner";
+
 export default {
   fetch: app.fetch,
   // One image per message: each generation runs in its own invocation (see enqueueImage).
