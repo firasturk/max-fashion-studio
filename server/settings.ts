@@ -153,9 +153,12 @@ export async function resolveGoogleAuth(env: Env): Promise<{
   vertex: VertexCreds | null;
   source: EngineKeySource | "vertex";
 }> {
+  const k = await resolveGoogleKey(env);
+  // The Gemini API key is preferred when asked for (its per-tier limits beat Vertex's shared pool);
+  // otherwise a saved service account wins, and the key is the fallback.
+  if (env.GOOGLE_PREFER === "key" && k.key) return { auth: { key: k.key }, vertex: null, source: k.source };
   const vertex = await resolveVertex(env);
   if (vertex) return { auth: { vertex }, vertex, source: "vertex" };
-  const k = await resolveGoogleKey(env);
   return { auth: k.key ? { key: k.key } : null, vertex: null, source: k.source };
 }
 

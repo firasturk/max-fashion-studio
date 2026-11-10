@@ -10,7 +10,7 @@ import { colourHex } from "@shared/colours";
 import { logEvent } from "./events";
 import { activeMemoryLines, learn } from "./memory";
 import { solidPng } from "@shared/png";
-import { concurrency, vertexWidth, type ImageJob } from "./env";
+import { concurrency, googleWidth, vertexWidth, type ImageJob } from "./env";
 import { all, first, run, now, uuid } from "./db";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
@@ -591,7 +591,7 @@ async function settleFailedAttempt(
     console.error("[rate limit]", message.slice(0, 400));
     const wait = Math.max(15_000, retryAfterMs(e));
     enginePausedUntil = Math.max(enginePausedUntil, now() + wait);
-    if (/vertex/i.test(message)) await narrowVertex(env);
+    if (isGoogleModel(task.model || config.model)) await narrowVertex(env);
     await run(env.DB, "UPDATE tasks SET attempts = MAX(0, attempts - 1) WHERE id = ?", task.id);
     await requeue(env, task, `Engine rate limited; retrying in ${Math.round(wait / 1000)} s.`);
     return;
@@ -617,8 +617,8 @@ async function narrowVertex(env: Env): Promise<void> {
  * minutes. With the queue every image has its own invocation, so the width is the quota's; without
  * it the isolate's six connections cap it.
  */
-async function vertexParallel(env: Env): Promise<number> {
-  const full = env.IMAGES ? vertexWidth(env) : concurrency(env);
+async function googleParallel(env: Env, vertex: boolean): Promise<number> {
+  const full = !env.IMAGES ? concurrency(env) : vertex ? vertexWidth(env) : googleWidth(env);
   const until = Number((await getSetting(env, VERTEX_THROTTLED_UNTIL)) ?? 0);
   return now() < until ? Math.max(3, Math.floor(full / 2)) : full;
 }
@@ -746,9 +746,9 @@ async function submitNext(
   }
   if (now() < enginePausedUntil) return; // a vendor asked us to wait
   const vertexActive = google ? !!(await resolveGoogleAuth(env)).vertex : false;
-  // Vertex's quota is per project, so with the queue the width is shared by every running batch
+  // Google's limits are per project, so with the queue the width is shared by every running batch
   // (ten people at once share it; one person alone gets all of it). Other engines are capped per batch.
-  const shared = vertexActive && !!env.IMAGES;
+  const shared = google && !!env.IMAGES;
   const processing = await first<{ n: number }>(
     env.DB,
     shared
@@ -758,15 +758,18 @@ async function submitNext(
   );
   // Synchronous engines hold a connection per image, so they are capped; fal.ai queues on its side.
   const slots =
-    (fal ? FAL_PARALLEL : vertexActive ? await vertexParallel(env) : concurrency(env)) -
+    (fal ? FAL_PARALLEL : google ? await googleParallel(env, vertexActive) : concurrency(env)) -
     (processing?.n ?? 0);
   if (slots <= 0) return;
   // Prompts are written ahead of submission: every set leader first, then the followers whose
   // leader already has a prompt, so a follower only waits for the leader's image, not its text.
-  if (SKILL_MODES.has(config.mode))
+  // Without the queue the briefs are written ahead here (a few at a time, inside this invocation);
+  // with it, every consumer writes the brief for its own image, so nothing waits on the builder.
+  if (SKILL_MODES.has(config.mode) && !env.IMAGES)
     await prepareBriefs(env, batch, config, await briefPool(env, batch));
   let candidates = await eligibleQueued(env, batch, config, slots);
-  if (SKILL_MODES.has(config.mode)) candidates = candidates.filter((t) => !!t.brief);
+  if (SKILL_MODES.has(config.mode) && !env.IMAGES)
+    candidates = candidates.filter((t) => !!t.brief);
   const client = openai || google || fal ? null : await makeClient(env, undefined, config.model);
 
   for (const task of candidates) {

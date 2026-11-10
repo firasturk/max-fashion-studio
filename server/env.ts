@@ -14,6 +14,9 @@ export interface Env {
   PUBLIC_BASE_URL?: string;
   MAX_CONCURRENT_GENERATIONS?: string;
   VERTEX_PARALLEL?: string;
+  GOOGLE_PARALLEL?: string;
+  /** "key": the AI Studio key is used even when a Vertex service account is saved. */
+  GOOGLE_PREFER?: string;
   /** Image generations fanned out one per consumer invocation (synchronous engines). */
   IMAGES?: Queue<ImageJob>;
 }
@@ -39,4 +42,10 @@ export function concurrency(env: Env): number {
 export function vertexWidth(env: Env): number {
   const n = Number(env.VERTEX_PARALLEL ?? 12);
   return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 100) : 12;
+}
+
+/** Images in flight at once on the Gemini API (AI Studio key), whose limits are per project tier. */
+export function googleWidth(env: Env): number {
+  const n = Number(env.GOOGLE_PARALLEL ?? 40);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 200) : 40;
 }

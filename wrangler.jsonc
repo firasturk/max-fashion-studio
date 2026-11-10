@@ -59,6 +59,8 @@
     "HIGGSFIELD_BASE_URL": "https://api.higgsfield.ai",
     "MAX_CONCURRENT_GENERATIONS": "6",
     "VERTEX_PARALLEL": "12",
+    "GOOGLE_PARALLEL": "40",
+    "GOOGLE_PREFER": "key",
     "PUBLIC_BASE_URL": "https://max-fashion-studio.max-fashion-studio.workers.dev",
   },
 }
