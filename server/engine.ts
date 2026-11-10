@@ -1220,6 +1220,9 @@ async function ensureBrief(
   // The verified crop is binding: the builder's own reading never replaces it.
   brief.framing = framingForSkill(check.framing, skillId);
   await run(env.DB, "UPDATE tasks SET brief = ? WHERE id = ?", JSON.stringify(brief), task.id);
+  // The row in hand carries it too: the prompt assembly that follows in the same invocation asks
+  // for the brief again, and must not pay for (and wait on) a second build.
+  task.brief = JSON.stringify(brief);
   return brief;
 }
 
