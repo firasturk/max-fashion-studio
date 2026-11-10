@@ -1172,6 +1172,16 @@ async function ensureBrief(
     try {
       return await buildBriefWithGoogle(google!, req);
     } catch (e) {
+      // Every Google text model blocked this photo's prompt request: OpenAI writes it when it can;
+      // if it cannot (no key credit, its own refusal), Google's verdict stands.
+      if (openai && isContentPolicyError(errorMessage(e))) {
+        try {
+          return await buildBriefWithOpenAI(openai, req);
+        } catch (e2) {
+          console.error(`[builder] OpenAI stand-in failed: ${errorMessage(e2).slice(0, 160)}`);
+          throw e;
+        }
+      }
       // Gemini refuses some Cloudflare regions, a drained prepaid balance, or throttles the key;
       // OpenAI takes over for this prompt.
       if (openai && (googleUnavailable(e) || isRateLimit(e))) {

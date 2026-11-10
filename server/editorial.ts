@@ -4,6 +4,7 @@
  * ready-made entries in shared/skills.ts. Google Gemini is
  * used when a Google key exists, otherwise OpenAI. The skill text itself lives in shared/editorial-skill.ts.
  */
+import { isContentPolicyError } from "@shared/safety";
 import { skillById, type SkillDef } from "@shared/skills";
 import { zaidSkill } from "@shared/zaid";
 import { isVertexAuth, vertexText, type GoogleAuth } from "./vertex";
@@ -364,8 +365,11 @@ export async function buildBriefWithGoogle(
         m,
       );
     } catch (e) {
-      if (e instanceof StudioError && /\(404\)/.test(e.message)) {
-        lastError = e;
+      // A retired name answers 404; a content block on a catalogue photo (children's wear trips
+      // it at random) is one model's verdict, and the next model usually writes the prompt.
+      const blocked = e instanceof StudioError && isContentPolicyError(e.message);
+      if (e instanceof StudioError && (blocked || /\(404\)/.test(e.message))) {
+        if (blocked || !lastError) lastError = e;
         continue;
       }
       throw e;
