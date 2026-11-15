@@ -63,7 +63,7 @@
     "MAX_CONCURRENT_GENERATIONS": "6",
     "VERTEX_PARALLEL": "12",
     "GOOGLE_PARALLEL": "60",
-    "GOOGLE_PREFER": "key",
+    "GOOGLE_PREFER": "vertex",
     "PUBLIC_BASE_URL": "https://max-fashion-studio.max-fashion-studio.workers.dev",
   },
 }
