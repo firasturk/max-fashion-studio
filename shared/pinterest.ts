@@ -115,12 +115,45 @@ export function isShopBoard(name: string, url: string): boolean {
   );
 }
 
+/**
+ * Boards whose name says they are not about people wearing clothes in a place: homeware, beauty,
+ * gifts, shoes and bags on their own, shop interiors, events, magazine covers, celebrity news,
+ * children. Skipping them by name saves looking at every picture in them.
+ */
+export function isOffTopicBoard(name: string): boolean {
+  return /home|decor|interior|beaut|make-?up|skin|hair|nail|fragrance|perfume|gift|food|recipe|store|shop|accessor|jewel|bag|shoe|heel|sneaker|footwear|kids|baby|school|event|party|cover|celebrit|award|film|\btv\b|culture|music|wedding|mariage|meme|quote|art\b/i.test(
+    name.replace(/[-_]+/g, " "),
+  );
+}
+
+/** The board pages an account shows on its public profile, as "/account/board/" paths. */
+export function profileBoards(html: string, user: string): string[] {
+  const safe = user.replace(/[^a-zA-Z0-9_-]/g, "");
+  const found = html.match(new RegExp(`"url":"/${safe}/[^"/]{1,80}/"`, "g")) ?? [];
+  return [...new Set(found.map((m) => m.slice(7, -1)))].filter(
+    (url) => !url.split("/")[2].startsWith("_"),
+  );
+}
+
 /** The accounts the studio watches until the team chooses its own. */
 export const STARTER_SOURCES = [
   "https://www.pinterest.com/zaraofficial/",
   "https://www.pinterest.com/massimodutti/",
   "https://www.pinterest.com/hm/",
+  "https://www.pinterest.com/mangofashion/",
+  "https://www.pinterest.com/cos/",
+  "https://www.pinterest.com/andotherstories/",
   "https://www.pinterest.com/bershka/",
-  "https://www.pinterest.com/voguemagazine/",
-  "https://www.pinterest.com/harpersbazaar/",
+  "https://www.pinterest.com/sandroparis/",
+  "https://www.pinterest.com/calvinklein/",
+  "https://www.pinterest.com/ralphlauren/",
+  "https://www.pinterest.com/hugoboss/",
+  "https://www.pinterest.com/lacoste/",
+  "https://www.pinterest.com/aritzia/",
+  "https://www.pinterest.com/freepeople/",
+  "https://www.pinterest.com/riverisland/",
+  "https://www.pinterest.com/nextofficial/",
+  "https://www.pinterest.com/lcwaikiki/",
+  "https://www.pinterest.com/koton/",
+  "https://www.pinterest.com/netaporter/",
 ];

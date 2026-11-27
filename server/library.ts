@@ -7,14 +7,22 @@ import type { Env } from "./env";
 import { errorMessage, StudioError } from "./errors";
 import { all, first, now, run, uuid } from "./db";
 import { getSetting, setSetting } from "./settings";
-import { decodeEntities, downloadPins, pinterestPins } from "./pinterest";
+import { accountBoards, decodeEntities, downloadPins, pinterestPins } from "./pinterest";
 import { askVision, buildSkillFromReferences } from "./skillbuilder";
-import { STARTER_SOURCES, isShopBoard, parsePinterestLink, type Pin } from "@shared/pinterest";
+import {
+  STARTER_SOURCES,
+  isOffTopicBoard,
+  isShopBoard,
+  parsePinterestLink,
+  type Pin,
+} from "@shared/pinterest";
 
 const SOURCES_SETTING = "pinterest_sources";
 const RUN_SETTING = "library_last_run";
 /** How many of an account's boards are read in full on one pass. */
-const BOARDS_PER_ACCOUNT = 5;
+const BOARDS_PER_ACCOUNT = 6;
+/** How many pictures of one board are taken on one pass. */
+const PINS_PER_BOARD = 30;
 
 export interface LibraryPin {
   id: string;
@@ -58,7 +66,7 @@ export async function setLibrarySources(env: Env, links: string[]): Promise<stri
 async function keep(env: Env, account: string, pins: Pin[]): Promise<number> {
   let added = 0;
   for (const p of pins) {
-    if (isShopBoard(p.board, p.boardUrl)) continue;
+    if (isShopBoard(p.board, p.boardUrl) || isOffTopicBoard(p.board)) continue;
     added += await run(
       env.DB,
       `INSERT OR IGNORE INTO pin_library (id, account, board, thumb, image, note, twin, state, seen)
@@ -76,37 +84,45 @@ async function keep(env: Env, account: string, pins: Pin[]): Promise<number> {
   return added;
 }
 
-/** One account or board: its newest pictures, then each of its mood boards read in full. */
+/**
+ * One account or board. For an account, the boards on its public profile are read (a shop's
+ * newest pins are mostly its product feed, so the boards are where the campaigns are), leaving
+ * out the ones whose name says they are about something else.
+ */
 async function gather(env: Env, link: string): Promise<number> {
-  const source = await pinterestPins(link);
-  const account = decodeEntities(source.title);
-  let added = await keep(env, account, source.pins);
   const target = parsePinterestLink(link);
+  const source = await pinterestPins(link).catch(() => null);
+  const account = decodeEntities(source?.title ?? (target?.kind === "user" ? target.user : link));
+  let added = source ? await keep(env, account, source.pins.slice(0, PINS_PER_BOARD * 2)) : 0;
   if (target?.kind !== "user") return added;
-  const boards = [
-    ...new Set(
-      source.pins
-        .filter((p) => p.boardUrl && !isShopBoard(p.board, p.boardUrl))
-        .map((p) => p.boardUrl),
-    ),
-  ].slice(0, BOARDS_PER_ACCOUNT);
+  const fromFeed = (source?.pins ?? []).filter((p) => p.boardUrl).map((p) => p.boardUrl);
+  const fromProfile = await accountBoards(target.user).catch(() => [] as string[]);
+  const boards = [...new Set([...fromProfile, ...fromFeed])]
+    .filter((url) => {
+      const slug = decodeURIComponent(url.split("/").filter(Boolean)[1] ?? "");
+      return !isShopBoard(slug.replace(/-/g, " "), url) && !isOffTopicBoard(slug);
+    })
+    .slice(0, BOARDS_PER_ACCOUNT);
   for (const url of boards) {
     try {
       const board = await pinterestPins(`https://www.pinterest.com${url}`);
       added += await keep(
         env,
         account,
-        board.pins.map((p) => ({
-          ...p,
-          board: p.board || board.title,
-          boardUrl: p.boardUrl || url,
-        })),
+        board.pins
+          .slice(0, PINS_PER_BOARD)
+          .map((p) => ({ ...p, board: p.board || board.title, boardUrl: p.boardUrl || url })),
       );
     } catch (e) {
       console.log("[library] board", url, errorMessage(e));
     }
   }
   return added;
+}
+
+/** Asks for a gathering on the schedule's next turn, within a minute. Returns at once. */
+export async function askForGathering(env: Env): Promise<void> {
+  await setSetting(env, RUN_SETTING, "0");
 }
 
 /**
@@ -308,6 +324,10 @@ export async function prepareSkill(env: Env): Promise<string | null> {
   const group = await first<{ account: string; board: string }>(
     env.DB,
     `SELECT account, board FROM pin_library WHERE state = 'new' AND usable = 1
+       AND NOT EXISTS (
+         SELECT 1 FROM pin_library u
+         WHERE u.account = pin_library.account AND u.board = pin_library.board
+           AND u.state = 'new' AND u.usable IS NULL)
      GROUP BY account, board HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC LIMIT 1`,
     DRAFT_MIN + 2,
   );
@@ -403,9 +423,9 @@ export async function libraryWork(env: Env): Promise<void> {
   await setSetting(env, BUSY_SETTING, String(now()));
   try {
     await refreshLibrary(env);
-    const looked = (await checkPins(env, 16)) + (await checkPins(env, 16));
-    // Skills are prepared once the pictures on the table have been looked at.
-    if (!looked) await prepareSkill(env);
+    for (let i = 0; i < 3; i++) if (!(await checkPins(env, 16))) break;
+    // A skill is prepared as soon as one board has been looked at in full.
+    await prepareSkill(env).catch((e) => console.error("[library] prepare", errorMessage(e)));
   } finally {
     await setSetting(env, BUSY_SETTING, "0");
   }

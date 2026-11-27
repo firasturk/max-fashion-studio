@@ -8,7 +8,7 @@ import {
   librarySources,
   listLibrary,
   markPins,
-  refreshLibrary,
+  askForGathering,
   setLibrarySources,
 } from "./library";
 import { thumbResponse, thumbWidth } from "./thumbs";
@@ -866,13 +866,13 @@ studioRoutes.post("/library/sources", async (c) => {
     throw new StudioError("Only an admin can change the accounts to gather from.", 403);
   const { links } = await body(c, z.object({ links: z.array(z.string().max(300)).max(40) }));
   const sources = await setLibrarySources(c.env, links);
-  const added = await refreshLibrary(c.env, true);
-  return c.json({ sources, added });
+  return c.json({ sources });
 });
 
-studioRoutes.post("/library/refresh", async (c) =>
-  c.json({ added: await refreshLibrary(c.env, true) }),
-);
+studioRoutes.post("/library/refresh", async (c) => {
+  await askForGathering(c.env);
+  return c.json({ ok: true });
+});
 
 /* Ready skills: complete skills the studio prepared; a person switches them on or throws them away. */
 studioRoutes.get("/ready", async (c) => c.json({ items: await listReady(c.env) }));

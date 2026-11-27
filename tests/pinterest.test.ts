@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isShopBoard, parsePinterestLink, pinImage, readPins } from "@shared/pinterest";
+import {
+  isOffTopicBoard,
+  isShopBoard,
+  parsePinterestLink,
+  pinImage,
+  profileBoards,
+  readPins,
+} from "@shared/pinterest";
 
 describe("Pinterest links", () => {
   it("reads a board link, with or without a country site", () => {
@@ -118,5 +125,37 @@ describe("the Pinterest library", () => {
     expect(isShopBoard("Pin exclusivamente publicitario", "/massimodutti/pin-x/")).toBe(true);
     expect(isShopBoard("New in Woman", "/massimodutti/new-in-woman/")).toBe(false);
     expect(isShopBoard("Street style", "")).toBe(false);
+  });
+});
+
+describe("an account's boards", () => {
+  it("reads the board pages off a public profile, without the product feed", () => {
+    const html =
+      'x{"url":"/zaraofficial/studio-collection-aw26/"},{"url":"/zaraofficial/_products/"},' +
+      '{"url":"/zaraofficial/zara-core-wardrobe/"},{"url":"/someoneelse/board/"},{"url":"/zaraofficial/studio-collection-aw26/"}';
+    expect(profileBoards(html, "zaraofficial")).toEqual([
+      "/zaraofficial/studio-collection-aw26/",
+      "/zaraofficial/zara-core-wardrobe/",
+    ]);
+  });
+
+  it("skips boards that are not about outfits in a place", () => {
+    for (const name of [
+      "cos-stores",
+      "mango-home-decor",
+      "Beauty",
+      "festive-heels",
+      "LCW KIDS",
+      "gq-covers",
+    ])
+      expect(isOffTopicBoard(name)).toBe(true);
+    for (const name of [
+      "studio-collection-aw26",
+      "New in Woman",
+      "campaign-fw26",
+      "fall-fashion",
+      "editorials-calvin-klein",
+    ])
+      expect(isOffTopicBoard(name)).toBe(false);
   });
 });

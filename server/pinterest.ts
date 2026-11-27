@@ -7,6 +7,7 @@ import { StudioError } from "./errors";
 import {
   parsePinterestLink,
   pinImage,
+  profileBoards,
   readPins,
   type Pin,
   type PinterestTarget,
@@ -89,6 +90,23 @@ export async function pinterestPins(link: string): Promise<{ title: string; pins
     title: typeof name === "string" && name.trim() ? name.trim().slice(0, 60) : target.board,
     pins,
   };
+}
+
+/** The mood boards an account shows on its public profile page. */
+export async function accountBoards(user: string): Promise<string[]> {
+  const r = await fetch(`https://www.pinterest.com/${encodeURIComponent(user)}/`, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+      Accept: "text/html",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) {
+    await r.body?.cancel();
+    return [];
+  }
+  return profileBoards(await r.text(), user);
 }
 
 /** Pinterest sends names with HTML entities ("H&amp;M", "&#183; ZARA &#183;"). */

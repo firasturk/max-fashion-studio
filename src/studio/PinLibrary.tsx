@@ -48,6 +48,8 @@ export default function PinLibrary({
   const [caption, setCaption] = useState("");
   const [target, setTarget] = useState("");
   const [links, setLinks] = useState("");
+  /** Someone asked for new pictures and they are still on their way. */
+  const [asked, setAsked] = useState(false);
 
   const load = useCallback(
     async (offset = 0) => {
@@ -65,19 +67,31 @@ export default function PinLibrary({
   const gather = useCallback(async () => {
     setBusy("gather");
     try {
-      const r = await post<{ added: number }>("/api/studio/library/refresh");
-      await load();
+      await post("/api/studio/library/refresh");
+      setAsked(true);
       toast.success(
-        r.added
-          ? `${r.added} new pictures gathered. They appear once they are checked.`
-          : "No new pictures since the last look",
+        "Gathering started. New pictures appear here over the next minutes, once checked.",
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not reach Pinterest.");
+      toast.error(e instanceof Error ? e.message : "Could not start the gathering.");
     } finally {
       setBusy(null);
     }
-  }, [load]);
+  }, []);
+
+  // While pictures are being gathered or checked, the page keeps itself up to date.
+  const settling = asked || (lib?.checking ?? 0) > 0;
+  const shown = lib?.pins.length ?? 0;
+  useEffect(() => {
+    if (!settling) return;
+    const t = window.setInterval(() => {
+      if (document.hidden || picked.size || shown > 60) return;
+      void load().then((r) => {
+        if (!r.checking && r.total) setAsked(false);
+      });
+    }, 20_000);
+    return () => window.clearInterval(t);
+  }, [settling, picked.size, shown, load]);
 
   // The first visit fills the library by itself; after that it is already there.
   useEffect(() => {
@@ -168,12 +182,13 @@ export default function PinLibrary({
     });
   const saveSources = () =>
     run("sources", async () => {
-      const r = await post<{ added: number }>("/api/studio/library/sources", {
+      await post("/api/studio/library/sources", {
         links: links.split(/\s+/).filter(Boolean),
       });
       setSheet(null);
+      setAsked(true);
       await load();
-      toast.success(`Saved. ${r.added} new pictures gathered.`);
+      toast.success("Saved. Their pictures appear here over the next minutes, once checked.");
     });
 
   const toggle = (id: string) =>
@@ -215,10 +230,10 @@ export default function PinLibrary({
         <span className="nx-row nx-end">
           <button
             className="nx-btn nx-sm"
-            disabled={busy === "gather"}
+            disabled={busy === "gather" || asked}
             onClick={() => void gather()}
           >
-            {busy === "gather" ? "Gathering…" : "Get new pictures"}
+            {busy === "gather" || asked ? "Gathering…" : "Get new pictures"}
           </button>
           {lib.checking > 0 && lib.pins.length > 0 && (
             <span className="nx-chip nx-warn">{lib.checking} more being checked</span>
@@ -282,14 +297,14 @@ export default function PinLibrary({
       ) : (
         <div className="nx-empty">
           <b>
-            {busy === "gather"
+            {busy === "gather" || (asked && !lib.checking)
               ? "Gathering pictures from Pinterest…"
               : lib.checking
                 ? "Checking the pictures…"
                 : "No pictures waiting"}
           </b>
-          {busy === "gather"
-            ? "This takes a few seconds."
+          {busy === "gather" || (asked && !lib.checking)
+            ? "The studio is reading the accounts. This takes a minute or two."
             : lib.checking
               ? `${lib.checking} pictures are being looked at. Only real model photographs are kept; they appear here over the next minutes.`
               : "Use Get new pictures, or add accounts you like under Accounts to watch."}
