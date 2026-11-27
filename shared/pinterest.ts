@@ -52,7 +52,7 @@ export interface Pin {
   board: string;
   /** That board's own page ("/account/board/"), to read more of it. */
   boardUrl: string;
-  /** Marks near-copies: the same picture posted again with other text over it. */
+  /** The same for every pin of one picture, so a picture saved twice is kept once. */
   twin: string;
 }
 
@@ -94,10 +94,8 @@ export function readPins(raw: unknown): Pin[] {
       note: typeof p.description === "string" ? p.description.trim().slice(0, 140) : "",
       board: typeof p.board?.name === "string" ? p.board.name.trim().slice(0, 60) : "",
       boardUrl: typeof p.board?.url === "string" ? p.board.url : "",
-      twin:
-        typeof p.dominant_color === "string" && first?.width && first?.height
-          ? `${typeof p.board?.url === "string" ? p.board.url : ""}|${p.dominant_color}|${String(first.width)}x${String(first.height)}`
-          : `pin|${id}`,
+      // Pinterest files a picture under its own content: the same picture pinned twice has one path.
+      twin: image,
     });
   }
   return out;
@@ -135,25 +133,24 @@ export function profileBoards(html: string, user: string): string[] {
   );
 }
 
-/** The accounts the studio watches until the team chooses its own. */
+/**
+ * What the library gathers from until the team chooses its own: public boards that people curate
+ * around fashion editorials and campaigns. (Brand accounts were tried first: they mostly repost
+ * their followers' snapshots, which are no use as references.)
+ */
 export const STARTER_SOURCES = [
-  "https://www.pinterest.com/zaraofficial/",
-  "https://www.pinterest.com/massimodutti/",
-  "https://www.pinterest.com/hm/",
-  "https://www.pinterest.com/mangofashion/",
-  "https://www.pinterest.com/cos/",
-  "https://www.pinterest.com/andotherstories/",
-  "https://www.pinterest.com/bershka/",
-  "https://www.pinterest.com/sandroparis/",
-  "https://www.pinterest.com/calvinklein/",
-  "https://www.pinterest.com/ralphlauren/",
-  "https://www.pinterest.com/hugoboss/",
-  "https://www.pinterest.com/lacoste/",
-  "https://www.pinterest.com/aritzia/",
-  "https://www.pinterest.com/freepeople/",
-  "https://www.pinterest.com/riverisland/",
-  "https://www.pinterest.com/nextofficial/",
-  "https://www.pinterest.com/lcwaikiki/",
-  "https://www.pinterest.com/koton/",
-  "https://www.pinterest.com/netaporter/",
+  "https://www.pinterest.com/anneclairerohe/campaigns-editorial/",
+  "https://www.pinterest.com/simaoa/editorial-fashion-photography/",
+  "https://www.pinterest.com/lefashion/editorials/",
+  "https://www.pinterest.com/johannacaryhi/fashion-editorial-photography/",
+  "https://www.pinterest.com/stwildcatchick/editorial-fashion-photography/",
+  "https://www.pinterest.com/reneabean/fashion-editorials/",
+  "https://www.pinterest.com/behnazbaba/editorial-photography/",
+  "https://www.pinterest.com/callmeyenna/editorial/",
+  "https://www.pinterest.com/lakoco/campaign-shoots/",
+  "https://www.pinterest.com/levtproductions/fashion-advertising-photography-on-location/",
+  "https://www.pinterest.com/mvillasenor/editorial-location-set/",
+  "https://www.pinterest.com/magdotj/location-photo-shoots/",
+  "https://www.pinterest.com/mattpaxton750/full-body-street/",
+  "https://www.pinterest.com/straightastyle/street-style-fashion/",
 ];

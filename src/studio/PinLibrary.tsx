@@ -21,7 +21,7 @@ interface Library {
 }
 
 /**
- * The Pinterest library: pictures the studio gathered from the accounts it watches. People tick
+ * The Pinterest library: pictures the studio gathered from the boards it watches. People tick
  * the ones they like and turn them into a skill, add them to one, or hide them. Nothing here is
  * decided by the studio.
  */
@@ -246,7 +246,7 @@ export default function PinLibrary({
                 setSheet("sources");
               }}
             >
-              Accounts to watch
+              Boards to watch
             </button>
           )}
         </span>
@@ -304,10 +304,10 @@ export default function PinLibrary({
                 : "No pictures waiting"}
           </b>
           {busy === "gather" || (asked && !lib.checking)
-            ? "The studio is reading the accounts. This takes a minute or two."
+            ? "The studio is reading the boards. This takes a minute or two."
             : lib.checking
               ? `${lib.checking} pictures are being looked at. Only real model photographs are kept; they appear here over the next minutes.`
-              : "Use Get new pictures, or add accounts you like under Accounts to watch."}
+              : "Use Get new pictures, or add boards you like under Boards to watch."}
         </div>
       )}
       {chosen.length > 0 && !sheet && (
@@ -347,7 +347,7 @@ export default function PinLibrary({
                   ? "New skill"
                   : sheet === "add"
                     ? "Add to a skill"
-                    : "Accounts to watch"}
+                    : "Boards to watch"}
               </h2>
               {sheet !== "sources" && <span className="nx-chip">{chosen.length} pictures</span>}
               <span className="nx-right">
@@ -427,15 +427,16 @@ export default function PinLibrary({
               {sheet === "sources" && (
                 <>
                   <p>
-                    One Pinterest link per line: a public account or a public board. The studio
-                    gathers their pictures a few times a day. Product feeds and advert boards are
-                    left out.
+                    One Pinterest link per line. A public board of fashion editorials or campaigns
+                    works best: the studio takes its newest 50 pictures and keeps only the ones that
+                    look like an editorial of one model. A brand account also works, but brands
+                    mostly repost their followers' snapshots.
                   </p>
                   <textarea
                     rows={8}
                     value={links}
                     onChange={(e) => setLinks(e.target.value)}
-                    placeholder="https://www.pinterest.com/name/"
+                    placeholder="https://www.pinterest.com/name/board-name/"
                     aria-label="Pinterest accounts and boards"
                   />
                   <div className="nx-row">

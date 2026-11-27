@@ -1,6 +1,6 @@
 /**
- * The Pinterest library. The studio gathers pictures from a short list of public accounts and
- * boards; people pick the ones they like into a skill, or hide them. Gathering only reads
+ * The Pinterest library. The studio gathers pictures from a short list of public boards (fashion
+ * editorials and campaigns, to start with) and accounts; people pick the ones they like into a skill, or hide them. Gathering only reads
  * Pinterest's public feed, so it takes seconds and costs nothing; no skill is made here.
  */
 import type { Env } from "./env";
@@ -63,10 +63,11 @@ export async function setLibrarySources(env: Env, links: string[]): Promise<stri
   return clean;
 }
 
-async function keep(env: Env, account: string, pins: Pin[]): Promise<number> {
+/** A board the team listed by name is taken whole; boards found on an account are judged by name. */
+async function keep(env: Env, account: string, pins: Pin[], chosen = false): Promise<number> {
   let added = 0;
   for (const p of pins) {
-    if (isShopBoard(p.board, p.boardUrl) || isOffTopicBoard(p.board)) continue;
+    if (!chosen && (isShopBoard(p.board, p.boardUrl) || isOffTopicBoard(p.board))) continue;
     added += await run(
       env.DB,
       `INSERT OR IGNORE INTO pin_library (id, account, board, thumb, image, note, twin, state, seen)
@@ -93,7 +94,9 @@ async function gather(env: Env, link: string): Promise<number> {
   const target = parsePinterestLink(link);
   const source = await pinterestPins(link).catch(() => null);
   const account = decodeEntities(source?.title ?? (target?.kind === "user" ? target.user : link));
-  let added = source ? await keep(env, account, source.pins.slice(0, PINS_PER_BOARD * 2)) : 0;
+  let added = source
+    ? await keep(env, account, source.pins.slice(0, PINS_PER_BOARD * 2), target?.kind === "board")
+    : 0;
   if (target?.kind !== "user") return added;
   const fromFeed = (source?.pins ?? []).filter((p) => p.boardUrl).map((p) => p.boardUrl);
   const fromProfile = await accountBoards(target.user).catch(() => [] as string[]);
@@ -237,8 +240,9 @@ const LOOK_SCHEMA = {
           body: { type: "boolean" },
           text: { type: "boolean" },
           child: { type: "boolean" },
+          editorial: { type: "boolean" },
         },
-        required: ["n", "model", "body", "text", "child"],
+        required: ["n", "model", "body", "text", "child", "editorial"],
       },
     },
   },
@@ -247,12 +251,13 @@ const LOOK_SCHEMA = {
 
 function lookInstruction(count: number): string {
   return [
-    `${count} numbered pictures are attached, in order (1 to ${count}). A fashion studio wants to know which can serve as references for background, pose and light. Judge every picture on its own and answer four yes/no questions for each.`,
-    "model: true only when it is a real photograph in which one or two adult fashion models are the subject. False for empty rooms, shops, buildings, objects, food, products on their own, flat lays, illustrations, screenshots, collages and split frames.",
+    `${count} numbered pictures are attached, in order (1 to ${count}). A fashion studio wants to know which can serve as references for background, pose and light. Judge every picture on its own and answer five yes/no questions for each.`,
+    "model: true only when it is a real photograph in which exactly one adult fashion model is the subject. False when two or more people share the frame, and for empty rooms, shops, buildings, objects, food, products on their own, flat lays, illustrations, screenshots, collages and split frames.",
     "body: true only when most of the model's body is in view (at least from the knees or the waist up to the head). False for close-ups of a face, eyes, hands, feet or a detail of a garment.",
     "text: true when any words, prices, percentages, logos or graphic shapes are printed over the picture, anywhere. A sign that is physically part of the scene does not count.",
     "child: true when a person in the picture looks under 16.",
-    "Return ONLY a JSON object: { pictures: [ { n, model, body, text, child }, ... ] } with one entry per picture.",
+    "editorial: true only when it looks like a professionally made fashion editorial or campaign photograph: the model is posed on purpose, the light and the composition are considered, and the place was chosen for the picture. False for candid street snapshots, paparazzi, red-carpet and event photos, selfies and mirror photos, phone snapshots, influencer outfit posts, and catalogue cut-outs on a blank white background.",
+    "Return ONLY a JSON object: { pictures: [ { n, model, body, text, child, editorial }, ... ] } with one entry per picture.",
   ].join("\n\n");
 }
 
@@ -274,10 +279,18 @@ export async function checkPins(env: Env, batch = 12): Promise<number> {
     const answer = JSON.parse(
       await askVision(env, lookInstruction(photos.length), photos, LOOK_SCHEMA),
     ) as {
-      pictures?: { n: number; model: boolean; body: boolean; text: boolean; child: boolean }[];
+      pictures?: {
+        n: number;
+        model: boolean;
+        body: boolean;
+        text: boolean;
+        child: boolean;
+        editorial: boolean;
+      }[];
     };
     for (const p of answer.pictures ?? [])
-      if (p.model && p.body && !p.text && !p.child && order[p.n - 1]) good.add(order[p.n - 1]);
+      if (p.model && p.body && p.editorial && !p.text && !p.child && order[p.n - 1])
+        good.add(order[p.n - 1]);
   }
   // A picture that could not be fetched or was not answered for is left out, not asked again.
   for (const r of rows)

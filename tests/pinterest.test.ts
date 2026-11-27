@@ -85,7 +85,7 @@ describe("Pinterest pictures", () => {
         note: "Wide trousers",
         board: "",
         boardUrl: "",
-        twin: "pin|1",
+        twin: "https://i.pinimg.com/736x/dc/59/c7/dc59c78056607f0250deb7611d387731.jpg",
       },
     ]);
   });
@@ -106,17 +106,15 @@ describe("the Pinterest library", () => {
     },
   });
 
-  it("marks the same picture posted again with other text as a twin", () => {
+  it("knows one picture pinned twice by its file, not by its pin", () => {
     const pins = readPins([
       raw("1", "aa59c78056607f0250deb7611d387731", "#373737"),
       raw("2", "bb59c78056607f0250deb7611d387731", "#373737"),
-      raw("3", "cc59c78056607f0250deb7611d387731", "#bdb7ae"),
     ]);
-    expect(pins.map((p) => p.twin)).toEqual([
-      "/shop/new-in-woman/|#373737|236x354",
-      "/shop/new-in-woman/|#373737|236x354",
-      "/shop/new-in-woman/|#bdb7ae|236x354",
-    ]);
+    expect(pins[0].twin).toBe(
+      "https://i.pinimg.com/736x/dc/59/c7/aa59c78056607f0250deb7611d387731.jpg",
+    );
+    expect(pins[0].twin).not.toBe(pins[1].twin);
     expect(pins[0].boardUrl).toBe("/shop/new-in-woman/");
   });
 
