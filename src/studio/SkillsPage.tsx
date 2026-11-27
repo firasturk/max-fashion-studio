@@ -1,12 +1,14 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { post } from "@/api";
+import { get, post } from "@/api";
+import type { ReadySkill } from "./ReadySkills";
 import type { SkillInfo } from "@shared/types";
 
 const SkillDialog = lazy(() => import("./SkillDialog"));
 const PinterestDialog = lazy(() => import("./PinterestDialog"));
 const ReferenceLibrary = lazy(() => import("./ReferenceLibrary"));
 const PinLibrary = lazy(() => import("./PinLibrary"));
+const ReadySkills = lazy(() => import("./ReadySkills"));
 
 /** The skill library: what each skill shoots and how it poses. One skill drives a whole folder. */
 export default function SkillsPage({
@@ -23,7 +25,14 @@ export default function SkillsPage({
     skill: null,
   });
   const [pinterest, setPinterest] = useState(false);
-  const [tab, setTab] = useState<"skills" | "library">("skills");
+  const [tab, setTab] = useState<"skills" | "ready" | "library">("skills");
+  const [ready, setReady] = useState<ReadySkill[]>([]);
+  // Skills the studio prepared in the background; looked for again each time the tab is opened.
+  useEffect(() => {
+    get<{ items: ReadySkill[] }>("/api/studio/ready")
+      .then((r) => setReady(r.items))
+      .catch(() => {});
+  }, [tab]);
   const [waiting, setWaiting] = useState<number | null>(null);
   /** The skill whose reference photos are open, and whether Pinterest is adding to it. */
   const [photos, setPhotos] = useState<SkillInfo | null>(null);
@@ -72,17 +81,31 @@ export default function SkillsPage({
           <button aria-pressed={tab === "skills"} onClick={() => setTab("skills")}>
             Skills <span className="nx-mono">{skills.length}</span>
           </button>
+          <button aria-pressed={tab === "ready"} onClick={() => setTab("ready")}>
+            Ready to approve{" "}
+            <span className={`nx-mono ${ready.length ? "nx-hot" : ""}`}>{ready.length}</span>
+          </button>
           <button aria-pressed={tab === "library"} onClick={() => setTab("library")}>
             Pinterest library {waiting !== null && <span className="nx-mono">{waiting}</span>}
           </button>
         </div>
-        {tab === "library" && (
-          <span className="nx-muted">
-            Tick the pictures you like, then make a skill from them or add them to one.
-          </span>
-        )}
+        <span className="nx-muted">
+          {tab === "library"
+            ? "Tick the pictures you like, then make a skill from them or add them to one."
+            : tab === "ready"
+              ? "Complete skills prepared for you from Pinterest. Approve to switch one on."
+              : ""}
+        </span>
       </div>
-      {tab === "library" ? (
+      {tab === "ready" ? (
+        <Suspense fallback={null}>
+          <ReadySkills
+            items={ready}
+            onChanged={setReady}
+            onApproved={(list, id) => onSaved(list, id)}
+          />
+        </Suspense>
+      ) : tab === "library" ? (
         <Suspense fallback={null}>
           <PinLibrary
             admin={admin}

@@ -15,6 +15,7 @@ interface Library {
   total: number;
   accounts: { account: string; n: number }[];
   boards: { board: string; n: number }[];
+  checking: number;
   sources: string[];
   limit: number;
 }
@@ -66,7 +67,11 @@ export default function PinLibrary({
     try {
       const r = await post<{ added: number }>("/api/studio/library/refresh");
       await load();
-      toast.success(r.added ? `${r.added} new pictures` : "No new pictures since the last look");
+      toast.success(
+        r.added
+          ? `${r.added} new pictures gathered. They appear once they are checked.`
+          : "No new pictures since the last look",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not reach Pinterest.");
     } finally {
@@ -78,10 +83,19 @@ export default function PinLibrary({
   useEffect(() => {
     void load()
       .then((r) => {
-        if (!r.total && !r.accounts.length && r.sources.length && !account) void gather();
+        if (!r.total && !r.checking && !r.accounts.length && r.sources.length && !account)
+          void gather();
       })
       .catch(() =>
-        setLib({ pins: [], total: 0, accounts: [], boards: [], sources: [], limit: 24 }),
+        setLib({
+          pins: [],
+          total: 0,
+          accounts: [],
+          boards: [],
+          checking: 0,
+          sources: [],
+          limit: 24,
+        }),
       );
   }, [load, gather, account]);
 
@@ -206,6 +220,9 @@ export default function PinLibrary({
           >
             {busy === "gather" ? "Gathering…" : "Get new pictures"}
           </button>
+          {lib.checking > 0 && lib.pins.length > 0 && (
+            <span className="nx-chip nx-warn">{lib.checking} more being checked</span>
+          )}
           {admin && (
             <button
               className="nx-btn nx-sm nx-quiet"
@@ -264,10 +281,18 @@ export default function PinLibrary({
         </>
       ) : (
         <div className="nx-empty">
-          <b>{busy === "gather" ? "Gathering pictures from Pinterest…" : "No pictures waiting"}</b>
+          <b>
+            {busy === "gather"
+              ? "Gathering pictures from Pinterest…"
+              : lib.checking
+                ? "Checking the pictures…"
+                : "No pictures waiting"}
+          </b>
           {busy === "gather"
             ? "This takes a few seconds."
-            : "Use Get new pictures, or add accounts you like under Accounts to watch."}
+            : lib.checking
+              ? `${lib.checking} pictures are being looked at. Only real model photographs are kept; they appear here over the next minutes.`
+              : "Use Get new pictures, or add accounts you like under Accounts to watch."}
         </div>
       )}
       {chosen.length > 0 && !sheet && (

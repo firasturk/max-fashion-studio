@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { PIN_LIMIT, pinterestPhotos, pinterestPins, type PinPhoto } from "./pinterest";
 import {
+  approveReady,
+  dismissReady,
+  listReady,
   librarySources,
   listLibrary,
   markPins,
@@ -870,6 +873,23 @@ studioRoutes.post("/library/sources", async (c) => {
 studioRoutes.post("/library/refresh", async (c) =>
   c.json({ added: await refreshLibrary(c.env, true) }),
 );
+
+/* Ready skills: complete skills the studio prepared; a person switches them on or throws them away. */
+studioRoutes.get("/ready", async (c) => c.json({ items: await listReady(c.env) }));
+
+studioRoutes.post("/ready/approve", async (c) => {
+  const d = await body(
+    c,
+    z.object({ id: z.string().min(1), title: z.string().trim().min(2).max(60).optional() }),
+  );
+  const id = await approveReady(c.env, d.id, d.title);
+  return c.json({ id, skills: await listSkills(c.env, c.get("user").id) });
+});
+
+studioRoutes.post("/ready/dismiss", async (c) => {
+  await dismissReady(c.env, (await body(c, z.object({ id: z.string().min(1) }))).id);
+  return c.json({ ok: true });
+});
 
 studioRoutes.post("/library/hide", async (c) => {
   const { pins } = await body(

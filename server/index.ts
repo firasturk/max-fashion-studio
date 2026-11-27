@@ -16,7 +16,7 @@ import {
 import { LEARN_LAST_RUN, learnDue } from "./memory";
 import { driveCallback, ensureDriveApi, syncDrive } from "./drive";
 import { advanceClips, videoCallback } from "./video";
-import { refreshLibrary } from "./library";
+import { libraryWork } from "./library";
 import { logEvent, pruneEvents } from "./events";
 import {
   DEV_HOOK_TOKEN_SETTING,
@@ -221,8 +221,8 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(ensureDriveApi(env).catch((e) => console.error("[drive]", errorMessage(e))));
-    // The Pinterest library: new pictures from the watched accounts, a few times a day.
-    ctx.waitUntil(refreshLibrary(env).catch((e) => console.error("[library]", errorMessage(e))));
+    // The Pinterest library: gather, look at new pictures, prepare skills from the good ones.
+    ctx.waitUntil(libraryWork(env).catch((e) => console.error("[library]", errorMessage(e))));
     ctx.waitUntil(advanceClips(env, 8).catch((e) => console.error("[video]", errorMessage(e))));
     ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
     ctx.waitUntil(

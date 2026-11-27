@@ -5,9 +5,10 @@
  */
 import type { Env } from "./env";
 import { errorMessage, StudioError } from "./errors";
-import { all, first, now, run } from "./db";
+import { all, first, now, run, uuid } from "./db";
 import { getSetting, setSetting } from "./settings";
-import { decodeEntities, pinterestPins } from "./pinterest";
+import { decodeEntities, downloadPins, pinterestPins } from "./pinterest";
+import { askVision, buildSkillFromReferences } from "./skillbuilder";
 import { STARTER_SOURCES, isShopBoard, parsePinterestLink, type Pin } from "@shared/pinterest";
 
 const SOURCES_SETTING = "pinterest_sources";
@@ -140,8 +141,10 @@ export async function listLibrary(
   total: number;
   accounts: { account: string; n: number }[];
   boards: { board: string; n: number }[];
+  /** Pictures gathered but not looked at yet; they appear once they pass. */
+  checking: number;
 }> {
-  const where = ["state = 'new'"];
+  const where = ["state = 'new'", "usable = 1"];
   const args: string[] = [];
   if (account) {
     where.push("account = ?");
@@ -165,16 +168,20 @@ export async function listLibrary(
   );
   const accounts = await all<{ account: string; n: number }>(
     env.DB,
-    "SELECT account, COUNT(*) AS n FROM pin_library WHERE state = 'new' GROUP BY account ORDER BY n DESC",
+    "SELECT account, COUNT(*) AS n FROM pin_library WHERE state = 'new' AND usable = 1 GROUP BY account ORDER BY n DESC",
   );
   const boards = account
     ? await all<{ board: string; n: number }>(
         env.DB,
-        "SELECT board, COUNT(*) AS n FROM pin_library WHERE state = 'new' AND account = ? GROUP BY board ORDER BY n DESC",
+        "SELECT board, COUNT(*) AS n FROM pin_library WHERE state = 'new' AND usable = 1 AND account = ? GROUP BY board ORDER BY n DESC",
         account,
       )
     : [];
-  return { pins, total: total?.n ?? 0, accounts, boards };
+  const checking = await first<{ n: number }>(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM pin_library WHERE state = 'new' AND usable IS NULL",
+  );
+  return { pins, total: total?.n ?? 0, accounts, boards, checking: checking?.n ?? 0 };
 }
 
 /** Takes pictures off the library: hidden by a person, or used in a skill. */
@@ -188,4 +195,296 @@ export async function markPins(env: Env, ids: string[], state: "hidden" | "used"
       ...group,
     );
   }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Background work: every gathered picture is looked at once, and complete skills are prepared
+   from the good ones so that approving one is instant.
+   --------------------------------------------------------------------------------------------- */
+
+const BUSY_SETTING = "library_busy";
+/** How many prepared skills may wait for a decision at once. */
+const READY_LIMIT = 8;
+const DRAFT_MIN = 6;
+const DRAFT_MAX = 16;
+
+const LOOK_SCHEMA = {
+  type: "object",
+  properties: {
+    pictures: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          n: { type: "integer" },
+          model: { type: "boolean" },
+          body: { type: "boolean" },
+          text: { type: "boolean" },
+          child: { type: "boolean" },
+        },
+        required: ["n", "model", "body", "text", "child"],
+      },
+    },
+  },
+  required: ["pictures"],
+};
+
+function lookInstruction(count: number): string {
+  return [
+    `${count} numbered pictures are attached, in order (1 to ${count}). A fashion studio wants to know which can serve as references for background, pose and light. Judge every picture on its own and answer four yes/no questions for each.`,
+    "model: true only when it is a real photograph in which one or two adult fashion models are the subject. False for empty rooms, shops, buildings, objects, food, products on their own, flat lays, illustrations, screenshots, collages and split frames.",
+    "body: true only when most of the model's body is in view (at least from the knees or the waist up to the head). False for close-ups of a face, eyes, hands, feet or a detail of a garment.",
+    "text: true when any words, prices, percentages, logos or graphic shapes are printed over the picture, anywhere. A sign that is physically part of the scene does not count.",
+    "child: true when a person in the picture looks under 16.",
+    "Return ONLY a JSON object: { pictures: [ { n, model, body, text, child }, ... ] } with one entry per picture.",
+  ].join("\n\n");
+}
+
+/** Looks at the next few pictures nobody has checked yet. Returns how many it looked at. */
+export async function checkPins(env: Env, batch = 12): Promise<number> {
+  const rows = await all<{ id: string; thumb: string }>(
+    env.DB,
+    "SELECT id, thumb FROM pin_library WHERE state = 'new' AND usable IS NULL ORDER BY seen DESC, id DESC LIMIT ?",
+    batch,
+  );
+  if (!rows.length) return 0;
+  const photos = await downloadPins(
+    rows.map((r) => ({ id: r.id, image: r.thumb })),
+    "236x",
+  ).catch(() => []);
+  const order = photos.map((ph) => /pinterest-(\d+)\./.exec(ph.name)?.[1] ?? "");
+  const good = new Set<string>();
+  if (photos.length) {
+    const answer = JSON.parse(
+      await askVision(env, lookInstruction(photos.length), photos, LOOK_SCHEMA),
+    ) as {
+      pictures?: { n: number; model: boolean; body: boolean; text: boolean; child: boolean }[];
+    };
+    for (const p of answer.pictures ?? [])
+      if (p.model && p.body && !p.text && !p.child && order[p.n - 1]) good.add(order[p.n - 1]);
+  }
+  // A picture that could not be fetched or was not answered for is left out, not asked again.
+  for (const r of rows)
+    await run(
+      env.DB,
+      "UPDATE pin_library SET usable = ? WHERE id = ?",
+      good.has(r.id) ? 1 : 0,
+      r.id,
+    );
+  return rows.length;
+}
+
+const NAME_SCHEMA = {
+  type: "object",
+  properties: {
+    keep: { type: "array", items: { type: "integer" } },
+    name: { type: "string" },
+    tagline: { type: "string" },
+  },
+  required: ["keep", "name", "tagline"],
+};
+
+function nameInstruction(count: number): string {
+  return [
+    `${count} numbered fashion photographs are attached, in order (1 to ${count}). They will become the reference photos of one "skill": a look a studio can shoot again and again.`,
+    "keep: the numbers of the photographs that belong together as one look (the same kind of place, light and mood). Leave out the odd ones. Never keep two photographs that are the same picture.",
+    "name: 2 to 4 words in plain catalogue English for that look, the way a stylist would file it (for example 'Quiet tailoring', 'Winter street', 'Sunlit resort'). No brand names, no years.",
+    "tagline: 3 to 6 words naming the place and the light, separated by commas or a middle dot (for example 'Stone courtyards · overcast light').",
+    "Return ONLY a JSON object with keys keep, name and tagline.",
+  ].join("\n\n");
+}
+
+/**
+ * Prepares one complete skill from a board that has enough good pictures: chooses the ones that
+ * belong together, names the look, stores the photos and writes the skill's text from them. The
+ * result waits as a ready skill; approving it only switches it on.
+ */
+export async function prepareSkill(env: Env): Promise<string | null> {
+  const waiting = await first<{ n: number }>(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM skill_drafts WHERE state = 'waiting'",
+  );
+  if ((waiting?.n ?? 0) >= READY_LIMIT) return null;
+  const group = await first<{ account: string; board: string }>(
+    env.DB,
+    `SELECT account, board FROM pin_library WHERE state = 'new' AND usable = 1
+     GROUP BY account, board HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC LIMIT 1`,
+    DRAFT_MIN + 2,
+  );
+  if (!group) return null;
+  const pins = await all<{ id: string; thumb: string; image: string }>(
+    env.DB,
+    "SELECT id, thumb, image FROM pin_library WHERE state = 'new' AND usable = 1 AND account = ? AND board = ? ORDER BY seen DESC, id DESC LIMIT ?",
+    group.account,
+    group.board,
+    DRAFT_MAX,
+  );
+  // Whatever happens next, these pictures have had their turn.
+  await markPins(
+    env,
+    pins.map((p) => p.id),
+    "used",
+  );
+  const thumbs = await downloadPins(
+    pins.map((p) => ({ id: p.id, image: p.thumb })),
+    "236x",
+  );
+  const order = thumbs.map((ph) => /pinterest-(\d+)\./.exec(ph.name)?.[1] ?? "");
+  const named = JSON.parse(
+    await askVision(env, nameInstruction(thumbs.length), thumbs, NAME_SCHEMA),
+  ) as { keep?: number[]; name?: string; tagline?: string };
+  const kept = [...new Set(named.keep ?? [])]
+    .map((n) => pins.find((p) => p.id === order[n - 1]))
+    .filter((p): p is (typeof pins)[number] => !!p);
+  if (kept.length < DRAFT_MIN) return null;
+  const title = (named.name ?? "").trim().slice(0, 40) || group.board.slice(0, 40);
+  const taken =
+    (await first(env.DB, "SELECT id FROM skills WHERE lower(title) = lower(?)", title)) ||
+    (await first(
+      env.DB,
+      "SELECT id FROM skill_drafts WHERE lower(title) = lower(?) AND state = 'waiting'",
+      title,
+    ));
+  const base =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 30) || "look";
+  const id = `${base}-${uuid().slice(0, 4)}`;
+  const photos = await downloadPins(kept);
+  const built = await buildSkillFromReferences(
+    env,
+    title,
+    photos.slice(0, 10).map((p) => ({ bytes: p.bytes, mime: p.mime })),
+  );
+  const t = now();
+  for (const [i, p] of photos.entries()) {
+    const ref = uuid();
+    const key = `refs/${id}/${ref}`;
+    await env.BUCKET.put(key, p.bytes, { httpMetadata: { contentType: p.mime } });
+    await run(
+      env.DB,
+      "INSERT INTO refs (id, skill, key, name, framing, notes, created) VALUES (?, ?, ?, ?, NULL, NULL, ?)",
+      ref,
+      id,
+      key,
+      p.name,
+      t + i,
+    );
+  }
+  await run(
+    env.DB,
+    `INSERT INTO skill_drafts (id, origin, title, caption, description, goal, library, photos, state, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)`,
+    id,
+    `${group.account} · ${group.board}`.slice(0, 120),
+    taken ? `${title} ${photos.length}` : title,
+    (named.tagline ?? "").trim().slice(0, 80),
+    built.description,
+    built.goal,
+    built.library,
+    photos.length,
+    t,
+    t,
+  );
+  console.log("[library] ready skill:", title, "with", photos.length, "photos from", group.account);
+  return id;
+}
+
+/**
+ * One turn of background work, started by the schedule every minute: gather when it is time,
+ * look at a few unchecked pictures, and prepare a skill when a board has enough good ones. Only
+ * one turn runs at a time.
+ */
+export async function libraryWork(env: Env): Promise<void> {
+  const busy = Number((await getSetting(env, BUSY_SETTING)) ?? 0);
+  if (now() - busy < 4 * 60_000) return;
+  await setSetting(env, BUSY_SETTING, String(now()));
+  try {
+    await refreshLibrary(env);
+    const looked = (await checkPins(env, 16)) + (await checkPins(env, 16));
+    // Skills are prepared once the pictures on the table have been looked at.
+    if (!looked) await prepareSkill(env);
+  } finally {
+    await setSetting(env, BUSY_SETTING, "0");
+  }
+}
+
+export interface ReadySkill {
+  id: string;
+  origin: string;
+  title: string;
+  caption: string;
+  description: string;
+  photos: string[];
+}
+
+export async function listReady(env: Env): Promise<ReadySkill[]> {
+  const rows = await all<Omit<ReadySkill, "photos">>(
+    env.DB,
+    "SELECT id, origin, title, caption, description FROM skill_drafts WHERE state = 'waiting' ORDER BY created DESC LIMIT 20",
+  );
+  const out: ReadySkill[] = [];
+  for (const r of rows) {
+    const refs = await all<{ id: string }>(
+      env.DB,
+      "SELECT id FROM refs WHERE skill = ? ORDER BY created",
+      r.id,
+    );
+    out.push({ ...r, photos: refs.map((x) => x.id) });
+  }
+  return out;
+}
+
+/** Switches a prepared skill on. Its photos and text are already in place, so this is instant. */
+export async function approveReady(env: Env, id: string, title?: string): Promise<string> {
+  const d = await first<{
+    id: string;
+    title: string;
+    caption: string;
+    description: string;
+    goal: string;
+    library: string;
+  }>(env.DB, "SELECT * FROM skill_drafts WHERE id = ? AND state = 'waiting'", id);
+  if (!d) throw new StudioError("That skill is no longer waiting.", 404);
+  const t = now();
+  await run(
+    env.DB,
+    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?)`,
+    d.id,
+    title?.trim() || d.title,
+    d.caption,
+    d.description,
+    d.goal,
+    d.library,
+    t,
+    t,
+  );
+  await run(env.DB, "UPDATE skill_drafts SET state = 'approved', updated = ? WHERE id = ?", t, id);
+  return d.id;
+}
+
+/** Throws a prepared skill away, with the photos stored for it. */
+export async function dismissReady(env: Env, id: string): Promise<void> {
+  const d = await first(
+    env.DB,
+    "SELECT id FROM skill_drafts WHERE id = ? AND state = 'waiting'",
+    id,
+  );
+  if (!d) return;
+  const refs = await all<{ id: string; key: string }>(
+    env.DB,
+    "SELECT id, key FROM refs WHERE skill = ?",
+    id,
+  );
+  if (refs.length) await env.BUCKET.delete(refs.map((r) => r.key));
+  await run(env.DB, "DELETE FROM refs WHERE skill = ?", id);
+  await run(
+    env.DB,
+    "UPDATE skill_drafts SET state = 'dismissed', updated = ? WHERE id = ?",
+    now(),
+    id,
+  );
 }

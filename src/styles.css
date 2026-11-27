@@ -6630,3 +6630,67 @@ body {
   background: var(--pop);
   color: var(--pop-ink);
 }
+
+/* Ready skills */
+.nx-seg .nx-hot {
+  background: var(--blue);
+  color: #ffffff;
+  border-radius: 100px;
+  padding: 0 7px;
+}
+.nx-skill-shot {
+  width: 120px;
+  flex: none;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: var(--surface-3);
+  cursor: pointer;
+  overflow: hidden;
+}
+.nx-skill-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.6s var(--nx-glide);
+}
+.nx-skill:hover .nx-skill-shot img {
+  transform: scale(1.04);
+}
+.nx-skill.nx-ready {
+  outline: 1px solid var(--blue);
+  outline-offset: -1px;
+}
+.nx-strip.nx-mini {
+  display: flex;
+  gap: 4px;
+}
+.nx-strip.nx-mini img {
+  width: 40px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-3);
+}
+.nx-libgrid.nx-view {
+  max-height: 60vh;
+  overflow: auto;
+}
+.nx-libgrid.nx-view span {
+  border-radius: 14px;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  background: var(--surface-2);
+}
+.nx-libgrid.nx-view img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+@media (max-width: 900px) {
+  .nx-skill-shot {
+    width: 96px;
+  }
+}
