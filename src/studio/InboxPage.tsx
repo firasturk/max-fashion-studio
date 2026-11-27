@@ -24,6 +24,8 @@ interface Folder {
 }
 interface DriveState {
   account: string | null;
+  /** Whether the Drive API is switched on in the studio's Google Cloud project. */
+  api?: "on" | "off" | "unknown";
   inbox: { id: string; name: string } | null;
   lastSync: number;
   error: string | null;
@@ -149,14 +151,24 @@ export default function InboxPage({
           </div>
         ) : (
           <ol className="nx-steps nx-stagger">
-            <li>
-              <b>Switch on the Drive API</b>
-              <span>Open Cloud Shell in the studio's Google Cloud project and run this once.</span>
-              <div className="nx-code">
-                <code>{ENABLE_API}</code>
-                <Copy text={ENABLE_API} label="Command" />
-              </div>
-            </li>
+            {state.api === "on" ? (
+              <li className="nx-done">
+                <b>The Drive API is on</b>
+                <span>Nothing to do here: the studio checked it.</span>
+              </li>
+            ) : (
+              <li>
+                <b>Switch on the Drive API</b>
+                <span>
+                  The studio tried to switch it on by itself and was not allowed to. Open Cloud
+                  Shell in the studio's Google Cloud project and run this once.
+                </span>
+                <div className="nx-code">
+                  <code>{ENABLE_API}</code>
+                  <Copy text={ENABLE_API} label="Command" />
+                </div>
+              </li>
+            )}
             <li>
               <b>Share the folder with the studio</b>
               <span>

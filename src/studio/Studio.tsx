@@ -68,6 +68,7 @@ const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
 const PipelinePage = lazyScreen(() => import("./PipelinePage"));
 const SkillsPage = lazyScreen(() => import("./SkillsPage"));
+const VideoPage = lazyScreen(() => import("./VideoPage"));
 const InboxPage = lazyScreen(() => import("./InboxPage"));
 const ReviewPage = lazyScreen(() => import("./ReviewPage"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
@@ -122,12 +123,22 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState<
-    "studio" | "running" | "delivered" | "skills" | "admin" | "chat" | "inbox" | "review"
+    "studio" | "running" | "delivered" | "skills" | "video" | "admin" | "chat" | "inbox" | "review"
   >("inbox");
   const [drive, setDrive] = useState<{ connected: boolean; lastSync: number; error: boolean } | null>(
     null,
   );
   const [inboxCount, setInboxCount] = useState(0);
+  const [video, setVideo] = useState({ connected: false, open: 0 });
+  // Coming back from the Higgsfield sign-in: land on the Video page and say how it went.
+  useEffect(() => {
+    const outcome = new URLSearchParams(window.location.search).get("video");
+    if (!outcome) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    setPage("video");
+    if (outcome === "connected") toast.success("Higgsfield connected. Clips can be rendered now.");
+    else toast.error("The Higgsfield sign-in did not complete. Try again.");
+  }, []);
   const [reviewCount, setReviewCount] = useState(0);
   // The numbers on the rail: images waiting for a decision and folders waiting in the inbox.
   useEffect(() => {
@@ -136,17 +147,23 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         review: number;
         inbox: number;
         drive?: { connected: boolean; lastSync: number; error: boolean };
+        video?: { connected: boolean; open: number };
       }>("/api/studio/counts")
         .then((c) => {
           setReviewCount(c.review);
           setInboxCount(c.inbox);
           setDrive(c.drive ?? null);
+          setVideo(c.video ?? { connected: false, open: 0 });
         })
         .catch(() => {});
     load();
     const t = window.setInterval(load, 60_000);
     return () => window.clearInterval(t);
   }, []);
+  const onVideoCount = useCallback(
+    (open: number, connected: boolean) => setVideo({ open, connected }),
+    [],
+  );
   /** The image the user opened last: what "this image" means in the chat. */
   const [lastTask, setLastTask] = useState<Task | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -762,8 +779,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "review" ? "active" : ""} onClick={() => setPage("review")}>
             <i>3</i>Review{reviewCount > 0 && <em className="hot">{reviewCount}</em>}
           </button>
-          <button disabled title="Clips from approved images, rendered by Kling. Coming next.">
-            <i>4</i>Video<em className="soon">Soon</em>
+          <button className={page === "video" ? "active" : ""} onClick={() => setPage("video")}>
+            <i>4</i>Video{video.open > 0 && <em>{video.open}</em>}
           </button>
           <button className={page === "delivered" ? "active" : ""} onClick={() => setPage("delivered")}>
             <i>5</i>Delivered<em>{batches.length - runningCount}</em>
@@ -815,10 +832,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
                   : "not connected"}
               </span>
             </button>
-            <button disabled>
-              <span className="rail-dot" />
+            <button onClick={() => setPage("video")}>
+              <span className={`rail-dot ${video.connected ? "on" : ""}`} />
               <b>Video · Kling</b>
-              <span>soon</span>
+              <span>{video.connected ? "connected" : "not connected"}</span>
             </button>
           </div>
           <div className="rail-user">
@@ -871,6 +888,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               skills={skills}
               onCount={setReviewCount}
               onOpenBatch={(id) => void openBatch(id)}
+              onVideo={() => setPage("video")}
+            />
+          </Suspense>
+        ) : page === "video" ? (
+          <Suspense fallback={null}>
+            <VideoPage
+              admin={user.role === "admin"}
+              onCount={onVideoCount}
+              onPick={() => setPage("review")}
             />
           </Suspense>
         ) : page === "inbox" ? (

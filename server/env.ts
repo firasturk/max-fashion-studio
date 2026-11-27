@@ -4,6 +4,8 @@ export interface Env {
   HIGGSFIELD_API_KEY?: string;
   HIGGSFIELD_MODEL: string;
   HIGGSFIELD_BASE_URL: string;
+  /** The studio's OAuth client id at Higgsfield's MCP server (video). Public, not a secret. */
+  HIGGSFIELD_CLIENT_ID?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
   FAL_KEY?: string;

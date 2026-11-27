@@ -14,7 +14,8 @@ import {
   runLearning,
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
-import { syncDrive } from "./drive";
+import { ensureDriveApi, syncDrive } from "./drive";
+import { advanceClips, videoCallback } from "./video";
 import { logEvent, pruneEvents } from "./events";
 import {
   DEV_HOOK_TOKEN_SETTING,
@@ -77,6 +78,19 @@ app.get("/api/public/object", async (c) => {
       "X-Content-Type-Options": "nosniff",
     },
   });
+});
+
+// Higgsfield sending the admin back after the video sign-in. The single-use state is the guard.
+app.get("/api/video/callback", async (c) => {
+  let outcome = "connected";
+  try {
+    if (c.req.query("error")) throw new StudioError("Sign-in was cancelled.");
+    await videoCallback(c.env, c.req.query("code") ?? "", c.req.query("state") ?? "");
+  } catch (e) {
+    console.error("[video] callback", errorMessage(e));
+    outcome = "failed";
+  }
+  return c.redirect(`/?video=${outcome}`);
 });
 
 // Engine webhook: no session, protected by the shared token. Payload is ignored; state is re-read from the engine.
@@ -192,6 +206,8 @@ export default {
     }
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(ensureDriveApi(env).catch((e) => console.error("[drive]", errorMessage(e))));
+    ctx.waitUntil(advanceClips(env, 8).catch((e) => console.error("[video]", errorMessage(e))));
     ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
     ctx.waitUntil(
       readPendingReferences(env).catch((e) => console.error("[refs]", errorMessage(e))),

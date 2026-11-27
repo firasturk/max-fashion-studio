@@ -1,5 +1,21 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import {
+  advanceClips,
+  approveClip,
+  clipFile,
+  deleteClip,
+  disconnectVideo,
+  listClips,
+  motionMemory,
+  queueClips,
+  redoClip,
+  submitClips,
+  videoConnectUrl,
+  videoConnected,
+  videoCredits,
+} from "./video";
+import { VIDEO_RATIOS, VIDEO_SECONDS } from "@shared/video";
 import type { Env } from "./env";
 import { insertEvents, logEvent } from "./events";
 import { batchForAssistant, chat, verifyAnthropicKey } from "./assistant";
@@ -1121,9 +1137,11 @@ const newBatch = z.object({ name: z.string().max(100).optional(), config: config
 
 /* Review across batches: every finished image of this user that still needs a decision. */
 studioRoutes.get("/review", async (c) => {
+  // Approved images are listed on request only: they are where clips are made from.
+  const approved = c.req.query("status") === "approved";
   const items = await all(
     c.env.DB,
-    "SELECT t.id, t.batch, t.source, t.status, t.qa, t.output, t.updated, s.name, b.name AS batch_name, COALESCE(s.skill, json_extract(b.config, '$.skill')) AS skill FROM tasks t JOIN sources s ON s.id = t.source JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.output IS NOT NULL AND t.status IN ('ready','review') ORDER BY b.created DESC, s.name, t.card LIMIT 400",
+    `SELECT t.id, t.batch, t.source, t.status, t.qa, t.output, t.updated, s.name, b.name AS batch_name, COALESCE(s.skill, json_extract(b.config, '$.skill')) AS skill FROM tasks t JOIN sources s ON s.id = t.source JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.output IS NOT NULL AND t.status IN (${approved ? "'approved'" : "'ready','review'"}) ORDER BY ${approved ? "t.updated DESC" : "b.created DESC, s.name, t.card"} LIMIT 400`,
     c.get("user").id,
   );
   return c.json({ items });
@@ -1145,8 +1163,92 @@ studioRoutes.get("/counts", async (c) => {
     review: review?.n ?? 0,
     inbox: inbox?.n ?? 0,
     drive: { connected: !!drive.inbox, lastSync: drive.lastSync, error: !!drive.error },
+    video: {
+      connected: await videoConnected(c.env),
+      open:
+        (
+          await first<{ n: number }>(
+            c.env.DB,
+            "SELECT COUNT(*) AS n FROM clips WHERE owner = ? AND status IN ('queued','rendering','ready')",
+            c.get("user").id,
+          )
+        )?.n ?? 0,
+    },
   });
 });
+
+/* Video: clips rendered from finished images by Kling, through the team's Higgsfield account. */
+studioRoutes.get("/video", async (c) => {
+  const user = c.get("user");
+  const connected = await videoConnected(c.env);
+  if (connected)
+    c.executionCtx.waitUntil(
+      advanceClips(c.env).catch((e) => console.error("[video] advance", e)),
+    );
+  return c.json({
+    connected,
+    credits: connected ? await videoCredits(c.env, c.req.query("fresh") === "1") : null,
+    clips: await listClips(c.env, user.id),
+    motions: await motionMemory(c.env),
+  });
+});
+
+studioRoutes.post("/video/connect", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can connect the video engine.", 403);
+  return c.json({ url: await videoConnectUrl(c.env) });
+});
+
+studioRoutes.delete("/video/connect", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can disconnect the video engine.", 403);
+  await disconnectVideo(c.env);
+  return c.json({ ok: true });
+});
+
+const clipRequest = z.object({
+  items: z.array(z.object({ batch: z.string().min(1), id: z.string().min(1) })).min(1).max(12),
+  seconds: z.number().refine((n) => (VIDEO_SECONDS as readonly number[]).includes(n)),
+  ratio: z.string().refine((r) => (VIDEO_RATIOS as readonly string[]).includes(r)),
+  motion: z.string().trim().min(3).max(400),
+});
+
+studioRoutes.post("/video/make", async (c) => {
+  const req = await body(c, clipRequest);
+  const made = await queueClips(c.env, c.get("user").id, req);
+  if (!made) throw new StudioError("None of these images can be turned into a clip.");
+  c.executionCtx.waitUntil(submitClips(c.env).catch((e) => console.error("[video] submit", e)));
+  return c.json({ ok: true, made });
+});
+
+const clipRef = z.object({ id: z.string().min(1) });
+
+studioRoutes.post("/video/approve", async (c) => {
+  await approveClip(c.env, c.get("user").id, (await body(c, clipRef)).id);
+  return c.json({ ok: true });
+});
+
+studioRoutes.post("/video/redo", async (c) => {
+  await redoClip(c.env, c.get("user").id, (await body(c, clipRef)).id);
+  c.executionCtx.waitUntil(submitClips(c.env).catch((e) => console.error("[video] submit", e)));
+  return c.json({ ok: true });
+});
+
+studioRoutes.delete("/video", async (c) => {
+  await deleteClip(c.env, c.get("user").id, c.req.query("id") ?? "");
+  return c.json({ ok: true });
+});
+
+studioRoutes.get("/video/file", async (c) =>
+  clipFile(
+    c.env,
+    c.get("user").id,
+    c.req.query("id") ?? "",
+    c.req.query("kind") === "poster" ? "poster" : "video",
+    c.req.header("range"),
+    c.req.query("download") === "1",
+  ),
+);
 
 /* Google Drive inbox: folders wait for an approval; nothing is generated before it. */
 studioRoutes.get("/drive", async (c) => {

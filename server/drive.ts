@@ -224,18 +224,71 @@ export async function connectInbox(env: Env, folderId: string): Promise<DriveInb
   return inbox;
 }
 
+const DRIVE_API_SETTING = "drive_api";
+export type DriveApiState = "on" | "off" | "unknown";
+
+/**
+ * Makes sure the Drive API is switched on in the studio's own Google Cloud project. It asks Drive
+ * first; when Drive says the API is off it tries to switch it on with the service account, which
+ * works when that account may manage services. If it may not, the Inbox shows the manual step.
+ */
+export async function ensureDriveApi(env: Env, force = false): Promise<DriveApiState> {
+  const creds = await resolveVertex(env);
+  if (!creds) return "unknown";
+  const saved = JSON.parse((await getSetting(env, DRIVE_API_SETTING)) || "{}") as {
+    state?: DriveApiState;
+    at?: number;
+    project?: string;
+  };
+  if (saved.project === creds.projectId) {
+    if (saved.state === "on") return "on";
+    if (!force && saved.at && now() - saved.at < 10 * 60_000) return saved.state ?? "unknown";
+  }
+  let state: DriveApiState = "unknown";
+  try {
+    const token = await vertexToken(creds, fetch, DRIVE_SCOPE);
+    const r = await fetch(`${API}/about?fields=kind`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    const text = r.ok ? "" : (await r.text()).slice(0, 300);
+    if (r.ok) state = "on";
+    else if (r.status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text)) {
+      state = "off";
+      const cloud = await vertexToken(creds);
+      const e = await fetch(
+        `https://serviceusage.googleapis.com/v1/projects/${encodeURIComponent(creds.projectId)}/services/drive.googleapis.com:enable`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${cloud}`, "Content-Type": "application/json" },
+          body: "{}",
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      console.log("[drive] switching the Drive API on:", e.status, e.ok ? "accepted" : (await e.text()).slice(0, 200));
+    } else console.log("[drive] api check", r.status, text);
+  } catch (e) {
+    console.log("[drive] api check failed", e instanceof Error ? e.message : e);
+  }
+  await setSetting(env, DRIVE_API_SETTING, JSON.stringify({ state, at: now(), project: creds.projectId }));
+  return state;
+}
+
 export async function driveStatus(env: Env): Promise<{
   account: string | null;
   inbox: DriveInbox | null;
   lastSync: number;
   error: string | null;
+  api: DriveApiState;
 }> {
   const creds = await resolveVertex(env);
+  const inbox = await driveInbox(env);
   return {
     account: creds?.clientEmail ?? null,
-    inbox: await driveInbox(env),
+    inbox,
     lastSync: Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0),
     error: (await getSetting(env, DRIVE_ERROR_SETTING)) || null,
+    api: inbox ? "on" : await ensureDriveApi(env).catch(() => "unknown" as const),
   };
 }
 

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { get, post } from "@/api";
 import type { SkillInfo } from "@shared/types";
+import VideoDialog from "./VideoDialog";
 
 interface Item {
   id: string;
   batch: string;
   source: string;
-  status: "ready" | "review";
+  status: "ready" | "review" | "approved";
   qa: string | null;
   output: string;
   name: string;
@@ -53,13 +54,19 @@ export default function ReviewPage({
   skills,
   onOpenBatch,
   onCount,
+  onVideo,
 }: {
   skills: SkillInfo[];
+  /** Opens the Video page: after clips were started, or to connect the video engine. */
+  onVideo: () => void;
   onOpenBatch: (id: string) => void;
   onCount: (n: number) => void;
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
-  const [filter, setFilter] = useState<"all" | "review" | "ready">("all");
+  const [filter, setFilter] = useState<"all" | "review" | "ready" | "approved">("all");
+  /** Approved images are fetched when their tab is first opened; null means not loaded. */
+  const [approved, setApproved] = useState<Item[] | null>(null);
+  const [video, setVideo] = useState<Item[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -76,10 +83,19 @@ export default function ReviewPage({
     }
   }, [onCount]);
   useEffect(() => void load(), [load]);
+  useEffect(() => {
+    if (filter !== "approved" || approved !== null) return;
+    get<{ items: Item[] }>("/api/studio/review?status=approved")
+      .then((r) => setApproved(r.items))
+      .catch(() => setApproved([]));
+  }, [filter, approved]);
 
   const shown = useMemo(
-    () => (items ?? []).filter((i) => filter === "all" || i.status === filter),
-    [items, filter],
+    () =>
+      filter === "approved"
+        ? (approved ?? [])
+        : (items ?? []).filter((i) => filter === "all" || i.status === filter),
+    [items, approved, filter],
   );
   const open = shown.find((i) => i.id === openId) ?? null;
   const count = (s: "ready" | "review") => (items ?? []).filter((i) => i.status === s).length;
@@ -92,6 +108,7 @@ export default function ReviewPage({
         onCount(next.length);
         return next;
       });
+      setApproved((list) => (list ? list.filter((i) => !ids.includes(i.id)) : list));
       setPicked((p) => new Set([...p].filter((id) => !ids.includes(id))));
     },
     [onCount],
@@ -127,6 +144,7 @@ export default function ReviewPage({
           setOpenId(rest.length ? rest[Math.min(k, rest.length - 1)].id : null);
         }
         drop(done);
+        if (done.length) setApproved(null);
         setBusy(false);
       }
     },
@@ -157,10 +175,12 @@ export default function ReviewPage({
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement).matches?.("input,textarea,select");
+      if (video) return void (e.key === "Escape" && setVideo(null));
       if (e.key === "Escape") return note !== null ? setNote(null) : setOpenId(null);
-      if (!open || typing) return;
+      if (!open || typing || e.metaKey || e.ctrlKey) return;
       const k = e.key.toLowerCase();
-      if (k === "a") void approve([open]);
+      if (k === "a" && open.status !== "approved") void approve([open]);
+      else if (k === "v") setVideo([open]);
       else if (k === "e") {
         e.preventDefault();
         setNote("");
@@ -169,7 +189,7 @@ export default function ReviewPage({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [open, note, approve, step]);
+  }, [open, note, video, approve, step]);
 
   const selected = shown.filter((i) => picked.has(i.id));
   return (
@@ -199,6 +219,7 @@ export default function ReviewPage({
               ["all", "To decide", (items ?? []).length],
               ["review", "Needs a look", count("review")],
               ["ready", "Passed QC", count("ready")],
+              ["approved", "Approved", approved ? approved.length : ""],
             ] as const
           ).map(([k, label, n]) => (
             <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
@@ -207,13 +228,15 @@ export default function ReviewPage({
           ))}
         </div>
         <span className="nx-muted nx-keys">
-          Open an image, then <kbd>A</kbd> approve <kbd>E</kbd> send back with a note
+          Open an image, then <kbd>A</kbd> approve <kbd>E</kbd> send back <kbd>V</kbd> video
         </span>
       </div>
-      {items === null ? null : !shown.length ? (
+      {items === null || (filter === "approved" && approved === null) ? null : !shown.length ? (
         <div className="nx-empty">
-          <b>Nothing waiting for you</b>
-          Finished images appear here as soon as a batch produces them.
+          <b>{filter === "approved" ? "No approved images yet" : "Nothing waiting for you"}</b>
+          {filter === "approved"
+            ? "Images you approve are kept here, ready to turn into clips."
+            : "Finished images appear here as soon as a batch produces them."}
         </div>
       ) : (
         <>
@@ -239,7 +262,9 @@ export default function ReviewPage({
                   {picked.has(i.id) ? "✓" : ""}
                 </button>
                 <span className="nx-state">
-                  {i.status === "ready" ? (
+                  {i.status === "approved" ? (
+                    <span className="nx-chip nx-ok">Approved</span>
+                  ) : i.status === "ready" ? (
                     <span className="nx-chip nx-ok">Passed QC</span>
                   ) : (
                     <span className="nx-chip nx-warn">Needs a look</span>
@@ -259,13 +284,21 @@ export default function ReviewPage({
           )}
         </>
       )}
-      {selected.length > 0 && !open && (
+      {selected.length > 0 && !open && !video && (
         <div className="nx-bulk">
           <span>
             <b>{selected.length}</b> selected
           </span>
-          <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve(selected)}>
-            Approve
+          {filter !== "approved" && (
+            <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve(selected)}>
+              Approve
+            </button>
+          )}
+          <button
+            className={`nx-btn ${filter === "approved" ? "nx-primary" : ""}`}
+            onClick={() => setVideo(selected)}
+          >
+            Make video
           </button>
           <button className="nx-btn" onClick={() => setPicked(new Set())}>
             Clear
@@ -303,7 +336,9 @@ export default function ReviewPage({
             </div>
             <div className="nx-body">
               <div className="nx-row">
-                {findings(open).length ? (
+                {open.status === "approved" ? (
+                  <span className="nx-chip nx-ok">Approved</span>
+                ) : findings(open).length ? (
                   findings(open).map((f) => (
                     <span className="nx-chip nx-warn" key={f}>
                       {f}
@@ -315,8 +350,16 @@ export default function ReviewPage({
               </div>
               {note === null ? (
                 <div className="nx-row">
-                  <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve([open])}>
-                    Approve <kbd>A</kbd>
+                  {open.status !== "approved" && (
+                    <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve([open])}>
+                      Approve <kbd>A</kbd>
+                    </button>
+                  )}
+                  <button
+                    className={`nx-btn ${open.status === "approved" ? "nx-primary" : ""}`}
+                    onClick={() => setVideo([open])}
+                  >
+                    Make video <kbd>V</kbd>
                   </button>
                   <button className="nx-btn" onClick={() => setNote("")}>
                     Send back with a note <kbd>E</kbd>
@@ -360,6 +403,20 @@ export default function ReviewPage({
             </div>
           </section>
         </div>
+      )}
+      {video && (
+        <VideoDialog
+          items={video}
+          skillTitle={title}
+          onClose={() => setVideo(null)}
+          onConnect={onVideo}
+          onStarted={() => {
+            setVideo(null);
+            setPicked(new Set());
+            setOpenId(null);
+            onVideo();
+          }}
+        />
       )}
     </div>
   );

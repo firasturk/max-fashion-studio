@@ -5682,3 +5682,145 @@ main.main-chat {
     transition: none;
   }
 }
+
+/* Video: clip cards and the Make video dialog. */
+.nx-sheet.nx-small {
+  max-width: 520px;
+}
+.nx-sheet.nx-small p {
+  margin: 0;
+  color: var(--ink-700);
+}
+.nx-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.nx-opts label,
+.nx-opt-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+  min-width: 0;
+}
+.nx-sheet select,
+.nx-sheet.nx-small textarea {
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink-900);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 9px 12px;
+  width: 100%;
+  min-width: 0;
+}
+.nx-sheet.nx-small textarea {
+  resize: vertical;
+}
+.nx-cost {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--ink-700);
+}
+.nx-cost b {
+  color: var(--ink-900);
+}
+.nx-center {
+  justify-content: center;
+  margin-top: 14px;
+}
+.nx-chip.nx-bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+a.nx-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.nx-clips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.nx-clip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.nx-frame {
+  position: relative;
+  aspect-ratio: 1;
+  background: #0b0b0c;
+  display: grid;
+  place-items: center;
+}
+.nx-frame[data-ratio="9:16"] {
+  aspect-ratio: 9 / 16;
+}
+.nx-frame[data-ratio="16:9"] {
+  aspect-ratio: 16 / 9;
+}
+.nx-frame video,
+.nx-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.nx-clip.nx-busy .nx-frame img {
+  opacity: 0.45;
+}
+.nx-dur {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  background: rgb(0 0 0 / 0.6);
+  color: #ffffff;
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.nx-spin {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / 0.25);
+  border-top-color: #ffffff;
+  animation: nx-turn 0.9s linear infinite;
+}
+@keyframes nx-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.nx-clip .nx-meta {
+  gap: 8px;
+}
+.nx-clip .nx-row {
+  flex-wrap: wrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-spin {
+    animation-duration: 3s;
+  }
+}
+.nx-steps li.nx-done b {
+  color: var(--success);
+}
