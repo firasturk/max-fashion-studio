@@ -6434,3 +6434,134 @@ body {
     width: 96px;
   }
 }
+
+/* New skill from Pinterest */
+.nx-sheet.nx-pins {
+  max-width: 860px;
+}
+.nx-sheet.nx-pins p {
+  margin: 0;
+  max-width: 72ch;
+}
+.nx-sheet .nx-code input,
+.nx-input {
+  font: inherit;
+  color: var(--ink-900);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 9px 14px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+.nx-pingrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 2px;
+}
+.nx-pingrid button {
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-2);
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity 0.3s var(--nx-ease),
+    border-color 0.3s var(--nx-ease),
+    transform 0.3s var(--nx-spring);
+}
+.nx-pingrid button:hover {
+  opacity: 0.85;
+}
+.nx-pingrid button.nx-on {
+  opacity: 1;
+  border-color: var(--blue);
+}
+.nx-pingrid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.nx-pingrid i {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  background: rgb(29 29 31 / 0.35);
+  color: #ffffff;
+  font-style: normal;
+  font-size: 11px;
+  display: grid;
+  place-items: center;
+}
+.nx-pingrid button.nx-on i {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+/* Dialogs: never taller than the screen, never wider than their box, actions always in reach. */
+[role="dialog"].connection-dialog {
+  border-radius: 20px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+[role="dialog"].skill-dialog {
+  max-width: min(720px, calc(100vw - 32px)) !important;
+}
+[role="dialog"].connection-dialog .primary,
+[role="dialog"].connection-dialog .secondary {
+  border-radius: 100px;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+.skill-dialog .two-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.skill-dialog .text-input,
+.skill-dialog .prompt {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+.skill-dialog .field-row {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.skill-dialog .footer-actions {
+  position: sticky;
+  bottom: -24px;
+  margin: 0 -24px -24px;
+  padding: 14px 24px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  z-index: 1;
+}
+@media (max-width: 560px) {
+  .skill-dialog .two-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.nx-library .mood-strip {
+  max-height: 52vh;
+  overflow: auto;
+}
+.nx-library .field-label {
+  margin: 0;
+}

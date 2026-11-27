@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { PIN_LIMIT, pinterestPhotos, pinterestPins } from "./pinterest";
 import { thumbResponse, thumbWidth } from "./thumbs";
 import {
   advanceClips,
@@ -719,13 +720,15 @@ const skillBody = z.object({
   auto: z.boolean().optional(),
 });
 
+/** What a new skill says until its text is written from its reference photos. */
+const startingGoal = (title: string) =>
+  `Goal: write ONE prompt for "${title}". The reference photos in this skill's library are the creative source: build the scene, pose and stance, light and camera angle from the attached reference as a sibling of it. The garment, footwear and accessories stay exactly as supplied; the output keeps the upload's framing.`;
+
 studioRoutes.post("/skills", async (c) => {
   const d = await body(c, skillBody);
   if (d.id === "zaid")
     throw new StudioError("The creative direction is edited from its own workflow.");
-  const goal =
-    d.goal ||
-    `Goal: write ONE prompt for "${d.title}". The reference photos in this skill's library are the creative source: build the scene, pose and stance, light and camera angle from the attached reference as a sibling of it. The garment, footwear and accessories stay exactly as supplied; the output keeps the upload's framing.`;
+  const goal = d.goal || startingGoal(d.title);
   // A skill saved with its own text is manual; a name-only skill stays automatic.
   const auto = d.auto ?? !d.goal;
   const id =
@@ -760,12 +763,76 @@ studioRoutes.post("/skills", async (c) => {
  * stored and the skill stays automatic (the panel calls this after every library change);
  * without it the texts come back for review in the editor.
  */
+/* Pinterest: a public board or pin becomes a skill's reference library. */
+studioRoutes.post("/pinterest/preview", async (c) => {
+  const { link } = await body(c, z.object({ link: z.string().trim().min(8).max(500) }));
+  return c.json({ ...(await pinterestPins(link)), limit: PIN_LIMIT });
+});
+
+const pinterestBody = z.object({
+  link: z.string().trim().min(8).max(500),
+  pins: z
+    .array(z.string().regex(/^\d{6,24}$/))
+    .min(1)
+    .max(PIN_LIMIT),
+});
+
+/**
+ * A new skill from Pinterest, made the way New skill makes one: a name and a tagline first, then
+ * photos into its library, then its direction and scene library written from those photos.
+ */
+studioRoutes.post("/skills/pinterest", async (c) => {
+  const d = await body(
+    c,
+    pinterestBody.extend({
+      title: z.string().trim().min(2).max(60),
+      caption: z.string().trim().max(80).optional(),
+    }),
+  );
+  const user = c.get("user");
+  const photos = await pinterestPhotos(d.link, d.pins);
+  let id =
+    d.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 34) || `pinterest-${uuid().slice(0, 6)}`;
+  // An existing skill is never overwritten by a board with the same name.
+  if (id === "zaid" || (await first(c.env.DB, "SELECT id FROM skills WHERE id = ?", id)))
+    id = `${id}-${uuid().slice(0, 4)}`;
+  await run(
+    c.env.DB,
+    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
+     VALUES (?, ?, ?, '', ?, '', 0, 1, ?, ?)`,
+    id,
+    d.title,
+    d.caption ?? "",
+    startingGoal(d.title),
+    now(),
+    now(),
+  );
+  for (const p of photos) await addReference(c.env, id, p.bytes, p.mime, p.name);
+  // The same step the library runs after photos are added to an automatic skill.
+  let warning: string | null = null;
+  try {
+    await rebuildSkillFromLibrary(c.env, user.id, id, d.title);
+  } catch (e) {
+    warning = e instanceof StudioError ? e.message : "The skill text could not be written yet.";
+    console.error("[pinterest] build", errorMessage(e));
+  }
+  return c.json({ id, photos: photos.length, warning, skills: await listSkills(c.env, user.id) });
+});
+
 studioRoutes.post("/skills/:id/analyze", async (c) => {
   const id = c.req.param("id");
   const { title, save } = await body(
     c,
     z.object({ title: z.string().trim().min(2).max(60), save: z.boolean().optional() }),
   );
+  if (save) {
+    const built = await rebuildSkillFromLibrary(c.env, c.get("user").id, id, title);
+    return c.json({ ...built, skills: await listSkills(c.env, c.get("user").id) });
+  }
   const rows = await all<{ key: string }>(
     c.env.DB,
     "SELECT key FROM refs WHERE skill = ? ORDER BY created LIMIT 10",
@@ -780,27 +847,7 @@ studioRoutes.post("/skills/:id/analyze", async (c) => {
         mime: obj.httpMetadata?.contentType || "image/jpeg",
       });
   }
-  const built = await buildSkillFromReferences(c.env, title, images);
-  if (save) {
-    const current = (await listSkills(c.env, c.get("user").id)).find((s) => s.id === id);
-    await run(
-      c.env.DB,
-      `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
-       VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET goal = excluded.goal, library = excluded.library, description = excluded.description,
-         hidden = 0, auto = 1, updated = excluded.updated`,
-      id,
-      current?.title ?? title,
-      current?.caption ?? "",
-      built.description,
-      built.goal,
-      built.library,
-      now(),
-      now(),
-    );
-    return c.json({ ...built, skills: await listSkills(c.env, c.get("user").id) });
-  }
-  return c.json(built);
+  return c.json(await buildSkillFromReferences(c.env, title, images));
 });
 
 /** Built-in skills are hidden (and any edit of them dropped); custom ones are removed. Reference photos stay. */
@@ -853,6 +900,99 @@ studioRoutes.get("/references", async (c) => {
   return c.json({ references: items });
 });
 
+/**
+ * Stores one reference photo in a skill's library. Uploads and Pinterest both come through here.
+ * A pose photo is classified once (full, three-quarter, upper or lower body) so an upload only
+ * ever borrows a pose with the same framing; backgrounds and poses are read once as well (light,
+ * shadows, camera, standing spot; stance, hands, gaze) so every batch can tell the engine in words
+ * what the photo shows.
+ */
+async function addReference(
+  env: Env,
+  skill: string,
+  bytes: ArrayBuffer,
+  mime: string,
+  name: string,
+): Promise<string> {
+  const id = uuid();
+  const key = `refs/${skill}/${id}`;
+  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: mime } });
+  let framing: string | null = null;
+  let notes: string | null = null;
+  const image = { bytes, mime };
+  if (skill === NP_POSES) {
+    try {
+      framing = (await runFramingCheck(env, image)).framing;
+    } catch (e) {
+      console.error("[references] pose check failed", errorMessage(e));
+    }
+  }
+  if (skill === NP_POSES || skill === NP_BACKGROUNDS) {
+    try {
+      notes = (await runReferenceRead(env, image, skill === NP_POSES ? "pose" : "scene")) || null;
+    } catch (e) {
+      console.error("[references] read failed", errorMessage(e));
+    }
+  }
+  await run(
+    env.DB,
+    "INSERT INTO refs (id, skill, key, name, framing, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    id,
+    skill,
+    key,
+    name.slice(0, 120),
+    framing,
+    notes,
+    now(),
+  );
+  return id;
+}
+
+/** Rewrites an automatic skill's direction, library and description from its reference photos. */
+async function rebuildSkillFromLibrary(env: Env, userId: string, id: string, title: string) {
+  const rows = await all<{ key: string }>(
+    env.DB,
+    "SELECT key FROM refs WHERE skill = ? ORDER BY created LIMIT 10",
+    id,
+  );
+  const images = [];
+  for (const r of rows) {
+    const obj = await env.BUCKET.get(r.key);
+    if (obj)
+      images.push({
+        bytes: await obj.arrayBuffer(),
+        mime: obj.httpMetadata?.contentType || "image/jpeg",
+      });
+  }
+  const built = await buildSkillFromReferences(env, title, images);
+  const current = (await listSkills(env, userId)).find((s) => s.id === id);
+  await run(
+    env.DB,
+    `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET goal = excluded.goal, library = excluded.library, description = excluded.description,
+       hidden = 0, auto = 1, updated = excluded.updated`,
+    id,
+    current?.title ?? title,
+    current?.caption ?? "",
+    built.description,
+    built.goal,
+    built.library,
+    now(),
+    now(),
+  );
+  return built;
+}
+
+/** Pinterest pins into an existing skill's library, exactly as if they had been uploaded. */
+studioRoutes.post("/references/pinterest", async (c) => {
+  const d = await body(c, pinterestBody.extend({ skill: skillRef.shape.skill }));
+  const photos = await pinterestPhotos(d.link, d.pins);
+  const added: string[] = [];
+  for (const p of photos) added.push(await addReference(c.env, d.skill, p.bytes, p.mime, p.name));
+  return c.json({ ok: true, added });
+});
+
 studioRoutes.post("/references", async (c) => {
   const form = await c.req.formData();
   const { skill } = skillRef.parse({ skill: String(form.get("skill") ?? "") });
@@ -861,43 +1001,7 @@ studioRoutes.post("/references", async (c) => {
   const added: string[] = [];
   for (const raw of files.slice(0, 20)) {
     const f = checkImage(raw, MAX_REFERENCE_UPLOAD, "Reference");
-    const id = uuid();
-    const key = `refs/${skill}/${id}`;
-    const bytes = await f.arrayBuffer();
-    await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: f.type } });
-    // A pose photo is classified once (full, three-quarter, upper or lower body) so an upload only
-    // ever borrows a pose with the same framing.
-    // Backgrounds and poses are read once as well (light, shadows, camera, standing spot; stance,
-    // hands, gaze) so every batch can tell the engine in words what the photo shows.
-    let framing: string | null = null;
-    let notes: string | null = null;
-    const image = { bytes, mime: f.type };
-    if (skill === NP_POSES) {
-      try {
-        framing = (await runFramingCheck(c.env, image)).framing;
-      } catch (e) {
-        console.error("[references] pose check failed", errorMessage(e));
-      }
-    }
-    if (skill === NP_POSES || skill === NP_BACKGROUNDS) {
-      try {
-        notes =
-          (await runReferenceRead(c.env, image, skill === NP_POSES ? "pose" : "scene")) || null;
-      } catch (e) {
-        console.error("[references] read failed", errorMessage(e));
-      }
-    }
-    await run(
-      c.env.DB,
-      "INSERT INTO refs (id, skill, key, name, framing, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      id,
-      skill,
-      key,
-      f.name.slice(0, 120),
-      framing,
-      notes,
-      now(),
-    );
+    const id = await addReference(c.env, skill, await f.arrayBuffer(), f.type, f.name);
     added.push(id);
   }
   return c.json({ ok: true, added });
