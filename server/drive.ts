@@ -11,10 +11,12 @@ import { insertSource } from "./sources";
 import { DEFAULT_CONFIG, validateConfig, type Config } from "@shared/config";
 import { stemKey, isValidSourceName } from "@shared/naming";
 import {
+  classifyFolder,
   guessSkill,
   importName,
   isDeliveryName,
   learnRule,
+  pickProductPhotos,
   type DriveRules,
   type SkillGuess,
 } from "@shared/drive";
@@ -51,13 +53,18 @@ export interface DriveFolderRow {
   bytes: number;
   modified: number;
   thumbs: string;
-  state: "waiting" | "importing" | "imported" | "failed" | "skipped" | "gone";
+  /** "group" is a folder on the way down (a month, a day, a department); it is never shown. */
+  state: "waiting" | "importing" | "imported" | "failed" | "skipped" | "gone" | "group";
   batch: string | null;
   imported: number;
   skipped: number;
   error: string | null;
   seen: number;
   updated: number;
+  parent: string | null;
+  products: number;
+  walked: number;
+  scanned: number;
 }
 
 export interface ImportJob {
@@ -137,45 +144,6 @@ export async function listChildren(
   return out;
 }
 
-export interface Delivery {
-  id: string;
-  name: string;
-  path: string;
-}
-
-/**
- * Delivery folders under the inbox: date-named folders at the top, date-named folders one level
- * down inside a category folder ("Women / 28-10-2026-WW Denim-14"), and any other top folder
- * that is not a category.
- */
-export async function findDeliveries(
-  creds: DriveAuth,
-  rootId: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<Delivery[]> {
-  const top = (await listChildren(creds, [rootId], fetchImpl)).filter((f) => f.mimeType === FOLDER);
-  const out: Delivery[] = top
-    .filter((f) => isDeliveryName(f.name))
-    .map((f) => ({ id: f.id, name: f.name.trim(), path: "" }));
-  const others = top.filter((f) => !isDeliveryName(f.name));
-  if (others.length) {
-    const inner = (
-      await listChildren(
-        creds,
-        others.map((f) => f.id),
-        fetchImpl,
-      )
-    ).filter((f) => f.mimeType === FOLDER);
-    for (const o of others) {
-      const dated = inner.filter((f) => f.parents?.includes(o.id) && isDeliveryName(f.name));
-      if (dated.length)
-        out.push(...dated.map((f) => ({ id: f.id, name: f.name.trim(), path: o.name.trim() })));
-      else out.push({ id: o.id, name: o.name.trim(), path: "" });
-    }
-  }
-  return out;
-}
-
 export interface DeliveryPhoto extends DriveFile {
   /** Path inside the delivery, folders included: "170023817/170023817_01.jpg". */
   relative: string;
@@ -232,6 +200,10 @@ export async function connectInbox(env: Env, folderId: string): Promise<DriveInb
   if (f.mimeType !== FOLDER)
     throw new StudioError("That link is a file. Paste the link of a folder.");
   const inbox = { id: f.id, name: f.name };
+  const before = await driveInbox(env);
+  // Another folder: what was only waiting in the old one is forgotten; imported work stays.
+  if (before && before.id !== inbox.id)
+    await run(env.DB, "DELETE FROM drive_folders WHERE state IN ('waiting','group','gone')");
   await setSetting(env, DRIVE_INBOX_SETTING, JSON.stringify(inbox));
   await setSetting(env, DRIVE_SYNC_SETTING, "0");
   return inbox;
@@ -516,9 +488,190 @@ export async function driveStatus(env: Env): Promise<{
   };
 }
 
+/** Folder listings one check may ask Drive for; a big first read carries on in the next minute. */
+const WALK_CALLS = 24;
+/** Deliveries whose photos are counted in one check. */
+const SCANS_PER_SYNC = 8;
+/** A folder changed this recently may still be filling up, so it is looked into again. */
+const FRESH_MS = 3 * 24 * 3600 * 1000;
+const RECHECK_MS = 10 * 60 * 1000;
+
 /**
- * Looks at the inbox folder and records what is waiting. Folders already imported or skipped are
- * left alone; waiting ones are counted again, since photos may still be arriving.
+ * One pass down the inbox tree. `rows` is what was known before; the map that comes back is what
+ * is known now, and every change is also handed to `sql` to be written. `list` returns everything
+ * directly inside the given folders.
+ */
+export async function walkInbox(
+  rootId: string,
+  rows: DriveFolderRow[],
+  list: (parents: string[]) => Promise<DriveFile[]>,
+  sql: (text: string, ...params: unknown[]) => void,
+  flush: () => Promise<void> = async () => {},
+  maxCalls = WALK_CALLS,
+): Promise<Map<string, DriveFolderRow>> {
+  const started = now();
+  const known = new Map(rows.map((r) => [r.id, r]));
+  const childrenOf = (id: string) => [...known.values()].filter((r) => r.parent === id);
+
+  /** A folder that left Drive takes what was under it along; finished work is kept. */
+  const drop = (id: string) => {
+    const row = known.get(id);
+    if (!row) return;
+    for (const c of childrenOf(id)) drop(c.id);
+    if (row.state === "group") {
+      known.delete(id);
+      sql("DELETE FROM drive_folders WHERE id = ?", id);
+    } else if (row.state === "waiting") {
+      row.state = "gone";
+      sql("UPDATE drive_folders SET state = 'gone', updated = ? WHERE id = ?", now(), id);
+    }
+  };
+
+  /** Records the folders found directly inside one folder. */
+  const note = (parentId: string, path: string, folders: DriveFile[]) => {
+    const present = new Set(folders.map((f) => f.id));
+    for (const c of childrenOf(parentId)) if (!present.has(c.id)) drop(c.id);
+    for (const f of folders) {
+      const modified = Date.parse(f.modifiedTime ?? "") || 0;
+      const name = f.name.trim();
+      const row = known.get(f.id);
+      if (!row) {
+        const fresh: DriveFolderRow = {
+          id: f.id,
+          name,
+          path,
+          files: 0,
+          bytes: 0,
+          modified,
+          thumbs: "[]",
+          state: "group",
+          batch: null,
+          imported: 0,
+          skipped: 0,
+          error: null,
+          seen: now(),
+          updated: now(),
+          parent: parentId,
+          products: 0,
+          walked: 0,
+          scanned: 0,
+        };
+        known.set(f.id, fresh);
+        sql(
+          "INSERT OR IGNORE INTO drive_folders (id, name, path, modified, state, parent, seen, updated) VALUES (?, ?, ?, ?, 'group', ?, ?, ?)",
+          f.id,
+          name,
+          path,
+          modified,
+          parentId,
+          now(),
+          now(),
+        );
+        continue;
+      }
+      const changed = modified > row.modified;
+      const back = row.state === "gone";
+      if (!changed && !back && row.name === name && row.path === path && row.parent === parentId)
+        continue;
+      // Something was added or taken away inside it: look again.
+      if (back) row.state = "group";
+      if (changed || back) {
+        row.walked = 0;
+        row.scanned = 0;
+      }
+      Object.assign(row, {
+        name,
+        path,
+        modified: Math.max(modified, row.modified),
+        parent: parentId,
+      });
+      sql(
+        "UPDATE drive_folders SET name = ?, path = ?, modified = ?, parent = ?, state = ?, walked = ?, scanned = ?, updated = ? WHERE id = ?",
+        name,
+        path,
+        row.modified,
+        parentId,
+        row.state,
+        row.walked,
+        row.scanned,
+        now(),
+        f.id,
+      );
+    }
+  };
+
+  const asDelivery = (row: DriveFolderRow, products: number, photos: number) => {
+    for (const c of childrenOf(row.id)) drop(c.id);
+    const was = row.state;
+    if (was === "group" || was === "gone") row.state = "waiting";
+    Object.assign(row, { products, walked: now(), files: photos || row.files });
+    if (was === "group") row.scanned = 0;
+    sql(
+      "UPDATE drive_folders SET state = ?, products = ?, files = ?, walked = ?, scanned = ?, updated = ? WHERE id = ?",
+      row.state,
+      products,
+      row.files,
+      row.walked,
+      row.scanned,
+      now(),
+      row.id,
+    );
+  };
+
+  /** Decides what one folder is from what was found directly inside it. */
+  const settle = (row: DriveFolderRow, inside: DriveFile[]) => {
+    const kind = classifyFolder(row.name, inside);
+    if (kind.kind === "delivery") return asDelivery(row, kind.products, kind.photos);
+    if (kind.kind === "product") {
+      // A few photos and nothing else is one product, so the folder above is the delivery,
+      // unless that folder is a month or a day holding date-named drops.
+      const parent = row.parent ? known.get(row.parent) : undefined;
+      const siblings = parent ? childrenOf(parent.id) : [];
+      if (parent && parent.state === "group" && !siblings.some((x) => isDeliveryName(x.name)))
+        return asDelivery(parent, siblings.length, 0);
+      return asDelivery(row, 0, kind.photos);
+    }
+    row.walked = now();
+    sql("UPDATE drive_folders SET walked = ?, updated = ? WHERE id = ?", row.walked, now(), row.id);
+    if (kind.kind === "group")
+      note(
+        row.id,
+        row.path ? `${row.path} / ${row.name}` : row.name,
+        inside.filter((f) => f.mimeType === FOLDER),
+      );
+  };
+
+  const top = (await list([rootId])).filter((f) => f.mimeType === FOLDER);
+  note(rootId, "", top);
+  const depth = (r: DriveFolderRow) => (r.path ? r.path.split(" / ").length : 0);
+  const due = (r: DriveFolderRow) =>
+    r.state === "group" &&
+    (r.walked === 0 || (now() - r.modified < FRESH_MS && now() - r.walked > RECHECK_MS));
+  for (let calls = 1; calls < maxCalls && now() - started < 40_000; calls++) {
+    const turn = [...known.values()]
+      .filter(due)
+      .sort((a, b) => depth(a) - depth(b) || b.modified - a.modified)
+      .slice(0, 20);
+    if (!turn.length) break;
+    const found = await list(turn.map((t) => t.id));
+    for (const t of turn)
+      // It may have been taken off the list while a sibling was settled.
+      if (known.get(t.id)?.state === "group")
+        settle(
+          t,
+          found.filter((f) => f.parents?.includes(t.id)),
+        );
+    await flush();
+  }
+  await flush();
+  return known;
+}
+
+/**
+ * Looks at the inbox folder and records what is waiting. The inbox is a tree: months, the day's
+ * drop, departments, and at the bottom the folders of product folders, which are the deliveries.
+ * Folders are walked a level at a time and remembered, so a quiet Drive costs two requests a
+ * check and a new drop is read in a minute or two. Nothing is copied or generated here.
  */
 export async function syncDrive(env: Env, force = false): Promise<void> {
   const inbox = await driveInbox(env);
@@ -527,48 +680,51 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
   const last = Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0);
   if (!force && now() - last < 55_000) return;
   await setSetting(env, DRIVE_SYNC_SETTING, String(now()));
+  const started = now();
+  const pending: D1PreparedStatement[] = [];
+  const flush = async () => {
+    while (pending.length) await env.DB.batch(pending.splice(0, 80));
+  };
+  const sql = (text: string, ...params: unknown[]) =>
+    void pending.push(env.DB.prepare(text).bind(...params));
   try {
-    const deliveries = await findDeliveries(creds, inbox.id);
-    const rows = await all<DriveFolderRow>(env.DB, "SELECT * FROM drive_folders");
-    const known = new Map(rows.map((r) => [r.id, r]));
-    let scans = 0;
-    for (const d of deliveries) {
-      const row = known.get(d.id);
-      if (row && row.state !== "waiting" && row.state !== "gone") continue;
-      if (scans >= 12) break;
-      scans++;
-      const photos = await scanDelivery(creds, d.id);
+    const known = await walkInbox(
+      inbox.id,
+      await all<DriveFolderRow>(env.DB, "SELECT * FROM drive_folders"),
+      (parents) => listChildren(creds, parents),
+      sql,
+      flush,
+    );
+
+    // Count the photos of deliveries nobody has looked into yet, newest first.
+    const unread = [...known.values()]
+      .filter((r) => r.state === "waiting" && r.scanned === 0)
+      .sort((a, b) => b.modified - a.modified)
+      .slice(0, SCANS_PER_SYNC);
+    for (const d of unread) {
+      if (now() - started > 50_000) break;
+      const every = await scanDelivery(creds, d.id);
+      const photos = pickProductPhotos(every);
       const bytes = photos.reduce((n, p) => n + Number(p.size ?? 0), 0);
-      const modified = photos.reduce(
-        (n, p) => Math.max(n, Date.parse(p.modifiedTime ?? "") || 0),
-        0,
-      );
       const thumbs = JSON.stringify(photos.slice(0, 4).map((p) => p.id));
+      const products = new Set(
+        every.filter((p) => p.relative.includes("/")).map((p) => p.relative.split("/")[0]),
+      ).size;
       await run(
         env.DB,
-        "INSERT INTO drive_folders (id, name, path, files, bytes, modified, thumbs, state, seen, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, path = excluded.path, files = excluded.files, bytes = excluded.bytes, modified = excluded.modified, thumbs = excluded.thumbs, state = 'waiting', seen = excluded.seen, updated = excluded.updated",
-        d.id,
-        d.name,
-        d.path,
+        "UPDATE drive_folders SET files = ?, bytes = ?, thumbs = ?, products = MAX(products, ?), scanned = ?, updated = ? WHERE id = ?",
         photos.length,
         bytes,
-        modified,
         thumbs,
+        products,
         now(),
         now(),
+        d.id,
       );
     }
-    const present = new Set(deliveries.map((d) => d.id));
-    for (const r of rows)
-      if (r.state === "waiting" && !present.has(r.id))
-        await run(
-          env.DB,
-          "UPDATE drive_folders SET state = 'gone', updated = ? WHERE id = ?",
-          now(),
-          r.id,
-        );
     await setSetting(env, DRIVE_ERROR_SETTING, "");
   } catch (e) {
+    await flush().catch(() => {});
     await setSetting(env, DRIVE_ERROR_SETTING, errorMessage(e).slice(0, 400));
     throw e;
   }
@@ -609,7 +765,7 @@ export interface InboxFolder extends Omit<DriveFolderRow, "thumbs"> {
 export async function inboxFolders(env: Env): Promise<InboxFolder[]> {
   const rows = await all<DriveFolderRow>(
     env.DB,
-    "SELECT * FROM drive_folders WHERE state IN ('waiting','importing','failed') OR (state = 'imported' AND updated > ?) ORDER BY CASE state WHEN 'importing' THEN 0 WHEN 'failed' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, modified DESC LIMIT 60",
+    "SELECT * FROM drive_folders WHERE state IN ('waiting','importing','failed') OR (state = 'imported' AND updated > ?) ORDER BY CASE state WHEN 'importing' THEN 0 WHEN 'failed' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, modified DESC, path, name LIMIT 600",
     now() - 24 * 3600 * 1000,
   );
   const rules = await driveRules(env);
@@ -716,6 +872,35 @@ export async function approveFolder(
   return batchId;
 }
 
+/** Skips every waiting folder under one place in the tree ("October", or one day's drop). */
+export async function skipUnder(env: Env, path: string): Promise<number> {
+  return run(
+    env.DB,
+    "UPDATE drive_folders SET state = 'skipped', updated = ? WHERE state IN ('waiting','failed') AND (path = ? OR substr(path, 1, ?) = ?)",
+    now(),
+    path,
+    path.length + 3,
+    `${path} / `,
+  );
+}
+
+/** Puts every skipped folder back in the inbox. */
+export async function unskipAll(env: Env): Promise<number> {
+  return run(
+    env.DB,
+    "UPDATE drive_folders SET state = 'waiting', updated = ? WHERE state = 'skipped'",
+    now(),
+  );
+}
+
+export async function skippedCount(env: Env): Promise<number> {
+  const r = await first<{ n: number }>(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM drive_folders WHERE state = 'skipped'",
+  );
+  return r?.n ?? 0;
+}
+
 export async function skipFolder(env: Env, folderId: string): Promise<void> {
   await run(
     env.DB,
@@ -785,7 +970,7 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
     if (!batch) return (void (await fail("The batch for this folder was deleted.")), false);
     if (!creds) return (void (await fail("Nobody is signed in to Google Drive any more.")), false);
     const config = JSON.parse(batch.config) as Config;
-    const photos = await scanDelivery(creds, job.folder);
+    const photos = pickProductPhotos(await scanDelivery(creds, job.folder));
     const have = new Set(
       (
         await all<{ stem: string }>(env.DB, "SELECT stem FROM sources WHERE batch = ?", batch.id)

@@ -11,6 +11,8 @@ export interface Env {
   FAL_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   INVITE_CODE?: string;
+  /** Set for one deploy to point the Drive inbox at a folder; taken out again once it applied. */
+  DRIVE_INBOX_ID?: string;
   SESSION_SECRET?: string;
   WEBHOOK_TOKEN?: string;
   PUBLIC_BASE_URL?: string;

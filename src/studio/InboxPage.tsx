@@ -14,7 +14,9 @@ interface Folder {
   id: string;
   name: string;
   path: string;
+  /** Photos that will be generated: the first two views of every product. 0 until counted. */
   files: number;
+  products: number;
   thumbs: string[];
   state: "waiting" | "importing" | "imported" | "failed" | "skipped" | "gone";
   batch: string | null;
@@ -37,6 +39,8 @@ interface DriveState {
   lastSync: number;
   error: string | null;
   folders: Folder[];
+  /** Folders somebody skipped; they can be brought back. */
+  skipped: number;
   pricePerImage: number;
 }
 
@@ -82,6 +86,8 @@ export default function InboxPage({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [editClient, setEditClient] = useState(false);
+  /** The month (top folder) being looked at; empty shows every month. */
+  const [only, setOnly] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -363,7 +369,23 @@ export default function InboxPage({
       </div>
     );
 
-  const shown = state.folders.filter((f) => f.state !== "skipped" && f.state !== "gone");
+  const every = state.folders.filter((f) => f.state !== "skipped" && f.state !== "gone");
+  const monthOf = (f: Folder) => f.path.split(" / ")[0] || "Top level";
+  const months = [...new Set(every.map(monthOf))];
+  const shown = only && months.includes(only) ? every.filter((f) => monthOf(f) === only) : every;
+  // One section per place in Drive (a day's drop, a department), in the order the folders arrive.
+  const groups: { path: string; items: Folder[] }[] = [];
+  for (const f of shown) {
+    const g = groups.find((x) => x.path === f.path);
+    if (g) g.items.push(f);
+    else groups.push({ path: f.path, items: [f] });
+  }
+  const sum = (list: Folder[], key: "products" | "files") => list.reduce((n, f) => n + f[key], 0);
+  const skipAll = (path: string, count: number) => {
+    if (!window.confirm(`Skip all ${count} folders under ${path}? You can bring them back.`))
+      return;
+    void act(`skip:${path}`, () => post("/api/studio/drive/skip", { path }), `Skipped ${path}`);
+  };
   return (
     <div className="nx nx-enter">
       <div className="nx-head">
@@ -403,6 +425,48 @@ export default function InboxPage({
         </div>
       </div>
       {state.error && <div className="nx-alert">{state.error}</div>}
+      {(months.length > 1 || state.skipped > 0) && (
+        <div className="nx-row">
+          {months.length > 1 && (
+            <div className="nx-seg" role="group" aria-label="Month">
+              <button aria-pressed={!only} onClick={() => setOnly("")}>
+                All <span className="nx-mono">{every.length}</span>
+              </button>
+              {months.map((m) => (
+                <button key={m} aria-pressed={only === m} onClick={() => setOnly(m)}>
+                  {m}{" "}
+                  <span className="nx-mono">{every.filter((f) => monthOf(f) === m).length}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="nx-muted">
+            {shown.length} folders · {sum(shown, "products")} products
+          </span>
+          <span className="nx-right">
+            {only && months.includes(only) && (
+              <button className="nx-btn nx-sm nx-quiet" onClick={() => skipAll(only, shown.length)}>
+                Skip everything in {only}
+              </button>
+            )}
+            {state.skipped > 0 && (
+              <button
+                className="nx-btn nx-sm nx-quiet"
+                disabled={busy === "unskip"}
+                onClick={() =>
+                  void act(
+                    "unskip",
+                    () => post("/api/studio/drive/unskip"),
+                    "Skipped folders are back",
+                  )
+                }
+              >
+                Bring back {state.skipped} skipped
+              </button>
+            )}
+          </span>
+        </div>
+      )}
       {!shown.length ? (
         <div className="nx-empty">
           <b>Inbox is clear</b>
@@ -420,154 +484,200 @@ export default function InboxPage({
           </div>
         </div>
       ) : (
-        <div className="nx-folders nx-stagger">
-          {shown.map((f) => {
-            const skill = picked[f.id] ?? f.guess.skill ?? "";
-            const cost = f.files * state.pricePerImage;
-            const order = [
-              ...f.guess.options,
-              ...skills.map((s) => s.id).filter((id) => !f.guess.options.includes(id)),
-            ].filter((id) => skills.some((s) => s.id === id));
-            return (
-              <article className="nx-folder" key={f.id}>
-                <div className="nx-a">
-                  <div>
-                    {f.path && <div className="nx-path">{f.path}</div>}
-                    <div className="nx-name">{f.name}</div>
-                  </div>
-                  <div className="nx-strip">
-                    {f.thumbs.map((t) => (
-                      <img
-                        key={t}
-                        src={`/api/studio/drive/thumb?id=${encodeURIComponent(t)}`}
-                        alt="Photo from the folder"
-                        loading="lazy"
-                      />
-                    ))}
-                    <span className="nx-more">
-                      {f.thumbs.length && f.files > f.thumbs.length
-                        ? `+${f.files - f.thumbs.length}`
-                        : `${f.files} photos`}
-                    </span>
-                  </div>
-                  {f.state === "waiting" || f.state === "failed" ? (
-                    <div className="nx-row">
-                      <button
-                        className="nx-btn nx-primary"
-                        disabled={!skill || !f.files || busy === f.id}
-                        onClick={() =>
-                          void act(
-                            f.id,
-                            () =>
-                              post("/api/studio/drive/approve", {
-                                folder: f.id,
-                                skill,
-                                start: true,
-                              }),
-                            `Started ${f.name}`,
-                          )
-                        }
-                      >
-                        {f.state === "failed" ? "Try again" : "Approve and start"}
-                      </button>
-                      <button
-                        className="nx-btn"
-                        disabled={!skill || !f.files || busy === f.id}
-                        onClick={() =>
-                          void act(
-                            f.id,
-                            () =>
-                              post("/api/studio/drive/approve", {
-                                folder: f.id,
-                                skill,
-                                start: false,
-                              }),
-                            "Importing. Open the batch to change settings before generating.",
-                          )
-                        }
-                      >
-                        Import only
-                      </button>
-                      <button
-                        className="nx-btn nx-quiet"
-                        disabled={busy === f.id}
-                        onClick={() =>
-                          void act(f.id, () => post("/api/studio/drive/skip", { folder: f.id }))
-                        }
-                      >
-                        Skip
-                      </button>
-                    </div>
-                  ) : f.state === "importing" ? (
-                    <div className="nx-progress">
-                      <div className="nx-bar">
-                        <i
-                          style={{
-                            width: `${Math.min(100, (f.imported / Math.max(1, f.files)) * 100)}%`,
-                          }}
-                        />
+        groups.map((g, gi) => (
+          <details
+            className="nx-group"
+            key={g.path || "top"}
+            open={gi < 2 || groups.length <= 4 || g.items.some((f) => f.state !== "waiting")}
+          >
+            <summary>
+              <span className="nx-crumbs">
+                {(g.path || state.inbox!.name).split(" / ").map((part, i, parts) => (
+                  <span key={i} className={i === parts.length - 1 ? "nx-last" : ""}>
+                    {part}
+                  </span>
+                ))}
+              </span>
+              <span className="nx-muted">
+                {g.items.length} {g.items.length === 1 ? "folder" : "folders"} ·{" "}
+                {sum(g.items, "products")} products
+              </span>
+              {g.path && g.items.some((f) => f.state === "waiting") && (
+                <button
+                  className="nx-btn nx-sm nx-quiet"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    skipAll(g.path, g.items.length);
+                  }}
+                >
+                  Skip all
+                </button>
+              )}
+            </summary>
+            <div className="nx-folders">
+              {g.items.map((f) => {
+                const skill = picked[f.id] ?? f.guess.skill ?? "";
+                const cost = f.files * state.pricePerImage;
+                const order = [
+                  ...f.guess.options,
+                  ...skills.map((s) => s.id).filter((id) => !f.guess.options.includes(id)),
+                ].filter((id) => skills.some((s) => s.id === id));
+                return (
+                  <article className="nx-folder" key={f.id}>
+                    <div className="nx-a">
+                      <div>
+                        <div className="nx-name">{f.name}</div>
                       </div>
-                      <span>
-                        Importing {f.imported} of {f.files}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="nx-row">
-                      <span className="nx-chip nx-ok">Imported {f.imported}</span>
-                      {f.skipped > 0 && (
-                        <span className="nx-chip nx-warn">{f.skipped} left out</span>
-                      )}
-                      {f.batch && (
-                        <button className="nx-btn" onClick={() => onOpenBatch(f.batch!)}>
-                          Open batch
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {f.error && <div className="nx-alert">{f.error}</div>}
-                </div>
-                <div className="nx-b">
-                  <dl className="nx-kv">
-                    <dt>Skill</dt>
-                    <dd>
+                      <div className="nx-strip">
+                        {f.thumbs.map((t) => (
+                          <img
+                            key={t}
+                            src={`/api/studio/drive/thumb?id=${encodeURIComponent(t)}`}
+                            alt="Photo from the folder"
+                            loading="lazy"
+                          />
+                        ))}
+                        <span className="nx-more">
+                          {!f.files
+                            ? "Counting the photos…"
+                            : f.thumbs.length && f.files > f.thumbs.length
+                              ? `+${f.files - f.thumbs.length}`
+                              : `${f.files} photos`}
+                        </span>
+                      </div>
                       {f.state === "waiting" || f.state === "failed" ? (
-                        <select
-                          id={`skill-${f.id}`}
-                          aria-label={`Skill for ${f.name}`}
-                          value={skill}
-                          onChange={(e) => setPicked((p) => ({ ...p, [f.id]: e.target.value }))}
-                        >
-                          <option value="">Choose a skill</option>
-                          {order.map((id) => (
-                            <option key={id} value={id}>
-                              {title(id)}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="nx-row">
+                          <button
+                            className="nx-btn nx-primary"
+                            disabled={!skill || !f.files || busy === f.id}
+                            onClick={() =>
+                              void act(
+                                f.id,
+                                () =>
+                                  post("/api/studio/drive/approve", {
+                                    folder: f.id,
+                                    skill,
+                                    start: true,
+                                  }),
+                                `Started ${f.name}`,
+                              )
+                            }
+                          >
+                            {f.state === "failed" ? "Try again" : "Approve and start"}
+                          </button>
+                          <button
+                            className="nx-btn"
+                            disabled={!skill || !f.files || busy === f.id}
+                            onClick={() =>
+                              void act(
+                                f.id,
+                                () =>
+                                  post("/api/studio/drive/approve", {
+                                    folder: f.id,
+                                    skill,
+                                    start: false,
+                                  }),
+                                "Importing. Open the batch to change settings before generating.",
+                              )
+                            }
+                          >
+                            Import only
+                          </button>
+                          <button
+                            className="nx-btn nx-quiet"
+                            disabled={busy === f.id}
+                            onClick={() =>
+                              void act(f.id, () => post("/api/studio/drive/skip", { folder: f.id }))
+                            }
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      ) : f.state === "importing" ? (
+                        <div className="nx-progress">
+                          <div className="nx-bar">
+                            <i
+                              style={{
+                                width: `${Math.min(100, (f.imported / Math.max(1, f.files)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span>
+                            Importing {f.imported} of {f.files}
+                          </span>
+                        </div>
                       ) : (
-                        <span className={skillTone(skill)}>{title(skill)}</span>
-                      )}{" "}
-                      {f.guess.confidence === "high" ? (
-                        <span className="nx-chip nx-ok">Confident</span>
-                      ) : f.guess.confidence === "low" ? (
-                        <span className="nx-chip nx-warn">Check this</span>
-                      ) : (
-                        <span className="nx-chip nx-warn">Needs your choice</span>
+                        <div className="nx-row">
+                          <span className="nx-chip nx-ok">Imported {f.imported}</span>
+                          {f.skipped > 0 && (
+                            <span className="nx-chip nx-warn">{f.skipped} left out</span>
+                          )}
+                          {f.batch && (
+                            <button className="nx-btn" onClick={() => onOpenBatch(f.batch!)}>
+                              Open batch
+                            </button>
+                          )}
+                        </div>
                       )}
-                    </dd>
-                    <dt>Estimate</dt>
-                    <dd className="nx-mono">
-                      ${cost.toFixed(2)} · about {Math.max(1, Math.round(f.files / 5))} min
-                    </dd>
-                    <dt>Photos</dt>
-                    <dd className="nx-mono">{f.files}</dd>
-                  </dl>
-                  <div className="nx-why">{f.guess.why}</div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                      {f.error && <div className="nx-alert">{f.error}</div>}
+                    </div>
+                    <div className="nx-b">
+                      <dl className="nx-kv">
+                        <dt>Skill</dt>
+                        <dd>
+                          {f.state === "waiting" || f.state === "failed" ? (
+                            <select
+                              id={`skill-${f.id}`}
+                              aria-label={`Skill for ${f.name}`}
+                              value={skill}
+                              onChange={(e) => setPicked((p) => ({ ...p, [f.id]: e.target.value }))}
+                            >
+                              <option value="">Choose a skill</option>
+                              {order.map((id) => (
+                                <option key={id} value={id}>
+                                  {title(id)}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className={skillTone(skill)}>{title(skill)}</span>
+                          )}{" "}
+                          {f.guess.confidence === "high" ? (
+                            <span className="nx-chip nx-ok">Confident</span>
+                          ) : f.guess.confidence === "low" ? (
+                            <span className="nx-chip nx-warn">Check this</span>
+                          ) : (
+                            <span className="nx-chip nx-warn">Needs your choice</span>
+                          )}
+                        </dd>
+                        <dt>Estimate</dt>
+                        <dd className="nx-mono">
+                          {f.files
+                            ? `$${cost.toFixed(2)} · about ${Math.max(1, Math.round(f.files / 5))} min`
+                            : "–"}
+                        </dd>
+                        {f.products > 0 && (
+                          <>
+                            <dt>Products</dt>
+                            <dd className="nx-mono">{f.products}</dd>
+                          </>
+                        )}
+                        <dt>Photos</dt>
+                        <dd className="nx-mono">
+                          {f.files || "–"}
+                          {f.products > 0 && f.files > 0 && (
+                            <span className="nx-muted"> · front and back</span>
+                          )}
+                        </dd>
+                      </dl>
+                      <div className="nx-why">{f.guess.why}</div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </details>
+        ))
       )}
     </div>
   );

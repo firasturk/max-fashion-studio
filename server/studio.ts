@@ -111,7 +111,10 @@ import {
   driveThumb,
   inboxFolders,
   skipFolder,
+  skipUnder,
+  skippedCount,
   syncDrive,
+  unskipAll,
   DRIVE_INBOX_SETTING,
   createStudioFolders,
   driveSignInUrl,
@@ -1453,7 +1456,12 @@ studioRoutes.get("/drive", async (c) => {
     1,
     [1],
   ).total;
-  return c.json({ ...status, folders, pricePerImage: price });
+  return c.json({
+    ...status,
+    folders,
+    skipped: status.inbox ? await skippedCount(c.env) : 0,
+    pricePerImage: price,
+  });
 });
 
 /* Drive signs in as a person (the workspace account), apart from the account that pays for images. */
@@ -1540,10 +1548,19 @@ studioRoutes.post("/drive/approve", async (c) => {
 });
 
 studioRoutes.post("/drive/skip", async (c) => {
-  const { folder } = await body(c, z.object({ folder: z.string().min(5) }));
+  const { folder, path } = await body(
+    c,
+    z.object({ folder: z.string().min(5).optional(), path: z.string().min(1).max(400).optional() }),
+  );
+  if (path) return c.json({ ok: true, skipped: await skipUnder(c.env, path) });
+  if (!folder) throw new StudioError("Say which folder to skip.");
   await skipFolder(c.env, folder);
   return c.json({ ok: true });
 });
+
+studioRoutes.post("/drive/unskip", async (c) =>
+  c.json({ ok: true, restored: await unskipAll(c.env) }),
+);
 
 studioRoutes.get("/drive/thumb", async (c) => driveThumb(c.env, c.req.query("id") ?? ""));
 

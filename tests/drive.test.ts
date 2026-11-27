@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyFolder,
+  isProductName,
+  pickProductPhotos,
+  viewNumber,
   deliveryKey,
   driveFolderId,
   guessSkill,
@@ -10,9 +14,15 @@ import {
 
 describe("drive links", () => {
   it("reads the folder id from the usual link shapes", () => {
-    expect(driveFolderId("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp?usp=sharing")).toBe("1AbCdEfGhIjKlMnOp");
-    expect(driveFolderId("https://drive.google.com/drive/u/0/folders/1AbCdEfGhIjKlMnOp")).toBe("1AbCdEfGhIjKlMnOp");
-    expect(driveFolderId("https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp")).toBe("1AbCdEfGhIjKlMnOp");
+    expect(
+      driveFolderId("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp?usp=sharing"),
+    ).toBe("1AbCdEfGhIjKlMnOp");
+    expect(driveFolderId("https://drive.google.com/drive/u/0/folders/1AbCdEfGhIjKlMnOp")).toBe(
+      "1AbCdEfGhIjKlMnOp",
+    );
+    expect(driveFolderId("https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp")).toBe(
+      "1AbCdEfGhIjKlMnOp",
+    );
     expect(driveFolderId(" 1AbCdEfGhIjKlMnOp ")).toBe("1AbCdEfGhIjKlMnOp");
     expect(driveFolderId("https://example.com/nothing")).toBeNull();
   });
@@ -59,5 +69,79 @@ describe("skill memory", () => {
     const g = guessSkill("03-11-2026-BOYS-9", rules);
     expect(g.confidence).toBe("low");
     expect(g.options.sort()).toEqual(["kids", "street-style"]);
+  });
+});
+
+describe("the client's Drive layout", () => {
+  const folder = (name: string) => ({ name, mimeType: "application/vnd.google-apps.folder" });
+  const photo = (name: string) => ({ name, mimeType: "image/jpeg" });
+  it("knows a product folder by its number", () => {
+    expect(isProductName("170374972")).toBe(true);
+    expect(isProductName(" 170374972 ")).toBe(true);
+    expect(isProductName("27-11-2026-MW URBN-6")).toBe(false);
+    expect(isProductName("November")).toBe(false);
+  });
+  it("tells months, daily drops and departments from the folder that becomes a batch", () => {
+    expect(classifyFolder("November", [folder("27-11-2026-466"), folder("Party Edit")]).kind).toBe(
+      "group",
+    );
+    expect(
+      classifyFolder("27-11-2026-466", [
+        folder("27-11-2026-MW-78"),
+        folder("27-11-2026-WW-246"),
+        { name: ".DS_Store", mimeType: "application/octet-stream" },
+      ]).kind,
+    ).toBe("group");
+    expect(classifyFolder("27-11-2026-MW-78", [folder("27-11-2026-MW URBN-6")]).kind).toBe("group");
+    expect(
+      classifyFolder("27-11-2026-MW URBN-6", [folder("170374972"), folder("170469681")]),
+    ).toEqual({ kind: "delivery", products: 2, photos: 0 });
+    expect(
+      classifyFolder("170374972", [photo("170374972_01.jpg"), photo("170374972_02.jpg")]),
+    ).toEqual({
+      kind: "product",
+      photos: 2,
+    });
+    expect(
+      classifyFolder(
+        "Party Edit",
+        Array.from({ length: 40 }, (_, i) => photo(`p${i}.jpg`)),
+      ),
+    ).toEqual({
+      kind: "delivery",
+      products: 0,
+      photos: 40,
+    });
+    expect(
+      classifyFolder("27-11-2026-zip only", [{ name: "a.zip", mimeType: "application/zip" }]).kind,
+    ).toBe("empty");
+  });
+  it("reads the view number of a product photo", () => {
+    expect(viewNumber("170374972_02.jpg")).toBe(2);
+    expect(viewNumber("170173353 _01.jpg")).toBe(1);
+    expect(viewNumber("170374972_07_tag.jpg")).toBe(7);
+    expect(viewNumber("IMG-photo.jpeg")).toBeNull();
+  });
+  it("generates from the first two views of every product and never from the tag", () => {
+    const all = [
+      "170374972/170374972_06.jpg",
+      "170374972/170374972_04.jpg",
+      "170374972/170374972_07_tag.jpg",
+      "170374972/170374972_02.jpg",
+      "170374972/170374972_01.jpg",
+      "170469681/170469681_01.jpg",
+      "170469681/170469681_02_tag.jpg",
+      "Looks/front.jpg",
+      "Looks/side.jpg",
+      "loose_05.jpg",
+    ].map((relative) => ({ relative }));
+    expect(pickProductPhotos(all).map((p) => p.relative)).toEqual([
+      "170374972/170374972_01.jpg",
+      "170374972/170374972_02.jpg",
+      "170469681/170469681_01.jpg",
+      "Looks/front.jpg",
+      "Looks/side.jpg",
+      "loose_05.jpg",
+    ]);
   });
 });

@@ -97,3 +97,77 @@ export function learnRule(rules: DriveRules, name: string, skill: string): Drive
 export function importName(delivery: string, relative: string): string {
   return `${delivery.trim()}/${relative}`.replace(/\/{2,}/g, "/").normalize("NFC");
 }
+
+/** Product folders are named with the product number alone: "170374972". */
+export function isProductName(name: string): boolean {
+  return /^\s*\d{6,}(?!\d)/.test(name) && !isDeliveryName(name);
+}
+
+const FOLDER_TYPE = "application/vnd.google-apps.folder";
+
+/** What a folder under the inbox is, judged from what sits directly inside it. */
+export type FolderKind =
+  /** Holds product folders (or loose photos): the unit that becomes one batch. */
+  | { kind: "delivery"; products: number; photos: number }
+  /** Holds other folders: a month, a day's drop, a department. */
+  | { kind: "group" }
+  /** A handful of photos and nothing else: one product, so its parent is the delivery. */
+  | { kind: "product"; photos: number }
+  | { kind: "empty" };
+
+export function classifyFolder(
+  name: string,
+  children: { name: string; mimeType: string }[],
+): FolderKind {
+  const folders = children.filter((c) => c.mimeType === FOLDER_TYPE);
+  const photos = children.filter((c) => c.mimeType.startsWith("image/")).length;
+  const products = folders.filter((f) => isProductName(f.name)).length;
+  if (products > 0 && products >= folders.length - products)
+    return { kind: "delivery", products, photos: 0 };
+  if (folders.length) return { kind: "group" };
+  if (!photos) return { kind: "empty" };
+  return photos <= 20 && !isDeliveryName(name)
+    ? { kind: "product", photos }
+    : { kind: "delivery", products: 0, photos };
+}
+
+/** The view number of a product photo: "170374972_02.jpg" is 2. Null when the name has none. */
+export function viewNumber(file: string): number | null {
+  const m = /[_\s-]0*(\d{1,2})(?:_[a-z]+)?\.[a-z0-9]+$/i.exec(file);
+  return m ? Number(m[1]) : null;
+}
+
+/** Label and tag close-ups come with every product and are never a picture to generate from. */
+export function isTagPhoto(file: string): boolean {
+  return /[_\s-](tag|label|care)\.[a-z0-9]+$/i.test(file);
+}
+
+/**
+ * The photos of a delivery that get generated: for every product, its first two views (front and
+ * back), which is what the team has always uploaded and what goes back to the client. A product
+ * whose photos are not numbered keeps all of them. Tag photos are always left out.
+ */
+export function pickProductPhotos<T extends { relative: string }>(photos: T[], views = 2): T[] {
+  const byProduct = new Map<string, T[]>();
+  for (const p of photos) {
+    const cut = p.relative.lastIndexOf("/");
+    const folder = cut < 0 ? "" : p.relative.slice(0, cut);
+    byProduct.set(folder, [...(byProduct.get(folder) ?? []), p]);
+  }
+  const out: T[] = [];
+  for (const [folder, list] of byProduct) {
+    const usable = list.filter((p) => !isTagPhoto(p.relative));
+    const numbered = usable.filter((p) => viewNumber(p.relative) !== null);
+    // Loose photos straight in the delivery are each their own picture.
+    if (!folder || numbered.length < usable.length) {
+      out.push(...usable);
+      continue;
+    }
+    out.push(
+      ...numbered
+        .sort((a, b) => (viewNumber(a.relative) ?? 0) - (viewNumber(b.relative) ?? 0))
+        .slice(0, views),
+    );
+  }
+  return out;
+}

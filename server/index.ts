@@ -14,7 +14,7 @@ import {
   runLearning,
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
-import { driveCallback, ensureDriveApi, syncDrive } from "./drive";
+import { connectInbox, driveCallback, driveInbox, ensureDriveApi, syncDrive } from "./drive";
 import { advanceClips, videoCallback } from "./video";
 import { libraryWork } from "./library";
 import { logEvent, pruneEvents } from "./events";
@@ -232,7 +232,15 @@ export default {
     for (const id of ids)
       ctx.waitUntil(advanceBatch(env, id).catch((e) => console.error("[cron]", id, e)));
     // Google Drive inbox: new delivery folders are noticed within a minute.
-    ctx.waitUntil(syncDrive(env).catch((e) => console.error("[drive]", errorMessage(e))));
+    ctx.waitUntil(
+      (async () => {
+        if (env.DRIVE_INBOX_ID && (await driveInbox(env))?.id !== env.DRIVE_INBOX_ID) {
+          const inbox = await connectInbox(env, env.DRIVE_INBOX_ID);
+          console.log("[drive] inbox is now", inbox.name);
+        }
+        await syncDrive(env);
+      })().catch((e) => console.error("[drive]", errorMessage(e))),
+    );
     // Brand memory: one learning run a week over the event stream, plus pruning of old events.
     ctx.waitUntil(
       (async () => {

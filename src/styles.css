@@ -6694,3 +6694,55 @@ body {
     width: 96px;
   }
 }
+
+
+/* Inbox: one section per place in Drive (a day's drop, a department). */
+.nx-group {
+  border-top: 1px solid var(--line);
+  padding: 4px 0 2px;
+}
+.nx-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 2px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.nx-group > summary::-webkit-details-marker {
+  display: none;
+}
+.nx-group > summary::before {
+  content: "›";
+  width: 10px;
+  color: var(--ink-400);
+  transition: transform 0.15s ease;
+}
+.nx-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+.nx-group > summary .nx-btn {
+  margin-left: auto;
+}
+.nx-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--ink-400);
+  font-family: var(--f-data);
+  font-size: 12px;
+}
+.nx-crumbs span + span::before {
+  content: "/";
+  margin-right: 6px;
+  opacity: 0.5;
+}
+.nx-crumbs .nx-last {
+  color: var(--ink-900);
+  font-weight: 600;
+}
+.nx-group > .nx-folders {
+  padding-bottom: 14px;
+}
