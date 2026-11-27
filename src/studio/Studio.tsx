@@ -15,7 +15,6 @@ import {
   RotateCcw,
   Settings2,
   SlidersHorizontal,
-  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -67,14 +66,15 @@ import type {
 } from "@shared/types";
 const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
-const BatchesView = lazyScreen(() => import("./BatchesView"));
+const PipelinePage = lazyScreen(() => import("./PipelinePage"));
+const SkillsPage = lazyScreen(() => import("./SkillsPage"));
 const InboxPage = lazyScreen(() => import("./InboxPage"));
 const ReviewPage = lazyScreen(() => import("./ReviewPage"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
 import BootScreen from "./BootScreen";
-import { MODES } from "./constants";
+import { MODES, isFinished } from "./constants";
 import CreativePanel from "./CreativePanel";
 import SourcesTab, { type Pending } from "./SourcesTab";
 import ResultsTab from "./ResultsTab";
@@ -84,6 +84,12 @@ import type { EngineInfo } from "./ConnectionDialog";
 const ConnectionDialog = lazyScreen(() => import("./ConnectionDialog"));
 
 /** The format a download is encoded in: null keeps the engine's file untouched. */
+function syncedAgo(ms: number): string {
+  if (!ms) return "not yet";
+  const m = Math.round((Date.now() - ms) / 60_000);
+  return m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`;
+}
+
 function exportFormat(c: Config): "jpg" | "webp" | null {
   if (c.output === "jpg" || c.output === "webp") return c.output;
   return c.outputSize !== "quality" ? "jpg" : null;
@@ -116,17 +122,25 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState<
-    "studio" | "batches" | "admin" | "chat" | "inbox" | "review"
-  >("studio");
+    "studio" | "running" | "delivered" | "skills" | "admin" | "chat" | "inbox" | "review"
+  >("inbox");
+  const [drive, setDrive] = useState<{ connected: boolean; lastSync: number; error: boolean } | null>(
+    null,
+  );
   const [inboxCount, setInboxCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   // The numbers on the rail: images waiting for a decision and folders waiting in the inbox.
   useEffect(() => {
     const load = () =>
-      get<{ review: number; inbox: number }>("/api/studio/counts")
+      get<{
+        review: number;
+        inbox: number;
+        drive?: { connected: boolean; lastSync: number; error: boolean };
+      }>("/api/studio/counts")
         .then((c) => {
           setReviewCount(c.review);
           setInboxCount(c.inbox);
+          setDrive(c.drive ?? null);
         })
         .catch(() => {});
     load();
@@ -248,7 +262,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   // The batches page always shows fresh counts, including batches still generating in the background.
   useEffect(() => {
-    if (page !== "batches") return;
+    if (page !== "running" && page !== "delivered") return;
     void loadState();
     const timer = setInterval(() => {
       if (!document.hidden) void loadState();
@@ -725,6 +739,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         ? `Resume ${queued.length}`
         : `Generate ${queued.length || ""}`.trim()) + costTag;
 
+  const runningCount = batches.filter((b) => !isFinished(b)).length;
+  const connected =
+    engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none";
+
   return (
     <div className={`studio shell ${settingsOpen ? "settings-open" : ""}`}>
       <BootScreen done={booted} />
@@ -738,21 +756,31 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "inbox" ? "active" : ""} onClick={() => setPage("inbox")}>
             <i>1</i>Inbox{inboxCount > 0 && <em className="hot">{inboxCount}</em>}
           </button>
-          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
-            <i>2</i>Create
-          </button>
-          <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
-            <i>3</i>Batches<em>{batches.length}</em>
+          <button className={page === "running" ? "active" : ""} onClick={() => setPage("running")}>
+            <i>2</i>Running<em>{runningCount}</em>
           </button>
           <button className={page === "review" ? "active" : ""} onClick={() => setPage("review")}>
-            <i>4</i>Review{reviewCount > 0 && <em className="hot">{reviewCount}</em>}
+            <i>3</i>Review{reviewCount > 0 && <em className="hot">{reviewCount}</em>}
           </button>
           <button disabled title="Clips from approved images, rendered by Kling. Coming next.">
-            <i>5</i>Video<em className="soon">Soon</em>
+            <i>4</i>Video<em className="soon">Soon</em>
+          </button>
+          <button className={page === "delivered" ? "active" : ""} onClick={() => setPage("delivered")}>
+            <i>5</i>Delivered<em>{batches.length - runningCount}</em>
+          </button>
+        </nav>
+        <h6>Library</h6>
+        <nav className="rail-nav" aria-label="Library">
+          <button className={page === "skills" ? "active" : ""} onClick={() => setPage("skills")}>
+            <i>S</i>Skills<em>{skills.length}</em>
           </button>
         </nav>
         <h6>Tools</h6>
         <nav className="rail-nav" aria-label="Tools">
+          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
+            <Upload size={15} />
+            {batch ? "Open batch" : "Upload manually"}
+          </button>
           <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
             <MessageCircle size={15} />
             Ask the studio
@@ -766,16 +794,33 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </nav>
         <div className="rail-grow" />
         <div className="rail-foot">
-          <span className="rail-engine">
-            <Sparkles size={14} /> {models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "…"}
-          </span>
-          <button
-            className={`rail-conn ${engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "on" : ""}`}
-            onClick={() => setConnection(true)}
-          >
-            <span className="rail-dot" />
-            {engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "Connected" : "Not connected"}
-          </button>
+          <div className="rail-health" aria-label="Connections">
+            <button onClick={() => setPage("inbox")}>
+              <span className={`rail-dot ${drive?.connected && !drive.error ? "on" : ""}`} />
+              <b>Google Drive</b>
+              <span>
+                {!drive?.connected
+                  ? "not connected"
+                  : drive.error
+                    ? "needs a look"
+                    : `synced ${syncedAgo(drive.lastSync)}`}
+              </span>
+            </button>
+            <button onClick={() => setConnection(true)}>
+              <span className={`rail-dot ${connected ? "on" : ""}`} />
+              <b>Images</b>
+              <span>
+                {connected
+                  ? (models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "connected")
+                  : "not connected"}
+              </span>
+            </button>
+            <button disabled>
+              <span className="rail-dot" />
+              <b>Video · Kling</b>
+              <span>soon</span>
+            </button>
+          </div>
           <div className="rail-user">
             <button
               className="rail-icon"
@@ -835,44 +880,34 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               admin={user.role === "admin"}
               onCount={setInboxCount}
               onOpenBatch={(id) => void openBatch(id)}
+              onUpload={() => {
+                newBatch();
+                setPage("studio");
+              }}
             />
           </Suspense>
-        ) : page === "batches" ? (
-          <>
-            <div className="page-heading">
-              <div>
-                <div className="eyebrow">SAVED BATCHES</div>
-                <h1>Every collection you have processed.</h1>
-                <p>
-                  Open a batch to review, revise or export. Generation continues on the server while
-                  you are away.
-                </p>
-              </div>
-              <button
-                className="secondary"
-                onClick={() => {
-                  newBatch();
-                  setPage("studio");
-                }}
-                disabled={uploading}
-              >
-                <ImagePlus size={17} />
-                New batch
-              </button>
-            </div>
-            <section className="batches-page">
-              <Suspense fallback={null}>
-                <BatchesView
-                  batches={batches}
-                  skills={skills}
-                  modes={applyModeOverrides(modeOverrides)}
-                  busyId={openingId}
-                  onOpen={(id) => void openBatch(id)}
-                  onDelete={(b) => void deleteBatchById(b)}
-                />
-              </Suspense>
-            </section>
-          </>
+        ) : page === "running" || page === "delivered" ? (
+          <Suspense fallback={null}>
+            <PipelinePage
+              view={page}
+              batches={batches}
+              skills={skills}
+              modes={applyModeOverrides(modeOverrides)}
+              busyId={openingId}
+              onOpen={(id) => void openBatch(id)}
+              onDelete={(b) => void deleteBatchById(b)}
+              onReview={() => setPage("review")}
+              onRefresh={loadState}
+              onUpload={() => {
+                newBatch();
+                setPage("studio");
+              }}
+            />
+          </Suspense>
+        ) : page === "skills" ? (
+          <Suspense fallback={null}>
+            <SkillsPage skills={skills} onSaved={(list) => setSkills(list)} />
+          </Suspense>
         ) : (
           <>
             {hero ? (

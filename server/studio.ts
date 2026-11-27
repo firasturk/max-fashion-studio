@@ -293,6 +293,7 @@ studioRoutes.get("/state", async (c) => {
        COALESCE(SUM(t.cost), 0) AS spent,
        SUM(CASE WHEN t.output IS NOT NULL THEN 1 ELSE 0 END) AS completed,
        SUM(CASE WHEN t.status = 'review' THEN 1 ELSE 0 END) AS review,
+       SUM(CASE WHEN t.status = 'approved' THEN 1 ELSE 0 END) AS approved,
        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS failed,
        SUM(CASE WHEN t.status IN ('queued','processing','finalizing') THEN 1 ELSE 0 END) AS queued
      FROM batches b LEFT JOIN tasks t ON t.batch = b.id
@@ -1139,7 +1140,12 @@ studioRoutes.get("/counts", async (c) => {
     c.env.DB,
     "SELECT COUNT(*) AS n FROM drive_folders WHERE state = 'waiting'",
   );
-  return c.json({ review: review?.n ?? 0, inbox: inbox?.n ?? 0 });
+  const drive = await driveStatus(c.env);
+  return c.json({
+    review: review?.n ?? 0,
+    inbox: inbox?.n ?? 0,
+    drive: { connected: !!drive.inbox, lastSync: drive.lastSync, error: !!drive.error },
+  });
 });
 
 /* Google Drive inbox: folders wait for an approval; nothing is generated before it. */

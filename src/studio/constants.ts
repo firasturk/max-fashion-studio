@@ -115,3 +115,8 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
+/** A batch is finished when it has images and none of them is still waiting for the engine. */
+export function isFinished(b: { total?: number; queued?: number }): boolean {
+  return (b.total ?? 0) > 0 && (b.queued ?? 0) === 0;
+}

@@ -61,11 +61,14 @@ export default function InboxPage({
   admin,
   onOpenBatch,
   onCount,
+  onUpload,
 }: {
   skills: SkillInfo[];
   admin: boolean;
   onOpenBatch: (id: string) => void;
   onCount: (waiting: number) => void;
+  /** Photos that are not on Drive still come in by upload. */
+  onUpload: () => void;
 }) {
   const [state, setState] = useState<DriveState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -127,6 +130,11 @@ export default function InboxPage({
               Connect a Google Drive folder once. Every delivery folder dropped into it waits here
               for your approval before anything is generated.
             </p>
+          </div>
+          <div className="nx-right">
+            <button className="nx-btn" onClick={onUpload}>
+              Upload from your computer
+            </button>
           </div>
         </div>
         {!state.account ? (
@@ -204,6 +212,9 @@ export default function InboxPage({
         </div>
         <div className="nx-right">
           <span className="nx-muted">Checked {ago(state.lastSync)}</span>
+          <button className="nx-btn" onClick={onUpload}>
+            Upload from your computer
+          </button>
           <button
             className="nx-btn"
             disabled={busy === "sync"}

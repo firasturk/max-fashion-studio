@@ -30,6 +30,7 @@ export interface Batch {
   total?: number;
   completed?: number;
   review?: number;
+  approved?: number;
   failed?: number;
   queued?: number;
   /** Up to three latest result task ids, for previews on the batches page. */
