@@ -5,6 +5,7 @@ import type { Batch, SkillInfo } from "@shared/types";
 import { isSkillCampaign, type Config } from "@shared/config";
 
 import { MODES, isFinished, type ModeInfo } from "./constants";
+import { skillTone } from "./tone";
 
 function when(ts: number): string {
   return new Date(ts).toLocaleString("en-GB", {
@@ -53,6 +54,12 @@ export default function PipelinePage({
   onRefresh: () => Promise<void> | void;
 }) {
   const [acting, setActing] = useState<string | null>(null);
+  const tone = (b: Batch) => {
+    const cfg = JSON.parse(b.config) as Config;
+    return skillTone(
+      isSkillCampaign(cfg.mode) || cfg.mode === "7" ? cfg.skill : `mode-${cfg.mode}`,
+    );
+  };
   const label = (b: Batch) => {
     const cfg = JSON.parse(b.config) as Config;
     if (isSkillCampaign(cfg.mode) || cfg.mode === "7")
@@ -112,7 +119,7 @@ export default function PipelinePage({
                         <Thumbs b={b} />
                         <span>
                           <b>{b.name}</b>
-                          <span className="nx-chip">{label(b)}</span>
+                          <span className={tone(b)}>{label(b)}</span>
                         </span>
                       </span>
                     </td>
@@ -186,7 +193,7 @@ export default function PipelinePage({
                 <div className="nx-row">
                   <Thumbs b={b} />
                   <div className="nx-name">{b.name}</div>
-                  <span className="nx-chip">{label(b)}</span>
+                  <span className={tone(b)}>{label(b)}</span>
                   {b.state === "running" ? (
                     <span className="nx-chip nx-ok">Generating</span>
                   ) : b.state === "paused" ? (

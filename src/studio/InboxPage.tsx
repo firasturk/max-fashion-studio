@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { del, get, post } from "@/api";
 import type { SkillInfo } from "@shared/types";
+import { skillTone } from "./tone";
 
 interface Guess {
   skill: string | null;
@@ -544,7 +545,7 @@ export default function InboxPage({
                           ))}
                         </select>
                       ) : (
-                        <b>{title(skill)}</b>
+                        <span className={skillTone(skill)}>{title(skill)}</span>
                       )}{" "}
                       {f.guess.confidence === "high" ? (
                         <span className="nx-chip nx-ok">Confident</span>

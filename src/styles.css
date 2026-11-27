@@ -5843,3 +5843,545 @@ a.nx-btn {
   white-space: nowrap;
   min-width: 0;
 }
+
+/* ==================================================================
+   The approved design, applied as the last word: deep stage with a
+   faint grid, text-first rail, bright skill labels, one easing curve.
+   Values are taken from the prototype the owner signed off.
+   ================================================================== */
+:root {
+  --stage: #ffffff;
+  --rail-bg: #f5f5f7;
+  --rail-hover: #eaeaee;
+  --rail-line: #e3e3e8;
+  --grid-line: #f5f5f7;
+  --pop: #1d1d1f;
+  --pop-ink: #ffffff;
+  --pop-2: #2e2e31;
+  --pop-line: #434347;
+  --nx-ok: #0b7a4b;
+  --nx-ok-soft: #e1f7ec;
+  --nx-warn: #8f5200;
+  --nx-warn-soft: #fff3cc;
+  --nx-bad: #c2321a;
+  --nx-bad-soft: #fde6e1;
+  --nx-shade: rgb(0 0 0 / 0.15);
+  --nx-scrim: rgb(29 29 31 / 0.55);
+  --nx-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --f-data: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ink-700: #424242;
+}
+:root[data-theme="dark"] {
+  --stage: #0b0b0c;
+  --rail-bg: #111112;
+  --rail-hover: #1d1d1f;
+  --rail-line: #2c2c2e;
+  --grid-line: #1d1d1f;
+  --pop: #f5f5f7;
+  --pop-ink: #1d1d1f;
+  --pop-2: #e5e5ea;
+  --pop-line: #d1d1d6;
+  --nx-ok: #4fd695;
+  --nx-ok-soft: #0f2e1f;
+  --nx-warn: #ffcf33;
+  --nx-warn-soft: #3a2f00;
+  --nx-bad: #ff7a61;
+  --nx-bad-soft: #3b1711;
+  --nx-shade: rgb(0 0 0 / 0.5);
+  --nx-scrim: rgb(0 0 0 / 0.7);
+  --blue: #3d84f7;
+  --ink-700: #c7c7cc;
+}
+body {
+  background: var(--stage);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.studio.shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+  background: var(--stage);
+}
+.studio.shell > main {
+  max-width: none;
+  margin: 0;
+  padding: 22px 16px 80px;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: -1px -1px;
+  min-height: 100vh;
+}
+.studio.shell > main > * {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+.nx {
+  gap: 18px;
+}
+
+/* Rail */
+.rail {
+  gap: 18px;
+  padding: 18px 12px;
+  background: var(--rail-bg);
+  border-right: 1px solid var(--rail-line);
+}
+.rail-brand {
+  gap: 10px;
+  padding: 2px 8px 6px;
+}
+.rail-brand i {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ink-900);
+  color: var(--stage);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+}
+.rail-brand b {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+}
+.rail-brand span {
+  display: block;
+  border: 0;
+  padding: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 400;
+}
+.rail h6 {
+  margin: 0;
+  padding: 0 10px;
+  font-weight: 500;
+}
+.rail-nav button {
+  font-weight: 500;
+}
+.rail-nav button:hover:enabled {
+  background: var(--rail-hover);
+}
+.rail-nav i {
+  border: 1px solid var(--rail-line);
+  font-family: var(--f-data);
+  font-weight: 500;
+}
+.rail-nav em {
+  font-family: var(--f-data);
+  font-weight: 500;
+}
+.rail-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--rail-line);
+  border-radius: 100px;
+  padding: 10px 16px;
+  color: var(--ink-900);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.1);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.4s ease-in-out;
+}
+.rail-ask:hover {
+  box-shadow: 0 4px 15px var(--nx-shade);
+}
+.rail-ask:active {
+  transform: translate(1px, 1px);
+}
+.rail-ask kbd {
+  margin-left: auto;
+  font: 400 10.5px var(--f-data);
+  color: var(--ink-400);
+  border: 1px solid var(--rail-line);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.rail-health {
+  gap: 2px;
+  border-top: 1px solid var(--rail-line);
+  padding: 12px 2px 0;
+}
+.rail-health button {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+.rail-health button:hover:enabled {
+  background: var(--rail-hover);
+}
+.rail-health b {
+  font-weight: 500;
+}
+.rail-health .rail-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--nx-warn);
+}
+.rail-health .rail-dot.on {
+  background: var(--nx-ok);
+}
+.rail-health button > span:last-child {
+  font: 400 11.5px var(--f-data);
+  color: var(--ink-400);
+}
+.rail-user {
+  padding: 0 2px;
+}
+.rail-icon,
+.rail-out {
+  border-color: var(--rail-line);
+}
+.rail-icon:hover,
+.rail-out:hover {
+  background: var(--rail-hover);
+}
+.rail-icon.active {
+  background: var(--ink-900);
+  color: var(--stage);
+  border-color: transparent;
+}
+
+/* Shared pieces */
+.nx-mono,
+.nx kbd {
+  font-family: var(--f-data);
+  letter-spacing: -0.01em;
+}
+.nx-head p {
+  color: var(--ink-700);
+}
+.nx-chip.nx-ok {
+  background: var(--nx-ok-soft);
+  color: var(--nx-ok);
+}
+.nx-chip.nx-warn {
+  background: var(--nx-warn-soft);
+  color: var(--nx-warn);
+}
+.nx-chip.nx-bad,
+.nx-alert {
+  background: var(--nx-bad-soft);
+  color: var(--nx-bad);
+}
+.nx-tag {
+  display: inline-block;
+  border-radius: 4px 4px 4px 1px;
+  padding: 2px 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #00b5ce;
+  color: #1d1d1f;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nx-tag.nx-pink {
+  background: #ee46d3;
+}
+.nx-tag.nx-sky {
+  background: #18a0fb;
+}
+.nx-tag.nx-violet {
+  background: #6465ed;
+  color: #ffffff;
+}
+.nx-tag.nx-orange {
+  background: #ef5533;
+}
+.nx-tag.nx-green {
+  background: #1bc47d;
+}
+.nx-empty {
+  border-color: var(--line);
+  color: var(--ink-700);
+  background: var(--stage);
+}
+.nx-folder,
+.nx-run,
+.nx-skill,
+.nx-clip,
+.nx-card {
+  transition:
+    transform 0.4s ease-in-out,
+    box-shadow 0.4s ease-in-out,
+    border-color 0.3s var(--nx-ease);
+}
+.nx-folder:hover,
+.nx-run:hover,
+.nx-skill:hover,
+.nx-clip:hover,
+.nx-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px var(--nx-shade);
+}
+.nx-stack {
+  height: 8px;
+  border-radius: 6px;
+}
+.nx-stack .nx-g {
+  background: var(--nx-ok);
+}
+.nx-stack .nx-w {
+  background: var(--nx-warn);
+}
+.nx-stack .nx-r {
+  background: var(--nx-bad);
+}
+.nx-stats {
+  font-size: 12.5px;
+  color: var(--ink-700);
+  gap: 6px 18px;
+}
+.nx-stats b {
+  font-weight: 600;
+}
+
+/* Review */
+.nx-seg button[aria-pressed="true"] {
+  background: var(--pop);
+  color: var(--pop-ink);
+}
+.nx-grid {
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+}
+.nx-card .nx-meta {
+  padding: 8px 10px 10px;
+  gap: 5px;
+  align-items: flex-start;
+}
+.nx-card .nx-sku {
+  max-width: 100%;
+}
+.nx-bulk {
+  background: var(--pop);
+  color: var(--pop-ink);
+  animation: nx-pop 0.45s var(--nx-spring) both;
+  box-shadow: 0 10px 30px var(--nx-shade);
+}
+.nx-bulk .nx-btn {
+  background: var(--pop-2);
+  border-color: var(--pop-line);
+  color: var(--pop-ink);
+}
+.nx-bulk .nx-btn.nx-primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #ffffff;
+}
+@keyframes nx-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+.nx-scrim {
+  background: var(--nx-scrim);
+}
+.nx-scrim.nx-top {
+  place-items: start center;
+  padding-top: 8vh;
+}
+.nx-sheet header h2 {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.nx-pal input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink-900);
+  font: 500 16px "Inter", sans-serif;
+  padding: 16px;
+  outline: none;
+}
+.nx-pal ul {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+.nx-pal li button {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--ink-900);
+  cursor: pointer;
+}
+.nx-pal li button:hover,
+.nx-pal li button:focus-visible {
+  background: var(--surface-2);
+}
+.nx-pal li span {
+  color: var(--ink-400);
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* Skills, tables, clips */
+.nx-skills {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+.nx-skill {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 20px;
+  padding: 18px 20px;
+  overflow: visible;
+}
+.nx-skill h3 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink-900);
+}
+.nx-skill p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-700);
+}
+.nx-skill p b {
+  display: block;
+  color: var(--ink-400);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.nx-skill p.nx-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nx-skill .nx-foot {
+  margin-top: auto;
+  padding-top: 4px;
+}
+.nx-table {
+  font-size: 13px;
+}
+.nx-table th {
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  padding: 10px 14px;
+}
+.nx-table td {
+  padding: 10px 14px;
+}
+.nx-clips {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.nx-dur {
+  font-family: var(--f-data);
+  font-weight: 400;
+  border-radius: 6px;
+  left: auto;
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+}
+
+/* Motion: the stage rises in, its title inks in from grey, cards follow one after another. */
+@keyframes nx-ink {
+  from {
+    color: var(--line);
+  }
+  to {
+    color: var(--ink-900);
+  }
+}
+.nx-enter .nx-stagger > *:nth-child(1) {
+  animation-delay: 0.06s;
+}
+.nx-enter .nx-stagger > *:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.nx-enter .nx-stagger > *:nth-child(3) {
+  animation-delay: 0.18s;
+}
+.nx-enter .nx-stagger > *:nth-child(4) {
+  animation-delay: 0.24s;
+}
+.nx-enter .nx-stagger > *:nth-child(5) {
+  animation-delay: 0.3s;
+}
+.nx-enter .nx-stagger > *:nth-child(6) {
+  animation-delay: 0.36s;
+}
+.nx-enter .nx-stagger > *:nth-child(n + 7) {
+  animation-delay: 0.42s;
+}
+
+/* Messages: one dark note in the top corner, as in the design. */
+[data-sonner-toaster] [data-sonner-toast] {
+  background: var(--pop);
+  color: var(--pop-ink);
+  border: 0;
+  border-radius: 20px 20px 20px 2px;
+  padding: 10px 16px;
+  font: 500 14px "Inter", sans-serif;
+  box-shadow: 0 10px 30px var(--nx-shade);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  background: var(--nx-bad);
+  color: #ffffff;
+}
+@media (max-width: 900px) {
+  .studio.shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail-brand div,
+  .rail-ask kbd {
+    display: none;
+  }
+  .rail-ask {
+    width: auto;
+    white-space: nowrap;
+  }
+  .studio.shell > main {
+    padding: 16px 12px 80px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-bulk,
+  .nx-sheet {
+    animation: none;
+  }
+  .nx-folder,
+  .nx-run,
+  .nx-skill,
+  .nx-clip,
+  .nx-card {
+    transition: none;
+  }
+}

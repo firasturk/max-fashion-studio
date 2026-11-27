@@ -47,6 +47,7 @@ async function prepareAttachment(file: File): Promise<Attachment> {
 }
 
 export default function AssistantPage({
+  seed = "",
   userId,
   batchId,
   batchName,
@@ -56,6 +57,8 @@ export default function AssistantPage({
   github,
   onChanged,
 }: {
+  /** Text typed into Ask the studio: it arrives in the message box, ready to send. */
+  seed?: string;
   userId: string;
   batchId: string | null;
   batchName?: string;
@@ -74,7 +77,7 @@ export default function AssistantPage({
       return [];
     }
   });
-  const [text, setText] = useState("");
+  const [text, setText] = useState(seed);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Attachment[]>([]);
   const pictures = useRef<Map<number, Attachment[]>>(new Map());

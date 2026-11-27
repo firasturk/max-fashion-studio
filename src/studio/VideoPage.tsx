@@ -149,7 +149,7 @@ export default function VideoPage({
                     ) : (
                       <span className="nx-chip nx-ok">Ready</span>
                     )}
-                    <span className="nx-chip">{c.credits} cr</span>
+                    <span className="nx-chip">Kling Turbo</span>
                   </span>
                   {c.status === "failed" && c.error && <span className="nx-muted">{c.error}</span>}
                   {!live && (

@@ -35,26 +35,30 @@ export default function SkillsPage({
         <div className="nx-skills nx-stagger">
           {skills.map((s) => (
             <article className="nx-skill" key={s.id}>
-              {s.thumb ? (
-                <img src={`/api/studio/references/${s.thumb}/file`} alt="" loading="lazy" />
-              ) : (
-                <span className="nx-skill-ph" aria-hidden="true">
-                  {s.title.slice(0, 1)}
-                </span>
+              <div className="nx-row">
+                <h3>{s.title}</h3>
+                <span className="nx-chip nx-end">{s.builtIn ? "Built in" : "Team"}</span>
+              </div>
+              {s.caption && (
+                <p>
+                  <b>Scene</b>
+                  {s.caption}
+                </p>
               )}
-              <div className="nx-skill-body">
-                <div className="nx-row">
-                  <h3>{s.title}</h3>
-                  {!s.builtIn && <span className="nx-chip">Team</span>}
-                  {s.favourite && <span className="nx-chip nx-ok">Starred</span>}
-                </div>
-                {s.caption && <p className="nx-muted">{s.caption}</p>}
-                {s.description && <p>{s.description}</p>}
-                <div className="nx-row">
-                  <button className="nx-btn nx-sm" onClick={() => setEditor({ open: true, skill: s })}>
-                    Edit
-                  </button>
-                </div>
+              {s.description && (
+                <p className="nx-clamp">
+                  <b>Look</b>
+                  {s.description}
+                </p>
+              )}
+              <div className="nx-row nx-foot">
+                <button
+                  className="nx-btn nx-sm"
+                  onClick={() => setEditor({ open: true, skill: s })}
+                >
+                  Edit
+                </button>
+                {s.favourite && <span className="nx-chip nx-ok">Starred</span>}
               </div>
             </article>
           ))}

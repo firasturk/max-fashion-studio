@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { get, post } from "@/api";
 import type { SkillInfo } from "@shared/types";
 import VideoDialog from "./VideoDialog";
+import { skillTone } from "./tone";
 
 interface Item {
   id: string;
@@ -58,7 +59,10 @@ export default function ReviewPage({
   onOpenBatch,
   onCount,
   onVideo,
+  start = "all",
 }: {
+  /** The tab to open on, when the page is reached from Ask the studio. */
+  start?: "all" | "review" | "approved";
   skills: SkillInfo[];
   /** Opens the Video page: after clips were started, or to connect the video engine. */
   onVideo: () => void;
@@ -66,7 +70,7 @@ export default function ReviewPage({
   onCount: (n: number) => void;
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
-  const [filter, setFilter] = useState<"all" | "review" | "ready" | "approved">("all");
+  const [filter, setFilter] = useState<"all" | "review" | "ready" | "approved">(start);
   /** Approved images are fetched when their tab is first opened; null means not loaded. */
   const [approved, setApproved] = useState<Item[] | null>(null);
   const [video, setVideo] = useState<Item[] | null>(null);
@@ -286,7 +290,7 @@ export default function ReviewPage({
                 </span>
                 <div className="nx-meta">
                   <span className="nx-mono nx-sku">{sku(i.name)}</span>
-                  <span className="nx-muted">{title(i.skill)}</span>
+                  <span className={skillTone(i.skill)}>{title(i.skill)}</span>
                 </div>
               </article>
             ))}
@@ -333,7 +337,7 @@ export default function ReviewPage({
           >
             <header>
               <h2 className="nx-mono">{sku(open.name)}</h2>
-              <span className="nx-chip">{title(open.skill)}</span>
+              <span className={skillTone(open.skill)}>{title(open.skill)}</span>
               <span className="nx-muted">{open.batch_name}</span>
               <span className="nx-right">
                 <button className="nx-btn nx-sm" onClick={() => step(-1)}>

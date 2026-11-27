@@ -7,7 +7,6 @@ import {
   KeyRound,
   LoaderCircle,
   LogOut,
-  MessageCircle,
   Moon,
   Pause,
   Play,
@@ -68,6 +67,7 @@ import type { PickedFile } from "@/lib/files";
 const PipelinePage = lazyScreen(() => import("./PipelinePage"));
 const SkillsPage = lazyScreen(() => import("./SkillsPage"));
 const VideoPage = lazyScreen(() => import("./VideoPage"));
+const AskPalette = lazyScreen(() => import("./AskPalette"));
 const InboxPage = lazyScreen(() => import("./InboxPage"));
 const ReviewPage = lazyScreen(() => import("./ReviewPage"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
@@ -130,6 +130,26 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     error: boolean;
   } | null>(null);
   const [inboxCount, setInboxCount] = useState(0);
+  const [ask, setAsk] = useState(false);
+  const [askSeed, setAskSeed] = useState("");
+  const [reviewStart, setReviewStart] = useState<"all" | "review" | "approved">("all");
+  // "/" opens Ask the studio from anywhere, unless the person is typing.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (
+        e.key !== "/" ||
+        e.metaKey ||
+        e.ctrlKey ||
+        t.matches?.("input,textarea,select,[contenteditable]")
+      )
+        return;
+      e.preventDefault();
+      setAsk(true);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
   const [video, setVideo] = useState({ connected: false, open: 0 });
   // Coming back from a sign-in (Higgsfield for video, Google for Drive): say how it went.
   useEffect(() => {
@@ -761,22 +781,25 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       <BootScreen done={booted} />
       <aside className="rail">
         <a href="/" className="rail-brand" aria-label="Max Fashion Studio">
-          <img className="max-logo" src="/logo-mark.png" alt="Max" width={96} height={32} />
-          <span>Image Studio</span>
+          <i>M</i>
+          <div>
+            <b>Max Fashion Studio</b>
+            <span>Image studio</span>
+          </div>
         </a>
         <h6>Production line</h6>
         <nav className="rail-nav" aria-label="Production line">
           <button className={page === "inbox" ? "active" : ""} onClick={() => setPage("inbox")}>
-            <i>1</i>Inbox{inboxCount > 0 && <em className="hot">{inboxCount}</em>}
+            <i>1</i>Inbox<em className={inboxCount > 0 ? "hot" : ""}>{inboxCount}</em>
           </button>
           <button className={page === "running" ? "active" : ""} onClick={() => setPage("running")}>
             <i>2</i>Running<em>{runningCount}</em>
           </button>
           <button className={page === "review" ? "active" : ""} onClick={() => setPage("review")}>
-            <i>3</i>Review{reviewCount > 0 && <em className="hot">{reviewCount}</em>}
+            <i>3</i>Review<em className={reviewCount > 0 ? "hot" : ""}>{reviewCount}</em>
           </button>
           <button className={page === "video" ? "active" : ""} onClick={() => setPage("video")}>
-            <i>4</i>Video{video.open > 0 && <em>{video.open}</em>}
+            <i>4</i>Video<em>{video.open}</em>
           </button>
           <button
             className={page === "delivered" ? "active" : ""}
@@ -791,79 +814,104 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             <i>S</i>Skills<em>{skills.length}</em>
           </button>
         </nav>
-        <h6>Tools</h6>
-        <nav className="rail-nav" aria-label="Tools">
-          {batch && (
-            <button
-              className={page === "studio" ? "active" : ""}
-              onClick={() => setPage("studio")}
-              title={batch.name}
-            >
-              <FolderOpen size={15} />
-              <span className="rail-clip">{batch.name}</span>
-            </button>
-          )}
-          <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
-            <MessageCircle size={15} />
-            Ask the studio
+        {batch && (
+          <>
+            <h6>Open batch</h6>
+            <nav className="rail-nav" aria-label="Open batch">
+              <button
+                className={page === "studio" ? "active" : ""}
+                onClick={() => setPage("studio")}
+                title={batch.name}
+              >
+                <i>B</i>
+                <span className="rail-clip">{batch.name}</span>
+              </button>
+            </nav>
+          </>
+        )}
+        <div className="rail-grow" />
+        <button className="rail-ask" onClick={() => setAsk(true)}>
+          Ask the studio<kbd>/</kbd>
+        </button>
+        <div className="rail-health" aria-label="Connections">
+          <button onClick={() => setPage("inbox")}>
+            <span className={`rail-dot ${drive?.connected && !drive.error ? "on" : ""}`} />
+            <b>Google Drive</b>
+            <span>
+              {!drive?.connected
+                ? "not connected"
+                : drive.error
+                  ? "needs a look"
+                  : `synced ${syncedAgo(drive.lastSync)}`}
+            </span>
+          </button>
+          <button onClick={() => setConnection(true)}>
+            <span className={`rail-dot ${connected ? "on" : ""}`} />
+            <b>Images</b>
+            <span>
+              {connected
+                ? (models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "connected")
+                : "not connected"}
+            </span>
+          </button>
+          <button onClick={() => setPage("video")}>
+            <span className={`rail-dot ${video.connected ? "on" : ""}`} />
+            <b>Video · Kling</b>
+            <span>{video.connected ? "connected" : "not connected"}</span>
+          </button>
+        </div>
+        <div className="rail-user">
+          <button
+            className="rail-icon"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           {user.role === "admin" && (
-            <button className={page === "admin" ? "active" : ""} onClick={() => setPage("admin")}>
+            <button
+              className={`rail-icon ${page === "admin" ? "active" : ""}`}
+              onClick={() => setPage("admin")}
+              title="Admin"
+              aria-label="Admin"
+            >
               <Settings2 size={15} />
-              Admin
             </button>
           )}
-        </nav>
-        <div className="rail-grow" />
-        <div className="rail-foot">
-          <div className="rail-health" aria-label="Connections">
-            <button onClick={() => setPage("inbox")}>
-              <span className={`rail-dot ${drive?.connected && !drive.error ? "on" : ""}`} />
-              <b>Google Drive</b>
-              <span>
-                {!drive?.connected
-                  ? "not connected"
-                  : drive.error
-                    ? "needs a look"
-                    : `synced ${syncedAgo(drive.lastSync)}`}
-              </span>
-            </button>
-            <button onClick={() => setConnection(true)}>
-              <span className={`rail-dot ${connected ? "on" : ""}`} />
-              <b>Images</b>
-              <span>
-                {connected
-                  ? (models.find((m) => m.slug === engine.model)?.name ??
-                    engine.model ??
-                    "connected")
-                  : "not connected"}
-              </span>
-            </button>
-            <button onClick={() => setPage("video")}>
-              <span className={`rail-dot ${video.connected ? "on" : ""}`} />
-              <b>Video · Kling</b>
-              <span>{video.connected ? "connected" : "not connected"}</span>
-            </button>
-          </div>
-          <div className="rail-user">
-            <button
-              className="rail-icon"
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-            <button className="rail-out" onClick={() => void signOut()} title={user.email}>
-              <LogOut size={14} /> {user.name}
-            </button>
-          </div>
+          <button className="rail-out" onClick={() => void signOut()} title={user.email}>
+            <LogOut size={14} /> {user.name}
+          </button>
         </div>
       </aside>
+      {ask && (
+        <Suspense fallback={null}>
+          <AskPalette
+            onClose={() => setAsk(false)}
+            onAsk={(text) => {
+              setAsk(false);
+              setAskSeed(text);
+              setPage("chat");
+            }}
+            onAction={(a) => {
+              setAsk(false);
+              if (a === "drive") {
+                void post("/api/studio/drive/sync").catch(() => {});
+                setPage("inbox");
+              } else if (a === "running") setPage("running");
+              else {
+                setReviewStart(a === "needs" ? "review" : a === "clips" ? "approved" : "all");
+                setPage("review");
+              }
+            }}
+          />
+        </Suspense>
+      )}
 
       <main className={page === "chat" ? "main-chat" : undefined}>
         {page === "chat" ? (
           <AssistantPage
+            seed={askSeed}
             userId={user.id}
             batchId={batch?.id ?? null}
             batchName={batch?.name}
@@ -893,6 +941,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <Suspense fallback={null}>
             <ReviewPage
               skills={skills}
+              key={reviewStart}
+              start={reviewStart}
               onCount={setReviewCount}
               onOpenBatch={(id) => void openBatch(id)}
               onVideo={() => setPage("video")}
@@ -1269,10 +1319,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
             </div>
           </>
         )}
-        <footer className="page-footer">
-          <span>max fashion / image studio</span>
-          <span>AI results require visual approval before publishing.</span>
-        </footer>
       </main>
 
       <Suspense fallback={null}>
