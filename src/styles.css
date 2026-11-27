@@ -6385,3 +6385,52 @@ body {
     transition: none;
   }
 }
+
+/* Skills keep their reference picture beside the text. */
+.nx-skills {
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+.nx-skill {
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.nx-skill > img,
+.nx-skill-ph {
+  width: 120px;
+  flex: none;
+  align-self: stretch;
+  object-fit: cover;
+  background: var(--surface-3);
+}
+.nx-skill-body {
+  flex: 1;
+  padding: 16px 18px;
+  gap: 9px;
+}
+.nx-skill-body p,
+.nx-skill-body p.nx-muted {
+  display: block;
+  color: var(--ink-700);
+  overflow: visible;
+}
+.nx-skill-body p.nx-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nx-skill-body .nx-row:first-child {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .nx-skills {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nx-skill > img,
+  .nx-skill-ph {
+    width: 96px;
+  }
+}
