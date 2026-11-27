@@ -5830,3 +5830,10 @@ a.nx-btn {
   color: var(--ink-900);
   overflow-wrap: anywhere;
 }
+.nx-steps li.nx-sub {
+  list-style: none;
+  counter-increment: none;
+}
+.nx-steps li.nx-sub::before {
+  content: none;
+}

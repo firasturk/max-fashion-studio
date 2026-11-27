@@ -130,11 +130,19 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   );
   const [inboxCount, setInboxCount] = useState(0);
   const [video, setVideo] = useState({ connected: false, open: 0 });
-  // Coming back from the Higgsfield sign-in: land on the Video page and say how it went.
+  // Coming back from a sign-in (Higgsfield for video, Google for Drive): say how it went.
   useEffect(() => {
-    const outcome = new URLSearchParams(window.location.search).get("video");
-    if (!outcome) return;
+    const query = new URLSearchParams(window.location.search);
+    const outcome = query.get("video");
+    const drive = query.get("drive");
+    if (!outcome && !drive) return;
     window.history.replaceState(null, "", window.location.pathname);
+    if (drive) {
+      setPage("inbox");
+      if (drive === "connected") toast.success("Signed in to Google Drive. Now paste the folder link.");
+      else toast.error("The Google sign-in did not complete. Try again from the Inbox.");
+      return;
+    }
     setPage("video");
     if (outcome === "connected") toast.success("Higgsfield connected. Clips can be rendered now.");
     else toast.error("The Higgsfield sign-in did not complete. Try again.");

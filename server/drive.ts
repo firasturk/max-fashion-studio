@@ -6,15 +6,7 @@
 import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, now, run, uuid } from "./db";
-import {
-  DRIVE_ACCOUNT_SETTING,
-  deleteSetting,
-  getSetting,
-  resolveDrive,
-  resolveEngineModel,
-  setSetting,
-} from "./settings";
-import { DRIVE_SCOPE, vertexToken, type VertexCreds } from "./vertex";
+import { deleteSetting, getSetting, resolveEngineModel, setSetting } from "./settings";
 import { insertSource } from "./sources";
 import { DEFAULT_CONFIG, validateConfig, type Config } from "@shared/config";
 import { stemKey, isValidSourceName } from "@shared/naming";
@@ -81,27 +73,30 @@ export interface DriveInbox {
 }
 
 /** What Google says, in words the person connecting the folder can act on. */
-async function driveError(r: Response, creds: VertexCreds): Promise<StudioError> {
+async function driveError(r: Response, creds: DriveAuth): Promise<StudioError> {
   const text = (await r.text()).slice(0, 400);
-  if (r.status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text))
+  if (
+    r.status === 403 &&
+    /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text)
+  )
     return new StudioError(
-      "The Google Drive API is switched off in the Drive account's Google Cloud project. Turn it on (step 2 on this page), wait a minute and try again.",
+      "The Google Drive API is switched off in the Google Cloud project. Turn it on (step 2 on this page), wait a minute and try again.",
       428,
     );
   if (r.status === 404 || r.status === 403)
     return new StudioError(
-      `The studio cannot open that folder. Share it with ${creds.clientEmail} (Viewer is enough to read) and try again.`,
+      `${creds.email} cannot open that folder. Open the link while signed in as that account to check, then try again.`,
       404,
     );
   return new StudioError(`Google Drive answered ${r.status}: ${text}`, 502);
 }
 
 async function driveGet(
-  creds: VertexCreds,
+  creds: DriveAuth,
   path: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
-  const token = await vertexToken(creds, fetchImpl, DRIVE_SCOPE);
+  const token = await creds.token();
   const r = await fetchImpl(`${API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(60_000),
@@ -112,7 +107,7 @@ async function driveGet(
 
 /** Everything directly inside the given folders (asked for in groups, following pagination). */
 export async function listChildren(
-  creds: VertexCreds,
+  creds: DriveAuth,
   parents: string[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<DriveFile[]> {
@@ -154,7 +149,7 @@ export interface Delivery {
  * that is not a category.
  */
 export async function findDeliveries(
-  creds: VertexCreds,
+  creds: DriveAuth,
   rootId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Delivery[]> {
@@ -164,9 +159,13 @@ export async function findDeliveries(
     .map((f) => ({ id: f.id, name: f.name.trim(), path: "" }));
   const others = top.filter((f) => !isDeliveryName(f.name));
   if (others.length) {
-    const inner = (await listChildren(creds, others.map((f) => f.id), fetchImpl)).filter(
-      (f) => f.mimeType === FOLDER,
-    );
+    const inner = (
+      await listChildren(
+        creds,
+        others.map((f) => f.id),
+        fetchImpl,
+      )
+    ).filter((f) => f.mimeType === FOLDER);
     for (const o of others) {
       const dated = inner.filter((f) => f.parents?.includes(o.id) && isDeliveryName(f.name));
       if (dated.length)
@@ -184,7 +183,7 @@ export interface DeliveryPhoto extends DriveFile {
 
 /** Every photo in a delivery, up to three folders deep. */
 export async function scanDelivery(
-  creds: VertexCreds,
+  creds: DriveAuth,
   folderId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DeliveryPhoto[]> {
@@ -192,7 +191,11 @@ export async function scanDelivery(
   let level: { id: string; path: string }[] = [{ id: folderId, path: "" }];
   for (let depth = 0; depth <= MAX_DEPTH && level.length && photos.length < MAX_FILES; depth++) {
     const paths = new Map(level.map((l) => [l.id, l.path]));
-    const children = await listChildren(creds, level.map((l) => l.id), fetchImpl);
+    const children = await listChildren(
+      creds,
+      level.map((l) => l.id),
+      fetchImpl,
+    );
     const next: { id: string; path: string }[] = [];
     for (const f of children) {
       const parent = f.parents?.find((p) => paths.has(p));
@@ -220,98 +223,252 @@ export async function driveInbox(env: Env): Promise<DriveInbox | null> {
 
 /** Checks the folder can be opened and remembers it as the inbox. */
 export async function connectInbox(env: Env, folderId: string): Promise<DriveInbox> {
-  const creds = await resolveDrive(env);
-  if (!creds)
-    throw new StudioError("Add the Drive key first (step 1 on this page).", 428);
+  const creds = await resolveDriveAuth(env);
+  if (!creds) throw new StudioError("Sign in with Google first (step 3 on this page).", 428);
   const params = new URLSearchParams({ fields: "id,name,mimeType", supportsAllDrives: "true" });
-  const f = (await (await driveGet(creds, `/files/${encodeURIComponent(folderId)}?${params}`)).json()) as DriveFile;
-  if (f.mimeType !== FOLDER) throw new StudioError("That link is a file. Paste the link of a folder.");
+  const f = (await (
+    await driveGet(creds, `/files/${encodeURIComponent(folderId)}?${params}`)
+  ).json()) as DriveFile;
+  if (f.mimeType !== FOLDER)
+    throw new StudioError("That link is a file. Paste the link of a folder.");
   const inbox = { id: f.id, name: f.name };
   await setSetting(env, DRIVE_INBOX_SETTING, JSON.stringify(inbox));
   await setSetting(env, DRIVE_SYNC_SETTING, "0");
   return inbox;
 }
 
-/**
- * Saves the Drive service account. A different account sees different folders, so whatever was
- * connected or checked under the previous one is forgotten.
- */
-export async function setDriveAccount(env: Env, creds: VertexCreds | null): Promise<void> {
-  if (creds) await setSetting(env, DRIVE_ACCOUNT_SETTING, JSON.stringify(creds));
-  else await deleteSetting(env, DRIVE_ACCOUNT_SETTING);
+const CLIENT_SETTING = "drive_oauth_client";
+const TOKENS_SETTING = "drive_oauth";
+const PENDING_SETTING = "drive_oauth_pending";
+const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
+/** Full Drive access for the signed-in person: read deliveries now, hand results back later. */
+const DRIVE_USER_SCOPE = "https://www.googleapis.com/auth/drive";
+
+interface DriveClient {
+  id: string;
+  secret: string;
+}
+interface DriveTokens {
+  refresh: string;
+  access: string;
+  expires: number;
+  email: string;
+}
+
+/** Whoever reads Drive for the studio: the Google account that signed in on the Inbox page. */
+export interface DriveAuth {
+  email: string;
+  token: () => Promise<string>;
+}
+
+async function driveClient(env: Env): Promise<DriveClient | null> {
+  const raw = await getSetting(env, CLIENT_SETTING);
+  return raw ? (JSON.parse(raw) as DriveClient) : null;
+}
+
+/** Where Google sends the person back after the sign-in. It is registered on the OAuth client. */
+export function driveRedirect(env: Env): string {
+  if (!env.PUBLIC_BASE_URL) throw new StudioError("Server is missing PUBLIC_BASE_URL.", 503);
+  return new URL("/api/drive/callback", env.PUBLIC_BASE_URL).toString();
+}
+
+async function forgetDriveState(env: Env): Promise<void> {
   for (const key of [DRIVE_INBOX_SETTING, DRIVE_API_SETTING, DRIVE_ERROR_SETTING])
     await deleteSetting(env, key);
   await run(env.DB, "DELETE FROM drive_folders WHERE state IN ('waiting','skipped','gone')");
 }
 
+/** Saves the OAuth client the studio signs in with. A new client means signing in again. */
+export async function setDriveClient(env: Env, id: string, secret: string): Promise<void> {
+  if (!/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(id))
+    throw new StudioError("That is not a Client ID. It ends with .apps.googleusercontent.com.");
+  await setSetting(env, CLIENT_SETTING, JSON.stringify({ id, secret }));
+  await deleteSetting(env, TOKENS_SETTING);
+  await deleteSetting(env, DRIVE_API_SETTING);
+}
+
+/** Where to send the admin to sign in to Google with the Drive account. */
+export async function driveSignInUrl(env: Env): Promise<string> {
+  const client = await driveClient(env);
+  if (!client) throw new StudioError("Add the Client ID and secret first (step 1).", 428);
+  const state = uuid();
+  await setSetting(env, PENDING_SETTING, JSON.stringify({ state, at: now() }));
+  const u = new URL(GOOGLE_AUTH);
+  u.searchParams.set("client_id", client.id);
+  u.searchParams.set("redirect_uri", driveRedirect(env));
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("scope", DRIVE_USER_SCOPE);
+  u.searchParams.set("access_type", "offline");
+  u.searchParams.set("prompt", "consent select_account");
+  u.searchParams.set("state", state);
+  return u.toString();
+}
+
+async function googleToken(client: DriveClient, form: Record<string, string>) {
+  const r = await fetch(GOOGLE_TOKEN, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      ...form,
+      client_id: client.id,
+      client_secret: client.secret,
+    }).toString(),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const d = (await r.json().catch(() => ({}))) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error?: string;
+    error_description?: string;
+  };
+  if (!r.ok || !d.access_token) {
+    console.error("[drive] token", r.status, d.error, d.error_description);
+    throw new StudioError(
+      d.error === "invalid_client"
+        ? "Google did not accept the Client ID or secret. Paste them again (step 1)."
+        : "Google did not accept the sign-in. Sign in again on the Inbox page.",
+      428,
+    );
+  }
+  return d;
+}
+
+/** The sign-in coming back from Google. The state is single-use and expires in ten minutes. */
+export async function driveCallback(env: Env, code: string, state: string): Promise<void> {
+  const raw = await getSetting(env, PENDING_SETTING);
+  const pending = raw ? (JSON.parse(raw) as { state: string; at: number }) : null;
+  await deleteSetting(env, PENDING_SETTING);
+  const client = await driveClient(env);
+  if (!client || !pending || !code || pending.state !== state || now() - pending.at > 10 * 60_000)
+    throw new StudioError("This sign-in link expired. Start again from the Inbox page.", 400);
+  const d = await googleToken(client, {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: driveRedirect(env),
+  });
+  if (!d.refresh_token)
+    throw new StudioError("Google did not return a lasting sign-in. Sign in again.", 428);
+  let email = "Google account";
+  let api: DriveApiState = "unknown";
+  const about = await fetch(`${API}/about?fields=user(emailAddress)`, {
+    headers: { Authorization: `Bearer ${d.access_token}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (about.ok) {
+    email =
+      ((await about.json()) as { user?: { emailAddress?: string } }).user?.emailAddress ?? email;
+    api = "on";
+  } else if (apiIsOff(about.status, await about.text())) api = "off";
+  await setSetting(
+    env,
+    TOKENS_SETTING,
+    JSON.stringify({
+      refresh: d.refresh_token,
+      access: d.access_token as string,
+      expires: now() + (d.expires_in ?? 3600) * 1000,
+      email,
+    } satisfies DriveTokens),
+  );
+  await forgetDriveState(env);
+  await setSetting(env, DRIVE_API_SETTING, JSON.stringify({ state: api, at: now() }));
+}
+
+export async function signOutDrive(env: Env): Promise<void> {
+  await deleteSetting(env, TOKENS_SETTING);
+  await forgetDriveState(env);
+}
+
+/** The signed-in Drive account, with a token that renews itself. Null when nobody signed in. */
+export async function resolveDriveAuth(env: Env): Promise<DriveAuth | null> {
+  const raw = await getSetting(env, TOKENS_SETTING);
+  if (!raw) return null;
+  let tokens = JSON.parse(raw) as DriveTokens;
+  return {
+    email: tokens.email,
+    token: async () => {
+      if (tokens.expires - now() > 60_000) return tokens.access;
+      const client = await driveClient(env);
+      if (!client) throw new StudioError("The Google sign-in was removed. Sign in again.", 428);
+      const d = await googleToken(client, {
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh,
+      });
+      tokens = {
+        ...tokens,
+        access: d.access_token as string,
+        expires: now() + (d.expires_in ?? 3600) * 1000,
+      };
+      await setSetting(env, TOKENS_SETTING, JSON.stringify(tokens));
+      return tokens.access;
+    },
+  };
+}
+
 export type DriveApiState = "on" | "off" | "unknown";
 
-/**
- * Makes sure the Drive API is switched on in the studio's own Google Cloud project. It asks Drive
- * first; when Drive says the API is off it tries to switch it on with the service account, which
- * works when that account may manage services. If it may not, the Inbox shows the manual step.
- */
+function apiIsOff(status: number, text: string): boolean {
+  return (
+    status === 403 &&
+    /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text)
+  );
+}
+
+/** Asks Drive whether its API is switched on in the project the sign-in belongs to. */
 export async function ensureDriveApi(env: Env, force = false): Promise<DriveApiState> {
-  const creds = await resolveDrive(env);
-  if (!creds) return "unknown";
+  const auth = await resolveDriveAuth(env);
+  if (!auth) return "unknown";
   const saved = JSON.parse((await getSetting(env, DRIVE_API_SETTING)) || "{}") as {
     state?: DriveApiState;
     at?: number;
-    project?: string;
   };
-  if (saved.project === creds.projectId) {
-    if (saved.state === "on") return "on";
-    if (!force && saved.at && now() - saved.at < 10 * 60_000) return saved.state ?? "unknown";
-  }
+  if (saved.state === "on") return "on";
+  if (!force && saved.at && now() - saved.at < 10 * 60_000) return saved.state ?? "unknown";
   let state: DriveApiState = "unknown";
   try {
-    const token = await vertexToken(creds, fetch, DRIVE_SCOPE);
     const r = await fetch(`${API}/about?fields=kind`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${await auth.token()}` },
       signal: AbortSignal.timeout(20_000),
     });
-    const text = r.ok ? "" : (await r.text()).slice(0, 300);
     if (r.ok) state = "on";
-    else if (r.status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text)) {
-      state = "off";
-      const cloud = await vertexToken(creds);
-      const e = await fetch(
-        `https://serviceusage.googleapis.com/v1/projects/${encodeURIComponent(creds.projectId)}/services/drive.googleapis.com:enable`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${cloud}`, "Content-Type": "application/json" },
-          body: "{}",
-          signal: AbortSignal.timeout(30_000),
-        },
-      );
-      console.log("[drive] the Drive API is off in project", creds.projectId);
-      console.log("[drive] switching the Drive API on:", e.status, e.ok ? "accepted" : (await e.text()).slice(0, 200));
-    } else console.log("[drive] api check", r.status, text);
+    else {
+      const text = (await r.text()).slice(0, 300);
+      if (apiIsOff(r.status, text)) state = "off";
+      else console.log("[drive] api check", r.status, text);
+    }
   } catch (e) {
     console.log("[drive] api check failed", e instanceof Error ? e.message : e);
   }
-  await setSetting(env, DRIVE_API_SETTING, JSON.stringify({ state, at: now(), project: creds.projectId }));
+  await setSetting(env, DRIVE_API_SETTING, JSON.stringify({ state, at: now() }));
   return state;
 }
 
 export async function driveStatus(env: Env): Promise<{
+  /** The Google account that signed in for Drive. */
   account: string | null;
+  /** Whether the OAuth client (step 1) is saved. */
+  client: boolean;
+  /** The Google Cloud project number of that client: where the Drive API is switched on. */
+  project: string | null;
+  redirect: string;
   inbox: DriveInbox | null;
   lastSync: number;
   error: string | null;
   api: DriveApiState;
-  /** The Google Cloud project the service account lives in: where the Drive API is switched on. */
-  project: string | null;
 }> {
-  const creds = await resolveDrive(env);
+  const auth = await resolveDriveAuth(env);
+  const client = await driveClient(env);
   const inbox = await driveInbox(env);
   return {
-    account: creds?.clientEmail ?? null,
+    account: auth?.email ?? null,
+    client: !!client,
+    project: client?.id.split("-")[0] ?? null,
+    redirect: driveRedirect(env),
     inbox,
     lastSync: Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0),
     error: (await getSetting(env, DRIVE_ERROR_SETTING)) || null,
     api: inbox ? "on" : await ensureDriveApi(env).catch(() => "unknown" as const),
-    project: creds?.projectId ?? null,
   };
 }
 
@@ -321,7 +478,7 @@ export async function driveStatus(env: Env): Promise<{
  */
 export async function syncDrive(env: Env, force = false): Promise<void> {
   const inbox = await driveInbox(env);
-  const creds = inbox ? await resolveDrive(env) : null;
+  const creds = inbox ? await resolveDriveAuth(env) : null;
   if (!inbox || !creds) return;
   const last = Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0);
   if (!force && now() - last < 55_000) return;
@@ -338,7 +495,10 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
       scans++;
       const photos = await scanDelivery(creds, d.id);
       const bytes = photos.reduce((n, p) => n + Number(p.size ?? 0), 0);
-      const modified = photos.reduce((n, p) => Math.max(n, Date.parse(p.modifiedTime ?? "") || 0), 0);
+      const modified = photos.reduce(
+        (n, p) => Math.max(n, Date.parse(p.modifiedTime ?? "") || 0),
+        0,
+      );
       const thumbs = JSON.stringify(photos.slice(0, 4).map((p) => p.id));
       await run(
         env.DB,
@@ -357,7 +517,12 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
     const present = new Set(deliveries.map((d) => d.id));
     for (const r of rows)
       if (r.state === "waiting" && !present.has(r.id))
-        await run(env.DB, "UPDATE drive_folders SET state = 'gone', updated = ? WHERE id = ?", now(), r.id);
+        await run(
+          env.DB,
+          "UPDATE drive_folders SET state = 'gone', updated = ? WHERE id = ?",
+          now(),
+          r.id,
+        );
     await setSetting(env, DRIVE_ERROR_SETTING, "");
   } catch (e) {
     await setSetting(env, DRIVE_ERROR_SETTING, errorMessage(e).slice(0, 400));
@@ -425,7 +590,10 @@ async function configFor(env: Env, userId: string, skill: string): Promise<Confi
         "SELECT config FROM batches WHERE owner = ? AND json_extract(config, '$.mode') IN ('5','7','8') ORDER BY created DESC LIMIT 1",
         userId,
       );
-  const base = (same ?? mine) ? (JSON.parse((same ?? mine)!.config) as Config) : ({ ...DEFAULT_CONFIG, mode: "7" } as Config);
+  const base =
+    (same ?? mine)
+      ? (JSON.parse((same ?? mine)!.config) as Config)
+      : ({ ...DEFAULT_CONFIG, mode: "7" } as Config);
   const config: Config = { ...base, skill, identity: undefined };
   if (!config.model) config.model = await resolveEngineModel(env);
   const problem = validateConfig(config);
@@ -434,7 +602,8 @@ async function configFor(env: Env, userId: string, skill: string): Promise<Confi
 }
 
 async function dispatchImport(env: Env, job: ImportJob): Promise<void> {
-  if (!env.RUNNER) throw new StudioError("The import runner is not available on this deployment.", 500);
+  if (!env.RUNNER)
+    throw new StudioError("The import runner is not available on this deployment.", 500);
   const stub = env.RUNNER.get(env.RUNNER.idFromName(`import:${job.folder}:${uuid()}`));
   const r = await stub.fetch("https://runner/run", { method: "POST", body: JSON.stringify(job) });
   if (!r.ok) throw new StudioError(`The import did not start (${r.status}).`, 502);
@@ -448,13 +617,19 @@ export async function approveFolder(
   skill: string,
   start: boolean,
 ): Promise<string> {
-  const row = await first<DriveFolderRow>(env.DB, "SELECT * FROM drive_folders WHERE id = ?", folderId);
+  const row = await first<DriveFolderRow>(
+    env.DB,
+    "SELECT * FROM drive_folders WHERE id = ?",
+    folderId,
+  );
   if (!row) throw new StudioError("That folder is no longer in the inbox.", 404);
-  if (row.state === "importing") throw new StudioError("This folder is already being imported.", 409);
+  if (row.state === "importing")
+    throw new StudioError("This folder is already being imported.", 409);
   if (row.state === "imported") throw new StudioError("This folder was already imported.", 409);
   if (!row.files) throw new StudioError("This folder has no photos yet.");
   let batchId = row.batch;
-  if (batchId && !(await first(env.DB, "SELECT id FROM batches WHERE id = ?", batchId))) batchId = null;
+  if (batchId && !(await first(env.DB, "SELECT id FROM batches WHERE id = ?", batchId)))
+    batchId = null;
   if (!batchId) {
     const config = await configFor(env, userId, skill);
     batchId = uuid();
@@ -508,21 +683,29 @@ export async function skipFolder(env: Env, folderId: string): Promise<void> {
 
 /** A 1600 px copy from Drive's own preview, used as the engine reference when Drive has one. */
 async function referenceCopy(
-  creds: VertexCreds,
+  creds: DriveAuth,
   fileId: string,
 ): Promise<{ bytes: ArrayBuffer; mime: string } | null> {
   try {
     const meta = (await (
-      await driveGet(creds, `/files/${encodeURIComponent(fileId)}?fields=thumbnailLink&supportsAllDrives=true`)
+      await driveGet(
+        creds,
+        `/files/${encodeURIComponent(fileId)}?fields=thumbnailLink&supportsAllDrives=true`,
+      )
     ).json()) as DriveFile;
     if (!meta.thumbnailLink) return null;
     const url = meta.thumbnailLink.replace(/=s\d+(-[a-z0-9-]+)?$/i, "=s1600");
-    const token = await vertexToken(creds, fetch, DRIVE_SCOPE);
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+    const token = await creds.token();
+    const r = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(30_000),
+    });
     const mime = r.headers.get("content-type")?.split(";")[0] ?? "";
     if (!r.ok || !IMAGE_TYPES.includes(mime)) return null;
     const bytes = await r.arrayBuffer();
-    return bytes.byteLength > 20_000 && bytes.byteLength <= 3 * 1024 * 1024 ? { bytes, mime } : null;
+    return bytes.byteLength > 20_000 && bytes.byteLength <= 3 * 1024 * 1024
+      ? { bytes, mime }
+      : null;
   } catch {
     return null;
   }
@@ -543,20 +726,26 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
       job.folder,
     );
   try {
-    const row = await first<DriveFolderRow>(env.DB, "SELECT * FROM drive_folders WHERE id = ?", job.folder);
+    const row = await first<DriveFolderRow>(
+      env.DB,
+      "SELECT * FROM drive_folders WHERE id = ?",
+      job.folder,
+    );
     const batch = await first<{ id: string; owner: string; config: string }>(
       env.DB,
       "SELECT id, owner, config FROM batches WHERE id = ?",
       job.batch,
     );
-    const creds = await resolveDrive(env);
+    const creds = await resolveDriveAuth(env);
     if (!row || row.state !== "importing") return false;
-    if (!batch) return void (await fail("The batch for this folder was deleted.")), false;
-    if (!creds) return void (await fail("The Drive key is no longer connected.")), false;
+    if (!batch) return (void (await fail("The batch for this folder was deleted.")), false);
+    if (!creds) return (void (await fail("Nobody is signed in to Google Drive any more.")), false);
     const config = JSON.parse(batch.config) as Config;
     const photos = await scanDelivery(creds, job.folder);
     const have = new Set(
-      (await all<{ stem: string }>(env.DB, "SELECT stem FROM sources WHERE batch = ?", batch.id)).map((s) => s.stem),
+      (
+        await all<{ stem: string }>(env.DB, "SELECT stem FROM sources WHERE batch = ?", batch.id)
+      ).map((s) => s.stem),
     );
     let imported = have.size;
     let skipped = 0;
@@ -565,7 +754,11 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
       const name = importName(row.name, photo.relative);
       const stem = stemKey(name);
       if (have.has(stem)) continue;
-      if (!IMAGE_TYPES.includes(photo.mimeType) || Number(photo.size ?? 0) > MAX_PHOTO || !isValidSourceName(name)) {
+      if (
+        !IMAGE_TYPES.includes(photo.mimeType) ||
+        Number(photo.size ?? 0) > MAX_PHOTO ||
+        !isValidSourceName(name)
+      ) {
         skipped++;
         continue;
       }
@@ -580,12 +773,18 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
         const { photo, name, stem } = todo[cursor++];
         const id = uuid();
         const key = `${batch.owner}/${batch.id}/source/${id}`;
-        const media = await driveGet(creds, `/files/${encodeURIComponent(photo.id)}?alt=media&supportsAllDrives=true`);
+        const media = await driveGet(
+          creds,
+          `/files/${encodeURIComponent(photo.id)}?alt=media&supportsAllDrives=true`,
+        );
         const bytes = await media.arrayBuffer();
         await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: photo.mimeType } });
         const ref = await referenceCopy(creds, photo.id);
         const referenceKey = ref ? `${key}.reference` : null;
-        if (ref) await env.BUCKET.put(referenceKey!, ref.bytes, { httpMetadata: { contentType: ref.mime } });
+        if (ref)
+          await env.BUCKET.put(referenceKey!, ref.bytes, {
+            httpMetadata: { contentType: ref.mime },
+          });
         try {
           await insertSource(env, config, {
             id,
@@ -646,13 +845,16 @@ export async function driveThumb(env: Env, fileId: string): Promise<Response> {
     "SELECT id FROM drive_folders WHERE instr(thumbs, ?) > 0 LIMIT 1",
     `"${fileId}"`,
   );
-  const creds = await resolveDrive(env);
+  const creds = await resolveDriveAuth(env);
   if (!listed || !creds) return new Response(null, { status: 404 });
   const meta = (await (
-    await driveGet(creds, `/files/${encodeURIComponent(fileId)}?fields=thumbnailLink&supportsAllDrives=true`)
+    await driveGet(
+      creds,
+      `/files/${encodeURIComponent(fileId)}?fields=thumbnailLink&supportsAllDrives=true`,
+    )
   ).json()) as DriveFile;
   if (!meta.thumbnailLink) return new Response(null, { status: 404 });
-  const token = await vertexToken(creds, fetch, DRIVE_SCOPE);
+  const token = await creds.token();
   const r = await fetch(meta.thumbnailLink.replace(/=s\d+(-[a-z0-9-]+)?$/i, "=s240"), {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(20_000),

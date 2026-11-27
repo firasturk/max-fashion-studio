@@ -101,8 +101,10 @@ import {
   skipFolder,
   syncDrive,
   DRIVE_INBOX_SETTING,
+  driveSignInUrl,
   ensureDriveApi,
-  setDriveAccount,
+  setDriveClient,
+  signOutDrive,
 } from "./drive";
 import { driveFolderId } from "@shared/drive";
 import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
@@ -1264,25 +1266,28 @@ studioRoutes.get("/drive", async (c) => {
   return c.json({ ...status, folders, pricePerImage: price });
 });
 
-/** The Drive key is its own service account, apart from the one that pays for images. */
-studioRoutes.post("/drive/account", async (c) => {
+/* Drive signs in as a person (the workspace account), apart from the account that pays for images. */
+studioRoutes.post("/drive/client", async (c) => {
   if (c.get("user").role !== "admin")
-    throw new StudioError("Only an admin can add the Drive key.", 403);
-  const { json } = await body(c, z.object({ json: z.string().min(20).max(20000) }));
-  const creds = parseServiceAccount(json);
-  const billed = await resolveVertex(c.env);
-  if (billed && billed.clientEmail === creds.clientEmail)
-    throw new StudioError(
-      "This is the key of the account that pays for images. Drive needs its own key, from the Google account that owns the Drive.",
-    );
-  await setDriveAccount(c.env, creds);
-  return c.json({ ok: true, api: await ensureDriveApi(c.env, true) });
+    throw new StudioError("Only an admin can set up the Google sign-in.", 403);
+  const { id, secret } = await body(
+    c,
+    z.object({ id: z.string().trim().min(20).max(200), secret: z.string().trim().min(10).max(200) }),
+  );
+  await setDriveClient(c.env, id, secret);
+  return c.json({ ok: true });
+});
+
+studioRoutes.post("/drive/signin", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can sign in to Google Drive.", 403);
+  return c.json({ url: await driveSignInUrl(c.env) });
 });
 
 studioRoutes.delete("/drive/account", async (c) => {
   if (c.get("user").role !== "admin")
-    throw new StudioError("Only an admin can remove the Drive key.", 403);
-  await setDriveAccount(c.env, null);
+    throw new StudioError("Only an admin can sign out of Google Drive.", 403);
+  await signOutDrive(c.env);
   return c.json({ ok: true });
 });
 

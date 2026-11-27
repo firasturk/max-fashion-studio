@@ -23,18 +23,21 @@ interface Folder {
   guess: Guess;
 }
 interface DriveState {
+  /** The Google account signed in for Drive. */
   account: string | null;
-  /** Whether the Drive API is switched on in the studio's Google Cloud project. */
-  api?: "on" | "off" | "unknown";
-  project?: string | null;
+  /** Whether the Client ID and secret (step 1) are saved. */
+  client: boolean;
+  /** Project number of that client: where the Drive API is switched on. */
+  project: string | null;
+  /** The address Google sends the sign-in back to; it goes on the OAuth client. */
+  redirect: string;
+  api: "on" | "off" | "unknown";
   inbox: { id: string; name: string } | null;
   lastSync: number;
   error: string | null;
   folders: Folder[];
   pricePerImage: number;
 }
-
-const ENABLE_API = "gcloud services enable drive.googleapis.com";
 
 function ago(ms: number): string {
   if (!ms) return "not yet";
@@ -78,7 +81,9 @@ export default function InboxPage({
   const [link, setLink] = useState("");
   const [picked, setPicked] = useState<Record<string, string>>({});
   const timer = useRef<number | undefined>(undefined);
-  const keyInput = useRef<HTMLInputElement>(null);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [editClient, setEditClient] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +114,17 @@ export default function InboxPage({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "That did not work.");
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function signIn() {
+    setBusy("signin");
+    try {
+      const { url } = await post<{ url: string }>("/api/studio/drive/signin");
+      window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start the sign-in.");
       setBusy(null);
     }
   }
@@ -148,155 +164,190 @@ export default function InboxPage({
           </div>
         ) : (
           <ol className="nx-steps nx-stagger">
-            {state.account ? (
+            {state.client ? (
               <li className="nx-done">
-                <b>The Drive key is added</b>
-                <span>
-                  Drive is read by <b className="nx-mono">{state.account}</b>, apart from the
-                  account that pays for images.
-                </span>
+                <b>The Google sign-in is set up</b>
+                <span>The Client ID and secret are saved in the studio.</span>
                 <div className="nx-row">
-                  <button className="nx-btn nx-sm" onClick={() => keyInput.current?.click()}>
-                    Replace the key
-                  </button>
-                  <button
-                    className="nx-btn nx-sm nx-quiet"
-                    onClick={() =>
-                      void act("key", () => del("/api/studio/drive/account"), "Drive key removed")
-                    }
-                  >
-                    Remove
+                  <button className="nx-btn nx-sm" onClick={() => setEditClient(true)}>
+                    Replace them
                   </button>
                 </div>
               </li>
             ) : (
               <li>
-                <b>Add the Drive key</b>
+                <b>Create the Google sign-in</b>
                 <span>
-                  Drive uses its own key, apart from the account that pays for images. Open Google
-                  Cloud signed in as the Google account that owns the Drive, pick a project, then:
-                  Create service account, open it, Keys, Add key, Create new key, JSON. A file
-                  downloads. Choose that file here. Never send it in a chat.
+                  In Google Cloud, signed in as the account that owns the Drive: open Google Auth
+                  Platform, press Get started, give the app any name, choose Internal as the
+                  audience, and finish. Then Clients, Create client, Web application. Under
+                  Authorized redirect URIs press Add URI and paste this address:
+                </span>
+                <div className="nx-code">
+                  <code>{state.redirect}</code>
+                  <Copy text={state.redirect} label="Address" />
+                </div>
+                <div className="nx-row">
+                  <a
+                    className="nx-btn"
+                    target="_blank"
+                    rel="noreferrer"
+                    href="https://console.cloud.google.com/auth/overview"
+                  >
+                    Open Google Auth Platform
+                  </a>
+                </div>
+              </li>
+            )}
+            {(!state.client || editClient) && (
+              <li className="nx-sub">
+                <span>
+                  Google then shows a Client ID and a Client secret. Paste both here. They are
+                  stored encrypted in the studio; never send them in a chat.
+                </span>
+                <div className="nx-code">
+                  <input
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder="Client ID (ends with .apps.googleusercontent.com)"
+                    aria-label="Client ID"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="nx-code">
+                  <input
+                    type="password"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder="Client secret"
+                    aria-label="Client secret"
+                    autoComplete="off"
+                  />
+                  <button
+                    className="nx-btn nx-primary"
+                    disabled={!clientId.trim() || !clientSecret.trim() || busy === "client"}
+                    onClick={() =>
+                      void act(
+                        "client",
+                        async () => {
+                          await post("/api/studio/drive/client", {
+                            id: clientId,
+                            secret: clientSecret,
+                          });
+                          setClientId("");
+                          setClientSecret("");
+                          setEditClient(false);
+                        },
+                        "Saved. Now sign in with Google.",
+                      )
+                    }
+                  >
+                    {busy === "client" ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </li>
+            )}
+            {state.api === "on" ? (
+              <li className="nx-done">
+                <b>The Drive API is on</b>
+                <span>Nothing to do here: the studio checked it.</span>
+              </li>
+            ) : (
+              <li>
+                <b>Switch on the Drive API</b>
+                <span>
+                  In the same Google Cloud project, open this page and press Enable. It takes about
+                  a minute to take effect.
                 </span>
                 <div className="nx-row">
                   <a
                     className="nx-btn"
                     target="_blank"
                     rel="noreferrer"
-                    href="https://console.cloud.google.com/iam-admin/serviceaccounts"
+                    href={`https://console.developers.google.com/apis/api/drive.googleapis.com/overview${state.project ? `?project=${encodeURIComponent(state.project)}` : ""}`}
                   >
-                    Open service accounts in Google Cloud
+                    Open the Drive API page
                   </a>
+                  {state.account && (
+                    <button
+                      className="nx-btn"
+                      disabled={busy === "sync"}
+                      onClick={() => void act("sync", () => post("/api/studio/drive/check"))}
+                    >
+                      I pressed Enable, check again
+                    </button>
+                  )}
+                </div>
+              </li>
+            )}
+            {state.account ? (
+              <li className="nx-done">
+                <b>Signed in to Google Drive</b>
+                <span>
+                  The studio reads Drive as <b className="nx-mono">{state.account}</b>, apart from
+                  the account that pays for images.
+                </span>
+                <div className="nx-row">
+                  <button
+                    className="nx-btn nx-sm nx-quiet"
+                    onClick={() =>
+                      void act(
+                        "out",
+                        () => del("/api/studio/drive/account"),
+                        "Signed out of Google Drive",
+                      )
+                    }
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li>
+                <b>Sign in with Google</b>
+                <span>
+                  Choose the account that owns the Drive and allow access. The studio sees the
+                  folders that account sees; nothing has to be shared.
+                </span>
+                <div className="nx-row">
                   <button
                     className="nx-btn nx-primary"
-                    disabled={busy === "key"}
-                    onClick={() => keyInput.current?.click()}
+                    disabled={!state.client || busy === "signin"}
+                    onClick={() => void signIn()}
                   >
-                    {busy === "key" ? "Checking the key…" : "Choose the key file"}
+                    {busy === "signin" ? "Opening Google…" : "Sign in with Google"}
                   </button>
                 </div>
               </li>
             )}
-            <input
-              ref={keyInput}
-              type="file"
-              accept=".json,application/json"
-              hidden
-              aria-label="Drive key file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file)
-                  void act(
-                    "key",
-                    async () => post("/api/studio/drive/account", { json: await file.text() }),
-                    "Drive key added",
-                  );
-              }}
-            />
-            {!state.account ? null : (
-              <>
-                {state.api === "on" ? (
-                  <li className="nx-done">
-                    <b>The Drive API is on</b>
-                    <span>Nothing to do here: the studio checked it.</span>
-                  </li>
-                ) : (
-                  <li>
-                    <b>Switch on the Drive API</b>
-                    <span>
-                      Open this page with the same Google account that made the key and press
-                      Enable. It takes about a minute to take effect.
-                    </span>
-                    {state.project && (
-                      <span>
-                        If Google asks you to select a project, choose{" "}
-                        <b className="nx-mono">{state.project}</b>. If it is not in the list, switch
-                        to the Google account that created it (top right corner).
-                      </span>
-                    )}
-                    <div className="nx-row">
-                      <a
-                        className="nx-btn nx-primary"
-                        target="_blank"
-                        rel="noreferrer"
-                        href={`https://console.cloud.google.com/apis/library/drive.googleapis.com${state.project ? `?project=${encodeURIComponent(state.project)}` : ""}`}
-                      >
-                        Open the Drive API page
-                      </a>
-                      <button
-                        className="nx-btn"
-                        disabled={busy === "sync"}
-                        onClick={() => void act("sync", () => post("/api/studio/drive/check"))}
-                      >
-                        I pressed Enable, check again
-                      </button>
-                    </div>
-                    <div className="nx-code">
-                      <code>{ENABLE_API}</code>
-                      <Copy text={ENABLE_API} label="Command" />
-                    </div>
-                  </li>
-                )}
-                <li>
-                  <b>Share the folder with the studio</b>
-                  <span>
-                    In Google Drive, share the folder your deliveries arrive in with this address.
-                    Viewer is enough to read; Content manager lets the studio deliver results later.
-                  </span>
-                  <div className="nx-code">
-                    <code>{state.account}</code>
-                    <Copy text={state.account} label="Address" />
-                  </div>
-                </li>
-                <li>
-                  <b>Paste the folder link</b>
-                  <span>Open the folder in Drive and copy the link from the address bar.</span>
-                  <div className="nx-code">
-                    <input
-                      id="drive-link"
-                      value={link}
-                      onChange={(e) => setLink(e.target.value)}
-                      placeholder="https://drive.google.com/drive/folders/…"
-                      aria-label="Drive folder link"
-                    />
-                    <button
-                      className="nx-btn nx-primary"
-                      disabled={!link.trim() || busy === "connect"}
-                      onClick={() =>
-                        void act(
-                          "connect",
-                          () => post("/api/studio/drive/inbox", { link }),
-                          "Drive folder connected",
-                        )
-                      }
-                    >
-                      {busy === "connect" ? "Connecting…" : "Connect"}
-                    </button>
-                  </div>
-                </li>
-              </>
-            )}
+            <li>
+              <b>Paste the folder link</b>
+              <span>
+                Open the folder your deliveries arrive in and copy the link from the address bar.
+              </span>
+              <div className="nx-code">
+                <input
+                  id="drive-link"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                  aria-label="Drive folder link"
+                />
+                <button
+                  className="nx-btn nx-primary"
+                  disabled={!state.account || !link.trim() || busy === "connect"}
+                  onClick={() =>
+                    void act(
+                      "connect",
+                      () => post("/api/studio/drive/inbox", { link }),
+                      "Drive folder connected",
+                    )
+                  }
+                >
+                  {busy === "connect" ? "Connecting…" : "Connect"}
+                </button>
+              </div>
+            </li>
           </ol>
         )}
       </div>

@@ -14,7 +14,7 @@ import {
   runLearning,
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
-import { ensureDriveApi, syncDrive } from "./drive";
+import { driveCallback, ensureDriveApi, syncDrive } from "./drive";
 import { advanceClips, videoCallback } from "./video";
 import { logEvent, pruneEvents } from "./events";
 import {
@@ -78,6 +78,19 @@ app.get("/api/public/object", async (c) => {
       "X-Content-Type-Options": "nosniff",
     },
   });
+});
+
+// Google sending the admin back after the Drive sign-in. The single-use state is the guard.
+app.get("/api/drive/callback", async (c) => {
+  let outcome = "connected";
+  try {
+    if (c.req.query("error")) throw new StudioError("Sign-in was cancelled.");
+    await driveCallback(c.env, c.req.query("code") ?? "", c.req.query("state") ?? "");
+  } catch (e) {
+    console.error("[drive] callback", errorMessage(e));
+    outcome = "failed";
+  }
+  return c.redirect(`/?drive=${outcome}`);
 });
 
 // Higgsfield sending the admin back after the video sign-in. The single-use state is the guard.
