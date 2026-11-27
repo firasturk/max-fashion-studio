@@ -981,7 +981,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           </Suspense>
         ) : page === "skills" ? (
           <Suspense fallback={null}>
-            <SkillsPage skills={skills} onSaved={(list) => setSkills(list)} />
+            <SkillsPage
+              skills={skills}
+              admin={user.role === "admin"}
+              onSaved={(list) => setSkills(list)}
+            />
           </Suspense>
         ) : (
           <>

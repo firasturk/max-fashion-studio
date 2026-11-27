@@ -1,6 +1,20 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { PIN_LIMIT, pinterestPhotos, pinterestPins } from "./pinterest";
+import {
+  PIN_LIMIT,
+  downloadPins,
+  pinterestPhotos,
+  pinterestPins,
+  type PinPhoto,
+} from "./pinterest";
+import {
+  closeSuggestion,
+  listSuggestions,
+  refreshSuggestions,
+  setSuggestionSources,
+  suggestionRow,
+  suggestionSources,
+} from "./suggest";
 import { thumbResponse, thumbWidth } from "./thumbs";
 import {
   advanceClips,
@@ -770,7 +784,6 @@ studioRoutes.post("/pinterest/preview", async (c) => {
 });
 
 const pinterestBody = z.object({
-  link: z.string().trim().min(8).max(500),
   pins: z
     .array(z.string().regex(/^\d{6,24}$/))
     .min(1)
@@ -790,37 +803,91 @@ studioRoutes.post("/skills/pinterest", async (c) => {
     }),
   );
   const user = c.get("user");
-  const photos = await pinterestPhotos(d.link, d.pins);
+  const photos = await pinterestPhotos(d.pins);
+  const made = await createSkillFromPhotos(c.env, user.id, d.title, d.caption ?? "", photos);
+  return c.json({ ...made, skills: await listSkills(c.env, user.id) });
+});
+
+/** The three steps of a new skill, in one go: the skill, its photos, its text from the photos. */
+async function createSkillFromPhotos(
+  env: Env,
+  userId: string,
+  title: string,
+  caption: string,
+  photos: PinPhoto[],
+): Promise<{ id: string; photos: number; warning: string | null }> {
   let id =
-    d.title
+    title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 34) || `pinterest-${uuid().slice(0, 6)}`;
   // An existing skill is never overwritten by a board with the same name.
-  if (id === "zaid" || (await first(c.env.DB, "SELECT id FROM skills WHERE id = ?", id)))
+  if (id === "zaid" || (await first(env.DB, "SELECT id FROM skills WHERE id = ?", id)))
     id = `${id}-${uuid().slice(0, 4)}`;
   await run(
-    c.env.DB,
+    env.DB,
     `INSERT INTO skills (id, title, caption, description, goal, library, hidden, auto, created, updated)
      VALUES (?, ?, ?, '', ?, '', 0, 1, ?, ?)`,
     id,
-    d.title,
-    d.caption ?? "",
-    startingGoal(d.title),
+    title,
+    caption,
+    startingGoal(title),
     now(),
     now(),
   );
-  for (const p of photos) await addReference(c.env, id, p.bytes, p.mime, p.name);
+  for (const p of photos) await addReference(env, id, p.bytes, p.mime, p.name);
   // The same step the library runs after photos are added to an automatic skill.
   let warning: string | null = null;
   try {
-    await rebuildSkillFromLibrary(c.env, user.id, id, d.title);
+    await rebuildSkillFromLibrary(env, userId, id, title);
   } catch (e) {
     warning = e instanceof StudioError ? e.message : "The skill text could not be written yet.";
-    console.error("[pinterest] build", errorMessage(e));
+    console.error("[skills] build", errorMessage(e));
   }
-  return c.json({ id, photos: photos.length, warning, skills: await listSkills(c.env, user.id) });
+  return { id, photos: photos.length, warning };
+}
+
+/* Suggested skills: proposed by the studio from the Pinterest accounts it watches. */
+studioRoutes.get("/suggestions", async (c) =>
+  c.json({
+    items: await listSuggestions(c.env),
+    sources: await suggestionSources(c.env),
+  }),
+);
+
+studioRoutes.post("/suggestions/sources", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can change the accounts to watch.", 403);
+  const { links } = await body(c, z.object({ links: z.array(z.string().max(300)).max(40) }));
+  const sources = await setSuggestionSources(c.env, links);
+  return c.json({ sources });
+});
+
+studioRoutes.post("/suggestions/refresh", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can start a search for new ideas.", 403);
+  const made = await refreshSuggestions(c.env, true);
+  return c.json({ made, items: await listSuggestions(c.env) });
+});
+
+studioRoutes.post("/suggestions/approve", async (c) => {
+  const d = await body(
+    c,
+    z.object({ id: z.string().min(1), title: z.string().trim().min(2).max(60).optional() }),
+  );
+  const user = c.get("user");
+  const s = await suggestionRow(c.env, d.id);
+  const photos = await downloadPins(s.pins);
+  const made = await createSkillFromPhotos(c.env, user.id, d.title ?? s.title, s.caption, photos);
+  await closeSuggestion(c.env, s.id, "approved", made.id);
+  return c.json({ ...made, skills: await listSkills(c.env, user.id) });
+});
+
+studioRoutes.post("/suggestions/dismiss", async (c) => {
+  const { id } = await body(c, z.object({ id: z.string().min(1) }));
+  await closeSuggestion(c.env, (await suggestionRow(c.env, id)).id, "dismissed");
+  return c.json({ ok: true });
 });
 
 studioRoutes.post("/skills/:id/analyze", async (c) => {
@@ -987,7 +1054,7 @@ async function rebuildSkillFromLibrary(env: Env, userId: string, id: string, tit
 /** Pinterest pins into an existing skill's library, exactly as if they had been uploaded. */
 studioRoutes.post("/references/pinterest", async (c) => {
   const d = await body(c, pinterestBody.extend({ skill: skillRef.shape.skill }));
-  const photos = await pinterestPhotos(d.link, d.pins);
+  const photos = await pinterestPhotos(d.pins);
   const added: string[] = [];
   for (const p of photos) added.push(await addReference(c.env, d.skill, p.bytes, p.mime, p.name));
   return c.json({ ok: true, added });

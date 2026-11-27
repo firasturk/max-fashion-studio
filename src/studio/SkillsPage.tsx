@@ -6,13 +6,16 @@ import type { SkillInfo } from "@shared/types";
 const SkillDialog = lazy(() => import("./SkillDialog"));
 const PinterestDialog = lazy(() => import("./PinterestDialog"));
 const ReferenceLibrary = lazy(() => import("./ReferenceLibrary"));
+const SuggestedSkills = lazy(() => import("./SuggestedSkills"));
 
 /** The skill library: what each skill shoots and how it poses. One skill drives a whole folder. */
 export default function SkillsPage({
   skills,
+  admin,
   onSaved,
 }: {
   skills: SkillInfo[];
+  admin: boolean;
   onSaved: (skills: SkillInfo[], id?: string) => void;
 }) {
   const [editor, setEditor] = useState<{ open: boolean; skill: SkillInfo | null }>({
@@ -62,6 +65,9 @@ export default function SkillsPage({
           </button>
         </div>
       </div>
+      <Suspense fallback={null}>
+        <SuggestedSkills admin={admin} onCreated={onSaved} />
+      </Suspense>
       {skills.length ? (
         <div className="nx-skills nx-stagger">
           {skills.map((s) => (

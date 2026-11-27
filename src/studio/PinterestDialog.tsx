@@ -8,16 +8,17 @@ interface Pin {
   thumb: string;
   note: string;
 }
-interface Board {
+interface Found {
   title: string;
   pins: Pin[];
   limit: number;
 }
 
 /**
- * Pictures from a public Pinterest board. Without a skill it makes a new one, the way New skill
- * does (name, tagline, then photos, then the text written from them); with a skill it adds the
- * pictures to that skill's reference library.
+ * Pictures chosen on Pinterest. Paste the links of pins you like (as many as you want), or a
+ * whole board or account, and tick the ones to keep. Without a skill this makes a new one, the
+ * way New skill does (name, tagline, then photos, then the text written from them); with a skill
+ * it adds the pictures to that skill's reference library.
  */
 export default function PinterestDialog({
   skill,
@@ -30,38 +31,73 @@ export default function PinterestDialog({
   onCreated?: (skills: SkillInfo[], id: string) => void;
   onAdded?: (count: number) => void | Promise<void>;
 }) {
-  const [link, setLink] = useState("");
-  const [board, setBoard] = useState<Board | null>(null);
+  const [links, setLinks] = useState("");
+  const [pins, setPins] = useState<Pin[]>([]);
+  const [limit, setLimit] = useState(12);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState<"find" | "make" | null>(null);
 
+  /** Reads every pasted link and adds its pictures to the ones already on the table. */
   async function find() {
+    const list = links.split(/\s+/).filter(Boolean).slice(0, 30);
+    if (!list.length) return;
     setBusy("find");
-    try {
-      const b = await post<Board>("/api/studio/pinterest/preview", { link });
-      setBoard(b);
-      setTitle(b.title);
-      setCaption(`Pinterest · ${b.title}`.slice(0, 80));
-      setPicked(new Set(b.pins.slice(0, b.limit).map((p) => p.id)));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not read that Pinterest link.");
-    } finally {
-      setBusy(null);
+    const fresh: Pin[] = [];
+    const single = new Set<string>();
+    let failed = 0;
+    let max = limit;
+    let name = "";
+    for (const link of list) {
+      try {
+        const f = await post<Found>("/api/studio/pinterest/preview", { link });
+        max = f.limit;
+        fresh.push(...f.pins);
+        // One pin was chosen on purpose; a board or an account is a pile to choose from.
+        if (f.pins.length === 1) single.add(f.pins[0].id);
+        else name ||= f.title;
+      } catch {
+        failed++;
+      }
     }
+    const known = new Set(pins.map((p) => p.id));
+    const added = fresh.filter(
+      (p, i) => !known.has(p.id) && fresh.findIndex((q) => q.id === p.id) === i,
+    );
+    setLimit(max);
+    setPins([...pins, ...added]);
+    setPicked((old) => {
+      const next = new Set(old);
+      const wanted = added.filter((p) => single.has(p.id));
+      // Nothing chosen yet and only piles were pasted: start with the first few.
+      const start = !next.size && !wanted.length ? added.slice(0, max) : wanted;
+      for (const p of start) if (next.size < max) next.add(p.id);
+      return next;
+    });
+    if (!title && name) {
+      setTitle(name);
+      setCaption(`Pinterest · ${name}`.slice(0, 80));
+    }
+    if (added.length) setLinks("");
+    if (failed)
+      toast.error(
+        failed === list.length
+          ? "Pinterest could not read those links. Use the link of a pin, a public board or an account."
+          : `${failed} link${failed === 1 ? "" : "s"} could not be read; the rest were added.`,
+      );
+    else if (!added.length) toast.message("Those pictures are already here.");
+    setBusy(null);
   }
 
   async function make() {
-    if (!board) return;
     setBusy("make");
-    const pins = board.pins.filter((p) => picked.has(p.id)).map((p) => p.id);
+    const chosen = pins.filter((p) => picked.has(p.id)).map((p) => p.id);
     try {
       if (skill) {
         const r = await post<{ added: string[] }>("/api/studio/references/pinterest", {
           skill: skill.id,
-          link,
-          pins,
+          pins: chosen,
         });
         toast.success(`${r.added.length} pictures added to ${skill.title}`);
         await onAdded?.(r.added.length);
@@ -73,10 +109,9 @@ export default function PinterestDialog({
         warning: string | null;
         skills: SkillInfo[];
       }>("/api/studio/skills/pinterest", {
-        link,
         title: title.trim(),
         caption: caption.trim(),
-        pins,
+        pins: chosen,
       });
       if (r.warning)
         toast.message(
@@ -94,8 +129,8 @@ export default function PinterestDialog({
     setPicked((p) => {
       const n = new Set(p);
       if (n.has(id)) n.delete(id);
-      else if (board && n.size < board.limit) n.add(id);
-      else toast.message(`Up to ${board?.limit} pictures at a time. Untick one first.`);
+      else if (n.size < limit) n.add(id);
+      else toast.message(`Up to ${limit} pictures at a time. Untick one first.`);
       return n;
     });
 
@@ -106,9 +141,9 @@ export default function PinterestDialog({
       <section className="nx-sheet nx-pins" role="dialog" aria-modal="true" aria-label={heading}>
         <header>
           <h2>{heading}</h2>
-          {board && (
+          {pins.length > 0 && (
             <span className="nx-chip">
-              {picked.size} of {board.limit} chosen
+              {picked.size} of {limit} chosen
             </span>
           )}
           <span className="nx-right">
@@ -119,32 +154,39 @@ export default function PinterestDialog({
         </header>
         <div className="nx-body">
           <p className="nx-muted">
-            Paste the link of a public Pinterest board (or one pin). The pictures you choose go into
-            the skill's reference library, like uploaded photos: its direction and scene library are
-            written from them, and each image borrows background, pose and light from one of them.
-            The outfit, footwear and accessories never change.
+            Choose the pictures yourself: on Pinterest, open a picture you like, copy its link
+            (Share, then Copy link) and paste it here. Paste as many links as you want, one per
+            line, and keep adding. A public board or account link also works if you want a pile to
+            choose from. No board of your own is needed.
           </p>
-          <div className="nx-code">
-            <input
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && link.trim() && void find()}
-              placeholder="https://www.pinterest.com/name/board/"
-              aria-label="Pinterest link"
+          <div className="nx-code nx-top-align">
+            <textarea
+              rows={3}
+              value={links}
+              onChange={(e) => setLinks(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void find();
+              }}
+              placeholder={"https://pin.it/…\nhttps://www.pinterest.com/pin/…"}
+              aria-label="Pinterest links"
               autoFocus
             />
             <button
               className="nx-btn"
-              disabled={!link.trim() || !!busy}
+              disabled={!links.trim() || !!busy}
               onClick={() => void find()}
             >
-              {busy === "find" ? "Looking…" : board ? "Look again" : "Find the pictures"}
+              {busy === "find"
+                ? "Looking…"
+                : pins.length
+                  ? "Add more pictures"
+                  : "Add the pictures"}
             </button>
           </div>
-          {board && (
+          {pins.length > 0 && (
             <>
               <div className="nx-pingrid">
-                {board.pins.map((p) => (
+                {pins.map((p) => (
                   <button
                     key={p.id}
                     className={picked.has(p.id) ? "nx-on" : ""}
@@ -170,6 +212,7 @@ export default function PinterestDialog({
                       className="nx-input"
                       value={title}
                       maxLength={60}
+                      placeholder="e.g. Ramadan evening"
                       onChange={(e) => setTitle(e.target.value)}
                       aria-label="Skill name"
                     />
@@ -180,6 +223,7 @@ export default function PinterestDialog({
                       className="nx-input"
                       value={caption}
                       maxLength={80}
+                      placeholder="e.g. Lanterns, courtyards, dusk"
                       onChange={(e) => setCaption(e.target.value)}
                       aria-label="Short tagline"
                     />
@@ -201,6 +245,9 @@ export default function PinterestDialog({
                       : `Create the skill from ${count}`}
                 </button>
                 {busy === "make" && <span className="nx-muted">This takes up to a minute.</span>}
+                {!skill && !busy && picked.size > 0 && title.trim().length < 2 && (
+                  <span className="nx-muted">Give the skill a name first.</span>
+                )}
               </div>
             </>
           )}

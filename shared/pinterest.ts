@@ -3,6 +3,7 @@
 export type PinterestTarget =
   | { kind: "board"; user: string; board: string }
   | { kind: "pin"; id: string }
+  | { kind: "user"; user: string }
   | { kind: "short"; url: string };
 
 /** First path segments that are Pinterest's own pages, not a person's boards. */
@@ -34,9 +35,10 @@ export function parsePinterestLink(link: string): PinterestTarget | null {
     const id = /(\d{6,})$/.exec(parts[1])?.[1];
     return id ? { kind: "pin", id } : null;
   }
-  if (parts.length >= 2 && !RESERVED.has(parts[0].toLowerCase()) && !parts[1].startsWith("_"))
-    return { kind: "board", user: parts[0], board: parts[1] };
-  return null;
+  if (!parts.length || RESERVED.has(parts[0].toLowerCase())) return null;
+  // An account's own page ("/name/", "/name/_saved/") stands for all its public pins.
+  if (parts.length === 1 || parts[1].startsWith("_")) return { kind: "user", user: parts[0] };
+  return { kind: "board", user: parts[0], board: parts[1] };
 }
 
 export interface Pin {
@@ -46,6 +48,8 @@ export interface Pin {
   /** The picture kept as a reference photo. */
   image: string;
   note: string;
+  /** The board the pin sits on, when the feed says so. */
+  board: string;
 }
 
 const PINIMG =
@@ -58,6 +62,7 @@ export function pinImage(url: string, size: "236x" | "736x"): string | null {
 }
 
 interface RawPin {
+  board?: { name?: unknown };
   id?: unknown;
   is_video?: unknown;
   description?: unknown;
@@ -82,7 +87,40 @@ export function readPins(raw: unknown): Pin[] {
       thumb,
       image,
       note: typeof p.description === "string" ? p.description.trim().slice(0, 140) : "",
+      board: typeof p.board?.name === "string" ? p.board.name.trim().slice(0, 60) : "",
     });
   }
   return out;
 }
+
+/** Pins sorted into their boards, biggest first: each board is one candidate look. */
+export function groupByBoard(pins: Pin[], fallback: string): { board: string; pins: Pin[] }[] {
+  const groups = new Map<string, Pin[]>();
+  for (const p of pins) {
+    const name = p.board || fallback;
+    groups.set(name, [...(groups.get(name) ?? []), p]);
+  }
+  return [...groups.entries()]
+    .map(([board, list]) => ({ board, pins: list }))
+    .sort((a, b) => b.pins.length - a.pins.length);
+}
+
+/** A stable name for "this board of this account", so a look is proposed only once. */
+export function originKey(account: string, board: string): string {
+  const norm = (v: string) =>
+    v
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  return `${norm(account)}/${norm(board)}`;
+}
+
+/** The accounts the studio watches until the team chooses its own. */
+export const STARTER_SOURCES = [
+  "https://www.pinterest.com/zaraofficial/",
+  "https://www.pinterest.com/massimodutti/",
+  "https://www.pinterest.com/hm/",
+  "https://www.pinterest.com/bershka/",
+  "https://www.pinterest.com/voguemagazine/",
+  "https://www.pinterest.com/harpersbazaar/",
+];

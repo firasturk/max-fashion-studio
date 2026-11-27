@@ -5,7 +5,7 @@
  */
 import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
-import { resolveGoogleKey, resolveOpenAIKey } from "./settings";
+import { resolveGoogleAuth, resolveOpenAIKey } from "./settings";
 import { askVisionGoogle, askVisionOpenAI } from "./editorial";
 import type { ImageBytes } from "./openai";
 
@@ -31,35 +31,48 @@ export function skillBuilderInstruction(title: string, count: number): string {
   ].join("\n\n");
 }
 
-export async function buildSkillFromReferences(
+/**
+ * Asks the studio's vision model about some photos and returns its JSON answer as text. Google is
+ * reached the way image generation reaches it (the billed Cloud account first), with OpenAI as
+ * the stand-in when Google cannot answer.
+ */
+export async function askVision(
   env: Env,
-  title: string,
+  instruction: string,
   images: ImageBytes[],
-): Promise<{ description: string; goal: string; library: string }> {
-  if (!images.length) throw new StudioError("Add reference photos to this skill first.");
-  const google = (await resolveGoogleKey(env)).key;
+  schema: unknown,
+): Promise<string> {
+  const google = (await resolveGoogleAuth(env)).auth;
   const openai = (await resolveOpenAIKey(env)).key;
   if (!google && !openai)
     throw new StudioError(
-      "Building from references needs a Google or OpenAI key in Connection.",
+      "Building from references needs Google Cloud, a Google key or an OpenAI key in Connection.",
       428,
     );
-  const instruction = skillBuilderInstruction(title, images.length);
   let text: string;
   if (google) {
     try {
-      text = await askVisionGoogle(google, instruction, images, SCHEMA);
+      text = await askVisionGoogle(google, instruction, images, schema);
     } catch (e) {
       if (openai && /location is not supported|credits are used up|\(4\d\d\)/.test(errorMessage(e)))
         text = await askVisionOpenAI(openai, instruction, images);
       else throw e;
     }
   } else text = await askVisionOpenAI(openai!, instruction, images);
-  const cleaned = text
+  return text
     .trim()
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/, "")
     .trim();
+}
+
+export async function buildSkillFromReferences(
+  env: Env,
+  title: string,
+  images: ImageBytes[],
+): Promise<{ description: string; goal: string; library: string }> {
+  if (!images.length) throw new StudioError("Add reference photos to this skill first.");
+  const cleaned = await askVision(env, skillBuilderInstruction(title, images.length), images, SCHEMA);
   const d = JSON.parse(cleaned) as { description?: string; goal?: string; library?: string };
   if (!d.goal || !d.library) throw new StudioError("The model returned an incomplete brief.", 502);
   return {

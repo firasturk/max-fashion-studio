@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePinterestLink, pinImage, readPins } from "@shared/pinterest";
+import { groupByBoard, originKey, parsePinterestLink, pinImage, readPins } from "@shared/pinterest";
 
 describe("Pinterest links", () => {
   it("reads a board link, with or without a country site", () => {
@@ -33,9 +33,20 @@ describe("Pinterest links", () => {
     });
   });
 
+  it("reads an account page as all of its public pins", () => {
+    expect(parsePinterestLink("https://www.pinterest.com/zaraofficial/")).toEqual({
+      kind: "user",
+      user: "zaraofficial",
+    });
+    expect(parsePinterestLink("pinterest.com/zaraofficial/_saved/")).toEqual({
+      kind: "user",
+      user: "zaraofficial",
+    });
+  });
+
   it("refuses pages that are not a board or a pin, and other sites", () => {
     expect(parsePinterestLink("https://www.pinterest.com/search/pins/?q=denim")).toBeNull();
-    expect(parsePinterestLink("https://www.pinterest.com/maxfashion/")).toBeNull();
+    expect(parsePinterestLink("https://www.pinterest.com/pin/")).toBeNull();
     expect(parsePinterestLink("https://evil.example/pinterest.com/a/b")).toBeNull();
     expect(parsePinterestLink("https://notpinterest.com/a/b")).toBeNull();
   });
@@ -65,7 +76,27 @@ describe("Pinterest pictures", () => {
         thumb: "https://i.pinimg.com/236x/dc/59/c7/dc59c78056607f0250deb7611d387731.jpg",
         image: "https://i.pinimg.com/736x/dc/59/c7/dc59c78056607f0250deb7611d387731.jpg",
         note: "Wide trousers",
+        board: "",
       },
     ]);
+  });
+});
+
+describe("looks to propose", () => {
+  it("sorts an account's pins into its boards, biggest first", () => {
+    const pin = (id: string, board: string) => ({ id, thumb: "t", image: id, note: "", board });
+    const groups = groupByBoard(
+      [pin("1", "Denim"), pin("2", "Tailoring"), pin("3", "Denim"), pin("4", "")],
+      "Zara",
+    );
+    expect(groups.map((g) => [g.board, g.pins.length])).toEqual([
+      ["Denim", 2],
+      ["Tailoring", 1],
+      ["Zara", 1],
+    ]);
+  });
+
+  it("names a board the same way every time", () => {
+    expect(originKey("ZaraOfficial", "Autumn / Winter '26")).toBe("zaraofficial/autumn-winter-26");
   });
 });

@@ -4,7 +4,13 @@
  * reference library, where they behave exactly like uploaded photos.
  */
 import { StudioError } from "./errors";
-import { parsePinterestLink, readPins, type Pin, type PinterestTarget } from "@shared/pinterest";
+import {
+  parsePinterestLink,
+  pinImage,
+  readPins,
+  type Pin,
+  type PinterestTarget,
+} from "@shared/pinterest";
 
 const FEED = "https://widgets.pinterest.com/v3/pidgets";
 const AGENT = "Mozilla/5.0 (compatible; studio-mood-board/1.0)";
@@ -47,6 +53,21 @@ async function resolve(link: string): Promise<Exclude<PinterestTarget, { kind: "
 
 export async function pinterestPins(link: string): Promise<{ title: string; pins: Pin[] }> {
   const target = await resolve(link);
+  if (target.kind === "user") {
+    const data = await feed(`/users/${encodeURIComponent(target.user)}/pins/`);
+    const pins = readPins(data.pins);
+    if (!pins.length)
+      throw new StudioError(
+        "That Pinterest account has no public pictures the studio can read.",
+        404,
+      );
+    const name = (data.user as { full_name?: unknown } | undefined)?.full_name;
+    return {
+      title:
+        typeof name === "string" && name.trim() ? decodeEntities(name).slice(0, 60) : target.user,
+      pins,
+    };
+  }
   if (target.kind === "pin") {
     const data = (await feed(`/pins/info/?pin_ids=${encodeURIComponent(target.id)}`)) as unknown;
     const pins = readPins(data);
@@ -70,24 +91,60 @@ export async function pinterestPins(link: string): Promise<{ title: string; pins
   };
 }
 
+/** Pinterest sends names with HTML entities ("H&amp;M", "&#183; ZARA &#183;"). */
+export function decodeEntities(v: string): string {
+  return v
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/[·•]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export interface PinPhoto {
   bytes: ArrayBuffer;
   mime: string;
   name: string;
 }
 
+export async function pinsByIds(ids: string[]): Promise<Pin[]> {
+  const out: Pin[] = [];
+  const unique = [...new Set(ids)].slice(0, 40);
+  for (let i = 0; i < unique.length; i += 20) {
+    const data = (await feed(
+      `/pins/info/?pin_ids=${unique
+        .slice(i, i + 20)
+        .map(encodeURIComponent)
+        .join(",")}`,
+    )) as unknown;
+    out.push(...readPins(data));
+  }
+  // Pinterest answers in its own order; the person's order is the one that counts.
+  return unique.map((id) => out.find((p) => p.id === id)).filter((p): p is Pin => !!p);
+}
+
 /**
- * Downloads the chosen pins of a board. The pictures are looked up again from the link, so only
+ * Downloads the chosen pins. Their pictures are looked up from Pinterest by id, so only
  * Pinterest's own image host is ever fetched, whatever the browser sent.
  */
-export async function pinterestPhotos(link: string, chosen: string[]): Promise<PinPhoto[]> {
-  const board = await pinterestPins(link);
-  const wanted = new Set(chosen);
-  const pins = board.pins.filter((p) => wanted.has(p.id)).slice(0, PIN_LIMIT);
+export async function pinterestPhotos(chosen: string[]): Promise<PinPhoto[]> {
+  const pins = (await pinsByIds(chosen)).slice(0, PIN_LIMIT);
   if (!pins.length) throw new StudioError("Choose at least one picture.");
+  return downloadPins(pins);
+}
+
+/** Fetches pictures from Pinterest's image host. Anything that is not a still picture is left out. */
+export async function downloadPins(
+  pins: { id: string; image: string }[],
+  size: "236x" | "736x" = "736x",
+): Promise<PinPhoto[]> {
   const out: PinPhoto[] = [];
-  for (const pin of pins) {
-    const r = await fetch(pin.image, {
+  for (const pin of pins.slice(0, 24)) {
+    const url = pinImage(pin.image, size);
+    if (!url) continue;
+    const r = await fetch(url, {
       headers: { "User-Agent": AGENT },
       signal: AbortSignal.timeout(20_000),
     });
