@@ -234,7 +234,11 @@ const BUSY_SETTING = "library_busy";
 /** How many prepared skills may wait for a decision at once. */
 const READY_LIMIT = 8;
 const DRAFT_MIN = 6;
-const DRAFT_MAX = 16;
+/** How many of a board's pictures are laid out to choose one look from. */
+const DRAFT_PILE = 30;
+/** The most pictures one prepared skill starts with. */
+const DRAFT_MAX = 12;
+const TRIED_SETTING = "library_tried";
 
 const LOOK_SCHEMA = {
   type: "object",
@@ -367,7 +371,7 @@ const NAME_SCHEMA = {
 function nameInstruction(count: number): string {
   return [
     `${count} numbered fashion photographs are attached, in order (1 to ${count}). They will become the reference photos of one "skill": a look a studio can shoot again and again.`,
-    "keep: the numbers of the photographs that belong together as one look (the same kind of place, light and mood). Leave out the odd ones. Never keep two photographs that are the same picture.",
+    `keep: the pile comes from a mixed board, so it holds several looks. Find the largest group of photographs that share one look (the same kind of place, the same kind of light, the same mood) and return their numbers: at least ${DRAFT_MIN} when the pile allows it, at most ${DRAFT_MAX}. A look can be broad (for example 'outdoors in daylight', 'plain studio wall', 'city street'), so prefer a group of ${DRAFT_MIN} or more over a tighter group of three. Never keep two photographs that are the same picture.`,
     "name: 2 to 4 words in plain catalogue English for that look, the way a stylist would file it (for example 'Quiet tailoring', 'Winter street', 'Sunlit resort'). No brand names, no years.",
     "tagline: 3 to 6 words naming the place and the light, separated by commas or a middle dot (for example 'Stone courtyards · overcast light').",
     "Return ONLY a JSON object with keys keep, name and tagline.",
@@ -385,29 +389,42 @@ export async function prepareSkill(env: Env): Promise<string | null> {
     "SELECT COUNT(*) AS n FROM skill_drafts WHERE state = 'waiting'",
   );
   if ((waiting?.n ?? 0) >= READY_LIMIT) return null;
-  const group = await first<{ account: string; board: string }>(
+  const groups = await all<{ account: string; board: string; n: number }>(
     env.DB,
-    `SELECT account, board FROM pin_library WHERE state = 'new' AND usable = 1
+    `SELECT account, board, COUNT(*) AS n FROM pin_library WHERE state = 'new' AND usable = 1
        AND NOT EXISTS (
          SELECT 1 FROM pin_library u
          WHERE u.account = pin_library.account AND u.board = pin_library.board
            AND u.state = 'new' AND u.usable IS NULL)
-     GROUP BY account, board HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC LIMIT 1`,
+     GROUP BY account, board HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC`,
     DRAFT_MIN + 2,
   );
-  if (!group) return null;
+  // A board that gave no look is tried again only once it has gained enough new pictures.
+  let tried: Record<string, number> = {};
+  try {
+    tried = JSON.parse((await getSetting(env, TRIED_SETTING)) ?? "{}") as Record<string, number>;
+  } catch {
+    tried = {};
+  }
+  const keyOf = (g: { account: string; board: string }) => `${g.account}|${g.board}`;
+  const open = groups.filter((g) => g.n >= (tried[keyOf(g)] ?? 0) + DRAFT_MIN);
+  if (!open.length) return null;
+  // Shelves that have nothing waiting yet go first, so every category gets a ready skill.
+  const served = await all<{ origin: string }>(
+    env.DB,
+    "SELECT origin FROM skill_drafts WHERE state = 'waiting'",
+  );
+  const has = (g: { account: string }) =>
+    served.some((d) => d.origin.startsWith(`${g.account} · `));
+  const group = open.find((g) => !has(g)) ?? open[0];
+  tried[keyOf(group)] = group.n;
+  await setSetting(env, TRIED_SETTING, JSON.stringify(tried));
   const pins = await all<{ id: string; thumb: string; image: string }>(
     env.DB,
     "SELECT id, thumb, image FROM pin_library WHERE state = 'new' AND usable = 1 AND account = ? AND board = ? ORDER BY seen DESC, id DESC LIMIT ?",
     group.account,
     group.board,
-    DRAFT_MAX,
-  );
-  // Whatever happens next, these pictures have had their turn.
-  await markPins(
-    env,
-    pins.map((p) => p.id),
-    "used",
+    DRAFT_PILE,
   );
   const thumbs = await downloadPins(
     pins.map((p) => ({ id: p.id, image: p.thumb })),
@@ -419,8 +436,13 @@ export async function prepareSkill(env: Env): Promise<string | null> {
   ) as { keep?: number[]; name?: string; tagline?: string };
   const kept = [...new Set(named.keep ?? [])]
     .map((n) => pins.find((p) => p.id === order[n - 1]))
-    .filter((p): p is (typeof pins)[number] => !!p);
-  if (kept.length < DRAFT_MIN) return null;
+    .filter((p): p is (typeof pins)[number] => !!p)
+    .slice(0, DRAFT_MAX);
+  if (kept.length < DRAFT_MIN) {
+    // The pictures stay in the library for people to pick from.
+    console.log("[library] no look in", keyOf(group), "kept", kept.length, "of", pins.length);
+    return null;
+  }
   const title = (named.name ?? "").trim().slice(0, 40) || group.board.slice(0, 40);
   const taken =
     (await first(env.DB, "SELECT id FROM skills WHERE lower(title) = lower(?)", title)) ||
@@ -472,7 +494,15 @@ export async function prepareSkill(env: Env): Promise<string | null> {
     t,
     t,
   );
-  console.log("[library] ready skill:", title, "with", photos.length, "photos from", group.account);
+  // Only the pictures that went into the skill leave the library; the board may hold another look.
+  await markPins(
+    env,
+    kept.map((p) => p.id),
+    "used",
+  );
+  delete tried[keyOf(group)];
+  await setSetting(env, TRIED_SETTING, JSON.stringify(tried));
+  console.log("[library] ready skill:", title, "with", photos.length, "photos from", keyOf(group));
   return id;
 }
 
