@@ -66,6 +66,7 @@ import type {
 const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
 const BatchesView = lazyScreen(() => import("./BatchesView"));
+const InboxPage = lazyScreen(() => import("./InboxPage"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
@@ -111,7 +112,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
-  const [page, setPage] = useState<"studio" | "batches" | "admin" | "chat">("studio");
+  const [page, setPage] = useState<"studio" | "batches" | "admin" | "chat" | "inbox">("studio");
+  const [inboxCount, setInboxCount] = useState(0);
   /** The image the user opened last: what "this image" means in the chat. */
   const [lastTask, setLastTask] = useState<Task | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -719,6 +721,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
             Studio
           </button>
+          <button className={page === "inbox" ? "active" : ""} onClick={() => setPage("inbox")}>
+            Inbox {inboxCount > 0 ? <span>{inboxCount}</span> : <span className="nav-badge">New</span>}
+          </button>
           <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
             Batches <span>{batches.length}</span>
           </button>
@@ -790,6 +795,15 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               <AdminView me={user.id} />
             </Suspense>
           </>
+        ) : page === "inbox" ? (
+          <Suspense fallback={null}>
+            <InboxPage
+              skills={skills}
+              admin={user.role === "admin"}
+              onCount={setInboxCount}
+              onOpenBatch={(id) => void openBatch(id)}
+            />
+          </Suspense>
         ) : page === "batches" ? (
           <>
             <div className="page-heading">

@@ -69,10 +69,24 @@ import {
   validateConfig,
   NP_POSES,
   NP_BACKGROUNDS,
+  DEFAULT_CONFIG,
 } from "@shared/config";
+import { estimateCost } from "@shared/pricing";
 import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
+import { insertSource } from "./sources";
+import {
+  approveFolder,
+  connectInbox,
+  driveStatus,
+  driveThumb,
+  inboxFolders,
+  skipFolder,
+  syncDrive,
+  DRIVE_INBOX_SETTING,
+} from "./drive";
+import { driveFolderId } from "@shared/drive";
 import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
 import type { EditorialBrief } from "./editorial";
 import { signObjectUrl } from "./signed";
@@ -1104,6 +1118,69 @@ studioRoutes.delete("/engine/key", async (c) => {
 
 const newBatch = z.object({ name: z.string().max(100).optional(), config: configSchema });
 
+/* Google Drive inbox: folders wait for an approval; nothing is generated before it. */
+studioRoutes.get("/drive", async (c) => {
+  const status = await driveStatus(c.env);
+  const folders = status.inbox ? await inboxFolders(c.env) : [];
+  const price = estimateCost(
+    { ...DEFAULT_CONFIG, mode: "7", model: await resolveEngineModel(c.env) },
+    1,
+    [1],
+  ).total;
+  return c.json({ ...status, folders, pricePerImage: price });
+});
+
+studioRoutes.post("/drive/inbox", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can connect the Drive folder.", 403);
+  const { link } = await body(c, z.object({ link: z.string().min(10).max(500) }));
+  const id = driveFolderId(link);
+  if (!id) throw new StudioError("That does not look like a Google Drive folder link.");
+  const inbox = await connectInbox(c.env, id);
+  await syncDrive(c.env, true);
+  return c.json({ inbox });
+});
+
+studioRoutes.delete("/drive/inbox", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can disconnect the Drive folder.", 403);
+  await deleteSetting(c.env, DRIVE_INBOX_SETTING);
+  return c.json({ ok: true });
+});
+
+studioRoutes.post("/drive/sync", async (c) => {
+  await syncDrive(c.env, true);
+  return c.json({ ok: true });
+});
+
+studioRoutes.post("/drive/approve", async (c) => {
+  const user = c.get("user");
+  const { folder, skill, start } = await body(
+    c,
+    z.object({ folder: z.string().min(5), skill: z.string().min(1).max(80), start: z.boolean() }),
+  );
+  if (!(await listSkills(c.env, user.id)).some((s) => s.id === skill))
+    throw new StudioError("Choose a skill for this folder.");
+  const batch = await approveFolder(c.env, user.id, folder, skill, start);
+  await logEvent(c.env, {
+    kind: "drive.approve",
+    actor: "user",
+    user: user.id,
+    batch,
+    skill,
+    data: { folder, start },
+  });
+  return c.json({ batch });
+});
+
+studioRoutes.post("/drive/skip", async (c) => {
+  const { folder } = await body(c, z.object({ folder: z.string().min(5) }));
+  await skipFolder(c.env, folder);
+  return c.json({ ok: true });
+});
+
+studioRoutes.get("/drive/thumb", async (c) => driveThumb(c.env, c.req.query("id") ?? ""));
+
 studioRoutes.post("/batch", async (c) => {
   const user = c.get("user");
   const parsed = newBatch.safeParse(await c.req.json().catch(() => ({})));
@@ -1302,21 +1379,17 @@ studioRoutes.post("/upload", async (c) => {
     });
   }
   try {
-    const statements = [
-      c.env.DB.prepare(
-        "INSERT INTO sources (id, batch, name, stem, key, reference_key, mime, size, role, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      ).bind(id, b.id, name, stem, key, referenceKey, f.type, f.size, role, now()),
-    ];
-    if (createsTasks(config, role)) {
-      for (let card = 1; card <= cardsPerSource(config); card++) {
-        statements.push(
-          c.env.DB.prepare(
-            "INSERT INTO tasks (id, batch, source, card, status, prompt, updated) VALUES (?, ?, ?, ?, 'queued', ?, ?)",
-          ).bind(uuid(), b.id, id, card, buildPrompt(config, card), now()),
-        );
-      }
-    }
-    await c.env.DB.batch(statements);
+    await insertSource(c.env, config, {
+      id,
+      batch: b.id,
+      name,
+      stem,
+      key,
+      referenceKey,
+      mime: f.type,
+      size: f.size,
+      role,
+    });
   } catch (e) {
     await c.env.BUCKET.delete([key, ...(referenceKey ? [referenceKey] : [])]);
     throw e;

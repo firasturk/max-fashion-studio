@@ -14,6 +14,7 @@ import {
   runLearning,
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
+import { syncDrive } from "./drive";
 import { logEvent, pruneEvents } from "./events";
 import {
   DEV_HOOK_TOKEN_SETTING,
@@ -198,6 +199,8 @@ export default {
     const ids = await activeBatchIds(env);
     for (const id of ids)
       ctx.waitUntil(advanceBatch(env, id).catch((e) => console.error("[cron]", id, e)));
+    // Google Drive inbox: new delivery folders are noticed within a minute.
+    ctx.waitUntil(syncDrive(env).catch((e) => console.error("[drive]", errorMessage(e))));
     // Brand memory: one learning run a week over the event stream, plus pruning of old events.
     ctx.waitUntil(
       (async () => {

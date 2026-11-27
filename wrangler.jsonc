@@ -27,6 +27,7 @@
     "@shared/colours": "./shared/colours.ts",
     "@shared/png": "./shared/png.ts",
     "@shared/backdrop": "./shared/backdrop.ts",
+    "@shared/drive": "./shared/drive.ts",
   },
   "triggers": { "crons": ["* * * * *"] },
   // Run near the US-hosted engines; Gemini refuses requests from some regions.
