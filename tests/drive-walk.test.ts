@@ -81,7 +81,12 @@ const NOVEMBER: Tree = {
   October: {},
 };
 
-async function settle(d: ReturnType<typeof drive>, rows: DriveFolderRow[] = [], maxCalls = 24) {
+async function settle(
+  d: ReturnType<typeof drive>,
+  rows: DriveFolderRow[] = [],
+  maxCalls = 24,
+  at = Date.now(),
+) {
   const known = await walkInbox(
     "root",
     rows,
@@ -89,6 +94,7 @@ async function settle(d: ReturnType<typeof drive>, rows: DriveFolderRow[] = [], 
     () => {},
     async () => {},
     maxCalls,
+    () => at,
   );
   return [...known.values()];
 }
@@ -142,13 +148,16 @@ describe("reading the client's Drive", () => {
     rows = await settle(d, rows);
     expect(d.calls - before).toBe(1);
 
+    // Drive does not touch the month's own date when a drop lands inside it.
     const fresh = drive(
       { November: { "28-11-2026-12": { "28-11-2026-BOYS-12": products("170666666") } } },
       new Date().toISOString(),
     );
     d.files.push(...fresh.files.filter((f) => f.id !== "/November"));
-    d.files.find((f) => f.id === "/November")!.modifiedTime = new Date().toISOString();
-    for (let i = 0; i < 4; i++) rows = await settle(d, rows);
+    rows = await settle(d, rows);
+    expect(waiting(rows)).toHaveLength(6);
+    const later = Date.now() + 6 * 60_000;
+    for (let i = 0; i < 4; i++) rows = await settle(d, rows, 24, later + i * 6 * 60_000);
     expect(waiting(rows)).toContain("November / 28-11-2026-12 / 28-11-2026-BOYS-12 [1p 0f]");
     expect(waiting(rows)).toHaveLength(7);
   });
@@ -163,9 +172,7 @@ describe("reading the client's Drive", () => {
         if (d.files[i].id === id || d.files[i].id.startsWith(`${id}/`)) d.files.splice(i, 1);
     };
     cut("/November/27-11-2026-466");
-    d.files.find((f) => f.id === "/November")!.modifiedTime = new Date().toISOString();
-    rows = await settle(d, rows);
-    rows = await settle(d, rows);
+    rows = await settle(d, rows, 24, Date.now() + 6 * 60_000);
     expect(rows.find((r) => r.name === "27-11-2026-MW URBN-6")?.state).toBe("gone");
     expect(rows.find((r) => r.name === "27-11-2026-MW Active-6")?.state).toBe("imported");
     expect(rows.some((r) => r.name === "27-11-2026-466")).toBe(false);

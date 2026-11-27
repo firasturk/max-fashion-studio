@@ -77,6 +77,8 @@ export interface ImportJob {
 export interface DriveInbox {
   id: string;
   name: string;
+  /** The shared drive the folder lives in ("" for My Drive); looked up once. */
+  driveId?: string;
 }
 
 /** What Google says, in words the person connecting the folder can act on. */
@@ -112,11 +114,36 @@ async function driveGet(
   return r;
 }
 
-/** Everything directly inside the given folders (asked for in groups, following pagination). */
+/** Shared drives this account turned out not to be a member of: asked the ordinary way instead. */
+const closedDrives = new Set<string>();
+
+/**
+ * Everything directly inside the given folders (asked for in groups, following pagination).
+ * A folder in a shared drive is asked for through that drive: asked the ordinary way, Google
+ * only returns the files this account has already opened, which leaves most of a delivery out.
+ */
 export async function listChildren(
   creds: DriveAuth,
   parents: string[],
   fetchImpl: typeof fetch = fetch,
+  driveId = "",
+): Promise<DriveFile[]> {
+  if (driveId && !closedDrives.has(driveId)) {
+    try {
+      return await listIn(creds, parents, fetchImpl, driveId);
+    } catch (e) {
+      closedDrives.add(driveId);
+      console.log("[drive] cannot list through the shared drive:", errorMessage(e).slice(0, 160));
+    }
+  }
+  return listIn(creds, parents, fetchImpl, "");
+}
+
+async function listIn(
+  creds: DriveAuth,
+  parents: string[],
+  fetchImpl: typeof fetch,
+  driveId: string,
 ): Promise<DriveFile[]> {
   const out: DriveFile[] = [];
   for (let i = 0; i < parents.length; i += 20) {
@@ -132,6 +159,10 @@ export async function listChildren(
         includeItemsFromAllDrives: "true",
         orderBy: "name",
       });
+      if (driveId) {
+        params.set("corpora", "drive");
+        params.set("driveId", driveId);
+      }
       if (pageToken) params.set("pageToken", pageToken);
       const d = (await (await driveGet(creds, `/files?${params}`, fetchImpl)).json()) as {
         files?: DriveFile[];
@@ -154,6 +185,7 @@ export async function scanDelivery(
   creds: DriveAuth,
   folderId: string,
   fetchImpl: typeof fetch = fetch,
+  driveId = "",
 ): Promise<DeliveryPhoto[]> {
   const photos: DeliveryPhoto[] = [];
   let level: { id: string; path: string }[] = [{ id: folderId, path: "" }];
@@ -163,6 +195,7 @@ export async function scanDelivery(
       creds,
       level.map((l) => l.id),
       fetchImpl,
+      driveId,
     );
     const next: { id: string; path: string }[] = [];
     for (const f of children) {
@@ -193,13 +226,16 @@ export async function driveInbox(env: Env): Promise<DriveInbox | null> {
 export async function connectInbox(env: Env, folderId: string): Promise<DriveInbox> {
   const creds = await resolveDriveAuth(env);
   if (!creds) throw new StudioError("Sign in with Google first (step 3 on this page).", 428);
-  const params = new URLSearchParams({ fields: "id,name,mimeType", supportsAllDrives: "true" });
+  const params = new URLSearchParams({
+    fields: "id,name,mimeType,driveId",
+    supportsAllDrives: "true",
+  });
   const f = (await (
     await driveGet(creds, `/files/${encodeURIComponent(folderId)}?${params}`)
-  ).json()) as DriveFile;
+  ).json()) as DriveFile & { driveId?: string };
   if (f.mimeType !== FOLDER)
     throw new StudioError("That link is a file. Paste the link of a folder.");
-  const inbox = { id: f.id, name: f.name };
+  const inbox: DriveInbox = { id: f.id, name: f.name, driveId: f.driveId ?? "" };
   const before = await driveInbox(env);
   // Another folder: what was only waiting in the old one is forgotten; imported work stays.
   if (before && before.id !== inbox.id)
@@ -492,9 +528,16 @@ export async function driveStatus(env: Env): Promise<{
 const WALK_CALLS = 24;
 /** Deliveries whose photos are counted in one check. */
 const SCANS_PER_SYNC = 8;
-/** A folder changed this recently may still be filling up, so it is looked into again. */
-const FRESH_MS = 3 * 24 * 3600 * 1000;
-const RECHECK_MS = 10 * 60 * 1000;
+/**
+ * How often a folder on the way down is listed again. Drive does not mark a folder as changed
+ * when something is added inside it, so the only way to notice a new drop is to look: the months
+ * and anything made in the last week every five minutes, older folders a few times a day.
+ */
+const FRESH_MS = 7 * 24 * 3600 * 1000;
+const RECHECK_MS = 5 * 60 * 1000;
+const OLD_RECHECK_MS = 6 * 3600 * 1000;
+/** A young delivery may still be filling up, so its photos are counted again now and then. */
+const RECOUNT_MS = 60 * 60 * 1000;
 
 /**
  * One pass down the inbox tree. `rows` is what was known before; the map that comes back is what
@@ -508,8 +551,10 @@ export async function walkInbox(
   sql: (text: string, ...params: unknown[]) => void,
   flush: () => Promise<void> = async () => {},
   maxCalls = WALK_CALLS,
+  clock: () => number = Date.now,
 ): Promise<Map<string, DriveFolderRow>> {
-  const started = now();
+  const now = clock;
+  const started = Date.now();
   const known = new Map(rows.map((r) => [r.id, r]));
   const childrenOf = (id: string) => [...known.values()].filter((r) => r.parent === id);
 
@@ -646,8 +691,10 @@ export async function walkInbox(
   const depth = (r: DriveFolderRow) => (r.path ? r.path.split(" / ").length : 0);
   const due = (r: DriveFolderRow) =>
     r.state === "group" &&
-    (r.walked === 0 || (now() - r.modified < FRESH_MS && now() - r.walked > RECHECK_MS));
-  for (let calls = 1; calls < maxCalls && now() - started < 40_000; calls++) {
+    (r.walked === 0 ||
+      now() - r.walked >
+        (depth(r) === 0 || now() - r.modified < FRESH_MS ? RECHECK_MS : OLD_RECHECK_MS));
+  for (let calls = 1; calls < maxCalls && Date.now() - started < 40_000; calls++) {
     const turn = [...known.values()]
       .filter(due)
       .sort((a, b) => depth(a) - depth(b) || b.modified - a.modified)
@@ -681,6 +728,17 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
   if (!force && now() - last < 55_000) return;
   await setSetting(env, DRIVE_SYNC_SETTING, String(now()));
   const started = now();
+  if (inbox.driveId === undefined) {
+    const meta = (await (
+      await driveGet(
+        creds,
+        `/files/${encodeURIComponent(inbox.id)}?fields=driveId&supportsAllDrives=true`,
+      )
+    ).json()) as { driveId?: string };
+    inbox.driveId = meta.driveId ?? "";
+    await setSetting(env, DRIVE_INBOX_SETTING, JSON.stringify(inbox));
+  }
+  const driveId = inbox.driveId;
   const pending: D1PreparedStatement[] = [];
   const flush = async () => {
     while (pending.length) await env.DB.batch(pending.splice(0, 80));
@@ -691,19 +749,23 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
     const known = await walkInbox(
       inbox.id,
       await all<DriveFolderRow>(env.DB, "SELECT * FROM drive_folders"),
-      (parents) => listChildren(creds, parents),
+      (parents) => listChildren(creds, parents, fetch, driveId),
       sql,
       flush,
     );
 
     // Count the photos of deliveries nobody has looked into yet, newest first.
     const unread = [...known.values()]
-      .filter((r) => r.state === "waiting" && r.scanned === 0)
-      .sort((a, b) => b.modified - a.modified)
+      .filter(
+        (r) =>
+          r.state === "waiting" &&
+          (r.scanned === 0 || (now() - r.modified < FRESH_MS && now() - r.scanned > RECOUNT_MS)),
+      )
+      .sort((a, b) => Number(a.scanned > 0) - Number(b.scanned > 0) || b.modified - a.modified)
       .slice(0, SCANS_PER_SYNC);
     for (const d of unread) {
       if (now() - started > 50_000) break;
-      const every = await scanDelivery(creds, d.id);
+      const every = await scanDelivery(creds, d.id, fetch, driveId);
       const photos = pickProductPhotos(every);
       const bytes = photos.reduce((n, p) => n + Number(p.size ?? 0), 0);
       const thumbs = JSON.stringify(photos.slice(0, 4).map((p) => p.id));
@@ -723,6 +785,19 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
       );
     }
     await setSetting(env, DRIVE_ERROR_SETTING, "");
+    const states = [...known.values()];
+    console.log(
+      "[drive] checked:",
+      states.filter((r) => r.state === "group").length,
+      "folders on the way,",
+      states.filter((r) => r.state === "waiting").length,
+      "waiting,",
+      driveId
+        ? closedDrives.has(driveId)
+          ? "listed the ordinary way"
+          : "listed through the shared drive"
+        : "My Drive",
+    );
   } catch (e) {
     await flush().catch(() => {});
     await setSetting(env, DRIVE_ERROR_SETTING, errorMessage(e).slice(0, 400));
@@ -970,7 +1045,9 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
     if (!batch) return (void (await fail("The batch for this folder was deleted.")), false);
     if (!creds) return (void (await fail("Nobody is signed in to Google Drive any more.")), false);
     const config = JSON.parse(batch.config) as Config;
-    const photos = pickProductPhotos(await scanDelivery(creds, job.folder));
+    const photos = pickProductPhotos(
+      await scanDelivery(creds, job.folder, fetch, (await driveInbox(env))?.driveId ?? ""),
+    );
     const have = new Set(
       (
         await all<{ stem: string }>(env.DB, "SELECT stem FROM sources WHERE batch = ?", batch.id)
