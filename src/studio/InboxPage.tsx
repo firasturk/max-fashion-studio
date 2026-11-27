@@ -321,10 +321,26 @@ export default function InboxPage({
               </li>
             )}
             <li>
-              <b>Paste the folder link</b>
+              <b>Choose the deliveries folder</b>
               <span>
-                Open the folder your deliveries arrive in and copy the link from the address bar.
+                Let the studio create its own folders in your Drive (Max Fashion Studio, with 1 -
+                Inbox and 2 - Approved inside), or paste the link of a folder you already use.
               </span>
+              <div className="nx-row">
+                <button
+                  className="nx-btn nx-primary"
+                  disabled={!state.account || busy === "setup"}
+                  onClick={() =>
+                    void act(
+                      "setup",
+                      () => post("/api/studio/drive/setup"),
+                      "Folders created in your Drive",
+                    )
+                  }
+                >
+                  {busy === "setup" ? "Creating…" : "Create the folders for me"}
+                </button>
+              </div>
               <div className="nx-code">
                 <input
                   id="drive-link"
@@ -360,8 +376,15 @@ export default function InboxPage({
         <div>
           <h1>Inbox</h1>
           <p>
-            New folders from <b>{state.inbox.name}</b> wait here. Nothing is generated until you
-            approve it.
+            New folders from{" "}
+            <a
+              href={`https://drive.google.com/drive/folders/${state.inbox.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <b>{state.inbox.name}</b>
+            </a>{" "}
+            wait here. Nothing is generated until you approve it.
           </p>
         </div>
         <div className="nx-right">
@@ -392,7 +415,18 @@ export default function InboxPage({
       {!shown.length ? (
         <div className="nx-empty">
           <b>Inbox is clear</b>
-          Drop a delivery folder into {state.inbox.name} and it appears here within a minute.
+          Drop a delivery folder into {state.inbox.name} and it appears here within a minute. Start
+          its name with the date, for example 28-11-2026-WW Denim.
+          <div className="nx-row nx-center">
+            <a
+              className="nx-btn"
+              href={`https://drive.google.com/drive/folders/${state.inbox.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open the folder in Drive
+            </a>
+          </div>
         </div>
       ) : (
         <div className="nx-folders nx-stagger">

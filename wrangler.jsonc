@@ -66,6 +66,7 @@
     "VERTEX_PARALLEL": "12",
     "GOOGLE_PARALLEL": "60",
     "GOOGLE_PREFER": "vertex",
+    "DRIVE_AUTOSETUP": "1",
     "PUBLIC_BASE_URL": "https://max-fashion-studio.max-fashion-studio.workers.dev",
   },
 }

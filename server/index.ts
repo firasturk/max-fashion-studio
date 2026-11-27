@@ -14,7 +14,13 @@ import {
   runLearning,
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
-import { driveCallback, ensureDriveApi, syncDrive } from "./drive";
+import {
+  createStudioFolders,
+  driveCallback,
+  driveStatus,
+  ensureDriveApi,
+  syncDrive,
+} from "./drive";
 import { advanceClips, videoCallback } from "./video";
 import { logEvent, pruneEvents } from "./events";
 import {
@@ -220,6 +226,17 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(ensureDriveApi(env).catch((e) => console.error("[drive]", errorMessage(e))));
+    // One-off, on the owner's request: make the studio's Drive folders without a click.
+    if (env.DRIVE_AUTOSETUP === "1")
+      ctx.waitUntil(
+        driveStatus(env)
+          .then(async (d) => {
+            if (!d.account || d.inbox) return;
+            const inbox = await createStudioFolders(env);
+            console.log("[drive] folders created and connected:", inbox.name);
+          })
+          .catch((e) => console.error("[drive] setup", errorMessage(e))),
+      );
     ctx.waitUntil(advanceClips(env, 8).catch((e) => console.error("[video]", errorMessage(e))));
     ctx.waitUntil(cleanupOldBatches(env).catch((e) => console.error("[cleanup]", e)));
     ctx.waitUntil(

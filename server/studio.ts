@@ -101,6 +101,7 @@ import {
   skipFolder,
   syncDrive,
   DRIVE_INBOX_SETTING,
+  createStudioFolders,
   driveSignInUrl,
   ensureDriveApi,
   setDriveClient,
@@ -1186,9 +1187,7 @@ studioRoutes.get("/video", async (c) => {
   const user = c.get("user");
   const connected = await videoConnected(c.env);
   if (connected)
-    c.executionCtx.waitUntil(
-      advanceClips(c.env).catch((e) => console.error("[video] advance", e)),
-    );
+    c.executionCtx.waitUntil(advanceClips(c.env).catch((e) => console.error("[video] advance", e)));
   return c.json({
     connected,
     credits: connected ? await videoCredits(c.env, c.req.query("fresh") === "1") : null,
@@ -1211,7 +1210,10 @@ studioRoutes.delete("/video/connect", async (c) => {
 });
 
 const clipRequest = z.object({
-  items: z.array(z.object({ batch: z.string().min(1), id: z.string().min(1) })).min(1).max(12),
+  items: z
+    .array(z.object({ batch: z.string().min(1), id: z.string().min(1) }))
+    .min(1)
+    .max(12),
   seconds: z.number().refine((n) => (VIDEO_SECONDS as readonly number[]).includes(n)),
   ratio: z.string().refine((r) => (VIDEO_RATIOS as readonly string[]).includes(r)),
   motion: z.string().trim().min(3).max(400),
@@ -1272,7 +1274,10 @@ studioRoutes.post("/drive/client", async (c) => {
     throw new StudioError("Only an admin can set up the Google sign-in.", 403);
   const { id, secret } = await body(
     c,
-    z.object({ id: z.string().trim().min(20).max(200), secret: z.string().trim().min(10).max(200) }),
+    z.object({
+      id: z.string().trim().min(20).max(200),
+      secret: z.string().trim().min(10).max(200),
+    }),
   );
   await setDriveClient(c.env, id, secret);
   return c.json({ ok: true });
@@ -1302,6 +1307,14 @@ studioRoutes.post("/drive/inbox", async (c) => {
   const id = driveFolderId(link);
   if (!id) throw new StudioError("That does not look like a Google Drive folder link.");
   const inbox = await connectInbox(c.env, id);
+  await syncDrive(c.env, true);
+  return c.json({ inbox });
+});
+
+studioRoutes.post("/drive/setup", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can create the Drive folders.", 403);
+  const inbox = await createStudioFolders(c.env);
   await syncDrive(c.env, true);
   return c.json({ inbox });
 });

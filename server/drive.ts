@@ -237,6 +237,50 @@ export async function connectInbox(env: Env, folderId: string): Promise<DriveInb
   return inbox;
 }
 
+const HOME_SETTING = "drive_home";
+const HOME_FOLDER = "Max Fashion Studio";
+const HOME_INBOX = "1 - Inbox";
+const HOME_APPROVED = "2 - Approved";
+
+/** The folder with this name under a parent ("root" is My Drive), created when it is not there. */
+async function findOrCreateFolder(creds: DriveAuth, name: string, parent: string): Promise<string> {
+  const q = `name = '${name.replace(/'/g, "\\'")}' and mimeType = '${FOLDER}' and '${parent}' in parents and trashed = false`;
+  const found = (await (
+    await driveGet(
+      creds,
+      `/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`,
+    )
+  ).json()) as { files?: { id: string }[] };
+  if (found.files?.[0]) return found.files[0].id;
+  const r = await fetch(`${API}/files?fields=id`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await creds.token()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: FOLDER, parents: [parent] }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw await driveError(r, creds);
+  return ((await r.json()) as { id: string }).id;
+}
+
+/**
+ * Makes the studio's own folders in the signed-in account's Drive and connects the inbox:
+ * "Max Fashion Studio / 1 - Inbox" for deliveries and "2 - Approved" for results. Folders that
+ * already exist are reused, so asking twice never makes a second set.
+ */
+export async function createStudioFolders(env: Env): Promise<DriveInbox> {
+  const creds = await resolveDriveAuth(env);
+  if (!creds) throw new StudioError("Sign in with Google first (step 3 on this page).", 428);
+  const root = await findOrCreateFolder(creds, HOME_FOLDER, "root");
+  const inboxId = await findOrCreateFolder(creds, HOME_INBOX, root);
+  const approved = await findOrCreateFolder(creds, HOME_APPROVED, root);
+  await setSetting(env, HOME_SETTING, JSON.stringify({ root, inbox: inboxId, approved }));
+  const inbox = { id: inboxId, name: `${HOME_FOLDER} / ${HOME_INBOX}` };
+  await setSetting(env, DRIVE_INBOX_SETTING, JSON.stringify(inbox));
+  await setSetting(env, DRIVE_SYNC_SETTING, "0");
+  await setSetting(env, DRIVE_API_SETTING, JSON.stringify({ state: "on", at: now() }));
+  return inbox;
+}
+
 const CLIENT_SETTING = "drive_oauth_client";
 const TOKENS_SETTING = "drive_oauth";
 const PENDING_SETTING = "drive_oauth_pending";

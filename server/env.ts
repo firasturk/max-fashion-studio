@@ -19,6 +19,8 @@ export interface Env {
   GOOGLE_PARALLEL?: string;
   /** "key": the AI Studio key is used even when a Vertex service account is saved. */
   GOOGLE_PREFER?: string;
+  /** "1" makes the schedule create the studio's Drive folders once, when none is connected. */
+  DRIVE_AUTOSETUP?: string;
   /** Image generations fanned out one per consumer invocation (synchronous engines). */
   IMAGES?: Queue<ImageJob>;
   /** One object per image generation (see server/runner.ts); preferred over the queue. */
