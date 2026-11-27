@@ -102,6 +102,7 @@ import {
   syncDrive,
   DRIVE_INBOX_SETTING,
   ensureDriveApi,
+  setDriveAccount,
 } from "./drive";
 import { driveFolderId } from "@shared/drive";
 import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
@@ -1261,6 +1262,28 @@ studioRoutes.get("/drive", async (c) => {
     [1],
   ).total;
   return c.json({ ...status, folders, pricePerImage: price });
+});
+
+/** The Drive key is its own service account, apart from the one that pays for images. */
+studioRoutes.post("/drive/account", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can add the Drive key.", 403);
+  const { json } = await body(c, z.object({ json: z.string().min(20).max(20000) }));
+  const creds = parseServiceAccount(json);
+  const billed = await resolveVertex(c.env);
+  if (billed && billed.clientEmail === creds.clientEmail)
+    throw new StudioError(
+      "This is the key of the account that pays for images. Drive needs its own key, from the Google account that owns the Drive.",
+    );
+  await setDriveAccount(c.env, creds);
+  return c.json({ ok: true, api: await ensureDriveApi(c.env, true) });
+});
+
+studioRoutes.delete("/drive/account", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can remove the Drive key.", 403);
+  await setDriveAccount(c.env, null);
+  return c.json({ ok: true });
 });
 
 studioRoutes.post("/drive/check", async (c) => {

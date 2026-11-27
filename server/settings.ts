@@ -144,6 +144,22 @@ export async function resolveVertex(env: Env): Promise<VertexCreds | null> {
   }
 }
 
+export const DRIVE_ACCOUNT_SETTING = "drive_service_account";
+
+/**
+ * The service account that reads Google Drive. It is kept apart from the billed Google Cloud
+ * account on purpose: Drive belongs to the company workspace, image generation to whoever pays.
+ */
+export async function resolveDrive(env: Env): Promise<VertexCreds | null> {
+  const stored = await getSetting(env, DRIVE_ACCOUNT_SETTING);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as VertexCreds;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * How Google is reached: the Vertex service account when one is saved (the project's credits pay),
  * otherwise the AI Studio key. Nothing connected gives null.

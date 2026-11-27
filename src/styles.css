@@ -5824,3 +5824,9 @@ a.nx-btn {
 .nx-steps li.nx-done b {
   color: var(--success);
 }
+.nx-steps li span b {
+  font-size: inherit;
+  letter-spacing: 0;
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}

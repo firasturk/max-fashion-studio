@@ -78,6 +78,7 @@ export default function InboxPage({
   const [link, setLink] = useState("");
   const [picked, setPicked] = useState<Record<string, string>>({});
   const timer = useRef<number | undefined>(undefined);
+  const keyInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -140,98 +141,162 @@ export default function InboxPage({
             </button>
           </div>
         </div>
-        {!state.account ? (
-          <div className="nx-empty">
-            <b>Google Cloud is not connected</b>
-            Add the Google Cloud service account in Connection first. The same account reads Drive.
-          </div>
-        ) : !admin ? (
+        {!admin ? (
           <div className="nx-empty">
             <b>No Drive folder is connected yet</b>
             Ask an admin to connect it from this page.
           </div>
         ) : (
           <ol className="nx-steps nx-stagger">
-            {state.api === "on" ? (
+            {state.account ? (
               <li className="nx-done">
-                <b>The Drive API is on</b>
-                <span>Nothing to do here: the studio checked it.</span>
+                <b>The Drive key is added</b>
+                <span>
+                  Drive is read by <b className="nx-mono">{state.account}</b>, apart from the
+                  account that pays for images.
+                </span>
+                <div className="nx-row">
+                  <button className="nx-btn nx-sm" onClick={() => keyInput.current?.click()}>
+                    Replace the key
+                  </button>
+                  <button
+                    className="nx-btn nx-sm nx-quiet"
+                    onClick={() =>
+                      void act("key", () => del("/api/studio/drive/account"), "Drive key removed")
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
               </li>
             ) : (
               <li>
-                <b>Switch on the Drive API</b>
+                <b>Add the Drive key</b>
                 <span>
-                  The studio tried to switch it on by itself and Google did not allow it. Open this
-                  page with the Google account that owns the project and press Enable. It takes
-                  about a minute to take effect.
+                  Drive uses its own key, apart from the account that pays for images. Open Google
+                  Cloud signed in as the Google account that owns the Drive, pick a project, then:
+                  Create service account, open it, Keys, Add key, Create new key, JSON. A file
+                  downloads. Choose that file here. Never send it in a chat.
                 </span>
-                {state.project && (
-                  <span>
-                    If Google asks you to select a project, choose <b className="nx-mono">{state.project}</b>.
-                    If it is not in the list, switch to the Google account that created it (top
-                    right corner).
-                  </span>
-                )}
                 <div className="nx-row">
                   <a
-                    className="nx-btn nx-primary"
+                    className="nx-btn"
                     target="_blank"
                     rel="noreferrer"
-                    href={`https://console.cloud.google.com/apis/library/drive.googleapis.com${state.project ? `?project=${encodeURIComponent(state.project)}` : ""}`}
+                    href="https://console.cloud.google.com/iam-admin/serviceaccounts"
                   >
-                    Open the Drive API page
+                    Open service accounts in Google Cloud
                   </a>
                   <button
-                    className="nx-btn"
-                    disabled={busy === "sync"}
-                    onClick={() => void act("sync", () => post("/api/studio/drive/check"))}
+                    className="nx-btn nx-primary"
+                    disabled={busy === "key"}
+                    onClick={() => keyInput.current?.click()}
                   >
-                    I pressed Enable, check again
+                    {busy === "key" ? "Checking the key…" : "Choose the key file"}
                   </button>
-                </div>
-                <div className="nx-code">
-                  <code>{ENABLE_API}</code>
-                  <Copy text={ENABLE_API} label="Command" />
                 </div>
               </li>
             )}
-            <li>
-              <b>Share the folder with the studio</b>
-              <span>
-                In Google Drive, share the folder your deliveries arrive in with this address.
-                Viewer is enough to read; Content manager lets the studio deliver results later.
-              </span>
-              <div className="nx-code">
-                <code>{state.account}</code>
-                <Copy text={state.account} label="Address" />
-              </div>
-            </li>
-            <li>
-              <b>Paste the folder link</b>
-              <span>Open the folder in Drive and copy the link from the address bar.</span>
-              <div className="nx-code">
-                <input
-                  id="drive-link"
-                  value={link}
-                  onChange={(e) => setLink(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/…"
-                  aria-label="Drive folder link"
-                />
-                <button
-                  className="nx-btn nx-primary"
-                  disabled={!link.trim() || busy === "connect"}
-                  onClick={() =>
-                    void act(
-                      "connect",
-                      () => post("/api/studio/drive/inbox", { link }),
-                      "Drive folder connected",
-                    )
-                  }
-                >
-                  {busy === "connect" ? "Connecting…" : "Connect"}
-                </button>
-              </div>
-            </li>
+            <input
+              ref={keyInput}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              aria-label="Drive key file"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file)
+                  void act(
+                    "key",
+                    async () => post("/api/studio/drive/account", { json: await file.text() }),
+                    "Drive key added",
+                  );
+              }}
+            />
+            {!state.account ? null : (
+              <>
+                {state.api === "on" ? (
+                  <li className="nx-done">
+                    <b>The Drive API is on</b>
+                    <span>Nothing to do here: the studio checked it.</span>
+                  </li>
+                ) : (
+                  <li>
+                    <b>Switch on the Drive API</b>
+                    <span>
+                      Open this page with the same Google account that made the key and press
+                      Enable. It takes about a minute to take effect.
+                    </span>
+                    {state.project && (
+                      <span>
+                        If Google asks you to select a project, choose{" "}
+                        <b className="nx-mono">{state.project}</b>. If it is not in the list, switch
+                        to the Google account that created it (top right corner).
+                      </span>
+                    )}
+                    <div className="nx-row">
+                      <a
+                        className="nx-btn nx-primary"
+                        target="_blank"
+                        rel="noreferrer"
+                        href={`https://console.cloud.google.com/apis/library/drive.googleapis.com${state.project ? `?project=${encodeURIComponent(state.project)}` : ""}`}
+                      >
+                        Open the Drive API page
+                      </a>
+                      <button
+                        className="nx-btn"
+                        disabled={busy === "sync"}
+                        onClick={() => void act("sync", () => post("/api/studio/drive/check"))}
+                      >
+                        I pressed Enable, check again
+                      </button>
+                    </div>
+                    <div className="nx-code">
+                      <code>{ENABLE_API}</code>
+                      <Copy text={ENABLE_API} label="Command" />
+                    </div>
+                  </li>
+                )}
+                <li>
+                  <b>Share the folder with the studio</b>
+                  <span>
+                    In Google Drive, share the folder your deliveries arrive in with this address.
+                    Viewer is enough to read; Content manager lets the studio deliver results later.
+                  </span>
+                  <div className="nx-code">
+                    <code>{state.account}</code>
+                    <Copy text={state.account} label="Address" />
+                  </div>
+                </li>
+                <li>
+                  <b>Paste the folder link</b>
+                  <span>Open the folder in Drive and copy the link from the address bar.</span>
+                  <div className="nx-code">
+                    <input
+                      id="drive-link"
+                      value={link}
+                      onChange={(e) => setLink(e.target.value)}
+                      placeholder="https://drive.google.com/drive/folders/…"
+                      aria-label="Drive folder link"
+                    />
+                    <button
+                      className="nx-btn nx-primary"
+                      disabled={!link.trim() || busy === "connect"}
+                      onClick={() =>
+                        void act(
+                          "connect",
+                          () => post("/api/studio/drive/inbox", { link }),
+                          "Drive folder connected",
+                        )
+                      }
+                    >
+                      {busy === "connect" ? "Connecting…" : "Connect"}
+                    </button>
+                  </div>
+                </li>
+              </>
+            )}
           </ol>
         )}
       </div>
@@ -317,7 +382,12 @@ export default function InboxPage({
                         onClick={() =>
                           void act(
                             f.id,
-                            () => post("/api/studio/drive/approve", { folder: f.id, skill, start: true }),
+                            () =>
+                              post("/api/studio/drive/approve", {
+                                folder: f.id,
+                                skill,
+                                start: true,
+                              }),
                             `Started ${f.name}`,
                           )
                         }
@@ -330,7 +400,12 @@ export default function InboxPage({
                         onClick={() =>
                           void act(
                             f.id,
-                            () => post("/api/studio/drive/approve", { folder: f.id, skill, start: false }),
+                            () =>
+                              post("/api/studio/drive/approve", {
+                                folder: f.id,
+                                skill,
+                                start: false,
+                              }),
                             "Importing. Open the batch to change settings before generating.",
                           )
                         }
@@ -350,7 +425,11 @@ export default function InboxPage({
                   ) : f.state === "importing" ? (
                     <div className="nx-progress">
                       <div className="nx-bar">
-                        <i style={{ width: `${Math.min(100, (f.imported / Math.max(1, f.files)) * 100)}%` }} />
+                        <i
+                          style={{
+                            width: `${Math.min(100, (f.imported / Math.max(1, f.files)) * 100)}%`,
+                          }}
+                        />
                       </div>
                       <span>
                         Importing {f.imported} of {f.files}
@@ -359,7 +438,9 @@ export default function InboxPage({
                   ) : (
                     <div className="nx-row">
                       <span className="nx-chip nx-ok">Imported {f.imported}</span>
-                      {f.skipped > 0 && <span className="nx-chip nx-warn">{f.skipped} left out</span>}
+                      {f.skipped > 0 && (
+                        <span className="nx-chip nx-warn">{f.skipped} left out</span>
+                      )}
                       {f.batch && (
                         <button className="nx-btn" onClick={() => onOpenBatch(f.batch!)}>
                           Open batch

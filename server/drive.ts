@@ -6,7 +6,14 @@
 import type { Env } from "./env";
 import { StudioError, errorMessage } from "./errors";
 import { all, first, now, run, uuid } from "./db";
-import { getSetting, resolveEngineModel, resolveVertex, setSetting } from "./settings";
+import {
+  DRIVE_ACCOUNT_SETTING,
+  deleteSetting,
+  getSetting,
+  resolveDrive,
+  resolveEngineModel,
+  setSetting,
+} from "./settings";
 import { DRIVE_SCOPE, vertexToken, type VertexCreds } from "./vertex";
 import { insertSource } from "./sources";
 import { DEFAULT_CONFIG, validateConfig, type Config } from "@shared/config";
@@ -24,6 +31,7 @@ export const DRIVE_INBOX_SETTING = "drive_inbox";
 const DRIVE_RULES_SETTING = "drive_rules";
 const DRIVE_SYNC_SETTING = "drive_last_sync";
 const DRIVE_ERROR_SETTING = "drive_error";
+const DRIVE_API_SETTING = "drive_api";
 const API = "https://www.googleapis.com/drive/v3";
 const FOLDER = "application/vnd.google-apps.folder";
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -77,7 +85,7 @@ async function driveError(r: Response, creds: VertexCreds): Promise<StudioError>
   const text = (await r.text()).slice(0, 400);
   if (r.status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used|is disabled/i.test(text))
     return new StudioError(
-      "The Google Drive API is switched off for the studio's Google Cloud project. Turn it on (step 1 on this page), wait a minute and try again.",
+      "The Google Drive API is switched off in the Drive account's Google Cloud project. Turn it on (step 2 on this page), wait a minute and try again.",
       428,
     );
   if (r.status === 404 || r.status === 403)
@@ -212,9 +220,9 @@ export async function driveInbox(env: Env): Promise<DriveInbox | null> {
 
 /** Checks the folder can be opened and remembers it as the inbox. */
 export async function connectInbox(env: Env, folderId: string): Promise<DriveInbox> {
-  const creds = await resolveVertex(env);
+  const creds = await resolveDrive(env);
   if (!creds)
-    throw new StudioError("Connect the Google Cloud service account first (Connection).", 428);
+    throw new StudioError("Add the Drive key first (step 1 on this page).", 428);
   const params = new URLSearchParams({ fields: "id,name,mimeType", supportsAllDrives: "true" });
   const f = (await (await driveGet(creds, `/files/${encodeURIComponent(folderId)}?${params}`)).json()) as DriveFile;
   if (f.mimeType !== FOLDER) throw new StudioError("That link is a file. Paste the link of a folder.");
@@ -224,7 +232,18 @@ export async function connectInbox(env: Env, folderId: string): Promise<DriveInb
   return inbox;
 }
 
-const DRIVE_API_SETTING = "drive_api";
+/**
+ * Saves the Drive service account. A different account sees different folders, so whatever was
+ * connected or checked under the previous one is forgotten.
+ */
+export async function setDriveAccount(env: Env, creds: VertexCreds | null): Promise<void> {
+  if (creds) await setSetting(env, DRIVE_ACCOUNT_SETTING, JSON.stringify(creds));
+  else await deleteSetting(env, DRIVE_ACCOUNT_SETTING);
+  for (const key of [DRIVE_INBOX_SETTING, DRIVE_API_SETTING, DRIVE_ERROR_SETTING])
+    await deleteSetting(env, key);
+  await run(env.DB, "DELETE FROM drive_folders WHERE state IN ('waiting','skipped','gone')");
+}
+
 export type DriveApiState = "on" | "off" | "unknown";
 
 /**
@@ -233,7 +252,7 @@ export type DriveApiState = "on" | "off" | "unknown";
  * works when that account may manage services. If it may not, the Inbox shows the manual step.
  */
 export async function ensureDriveApi(env: Env, force = false): Promise<DriveApiState> {
-  const creds = await resolveVertex(env);
+  const creds = await resolveDrive(env);
   if (!creds) return "unknown";
   const saved = JSON.parse((await getSetting(env, DRIVE_API_SETTING)) || "{}") as {
     state?: DriveApiState;
@@ -284,7 +303,7 @@ export async function driveStatus(env: Env): Promise<{
   /** The Google Cloud project the service account lives in: where the Drive API is switched on. */
   project: string | null;
 }> {
-  const creds = await resolveVertex(env);
+  const creds = await resolveDrive(env);
   const inbox = await driveInbox(env);
   return {
     account: creds?.clientEmail ?? null,
@@ -302,7 +321,7 @@ export async function driveStatus(env: Env): Promise<{
  */
 export async function syncDrive(env: Env, force = false): Promise<void> {
   const inbox = await driveInbox(env);
-  const creds = inbox ? await resolveVertex(env) : null;
+  const creds = inbox ? await resolveDrive(env) : null;
   if (!inbox || !creds) return;
   const last = Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0);
   if (!force && now() - last < 55_000) return;
@@ -530,10 +549,10 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
       "SELECT id, owner, config FROM batches WHERE id = ?",
       job.batch,
     );
-    const creds = await resolveVertex(env);
+    const creds = await resolveDrive(env);
     if (!row || row.state !== "importing") return false;
     if (!batch) return void (await fail("The batch for this folder was deleted.")), false;
-    if (!creds) return void (await fail("The Google Cloud service account is no longer connected.")), false;
+    if (!creds) return void (await fail("The Drive key is no longer connected.")), false;
     const config = JSON.parse(batch.config) as Config;
     const photos = await scanDelivery(creds, job.folder);
     const have = new Set(
@@ -627,7 +646,7 @@ export async function driveThumb(env: Env, fileId: string): Promise<Response> {
     "SELECT id FROM drive_folders WHERE instr(thumbs, ?) > 0 LIMIT 1",
     `"${fileId}"`,
   );
-  const creds = await resolveVertex(env);
+  const creds = await resolveDrive(env);
   if (!listed || !creds) return new Response(null, { status: 404 });
   const meta = (await (
     await driveGet(creds, `/files/${encodeURIComponent(fileId)}?fields=thumbnailLink&supportsAllDrives=true`)
