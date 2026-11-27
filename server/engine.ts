@@ -12,6 +12,7 @@ import { activeMemoryLines, learn } from "./memory";
 import { solidPng } from "@shared/png";
 import { concurrency, fansOut, googleWidth, vertexWidth, type ImageJob } from "./env";
 import { all, first, run, now, uuid } from "./db";
+import { makeThumb } from "./thumbs";
 import { HiggsfieldClient, downloadImage, type GenerationJob } from "./higgsfield";
 import { manualQA, reviewWithGoogle, reviewWithOpenAI } from "./review";
 import { estimateCost } from "@shared/pricing";
@@ -427,6 +428,8 @@ async function storeResultBytes(
   await env.BUCKET.put(key, result.bytes, {
     httpMetadata: { contentType: result.mime || "image/png" },
   });
+  // The review grid shows this size; making it now means the page never waits for it.
+  await makeThumb(env, key, 480);
   // Save the image before the (slow) automatic review so an evicted isolate never loses a paid
   // result; the review then upgrades the status if it is still waiting for it.
   await run(

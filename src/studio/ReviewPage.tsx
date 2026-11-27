@@ -24,6 +24,9 @@ const QUICK_NOTES = [
 
 const result = (i: Item) =>
   `/api/studio/file?batch=${i.batch}&id=${i.id}&kind=result&v=${i.output.split("/").at(-1)}`;
+/** Small copies: the grid and the viewer never load the multi-megabyte file itself. */
+const thumb = (i: Item) => `${result(i)}&w=480`;
+const large = (i: Item) => `${result(i)}&w=1400`;
 const original = (i: Item) => `/api/studio/file?batch=${i.batch}&id=${i.source}&kind=reference`;
 const sku = (name: string) => (name.split("/").at(-1) ?? name).replace(/\.[a-z0-9]+$/i, "");
 
@@ -134,7 +137,9 @@ export default function ReviewPage({
           await post("/api/studio/approve", { batch: i.batch, id: i.id });
           done.push(i.id);
         }
-        toast.success(list.length === 1 ? `Approved ${sku(list[0].name)}` : `Approved ${done.length} images`);
+        toast.success(
+          list.length === 1 ? `Approved ${sku(list[0].name)}` : `Approved ${done.length} images`,
+        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Approval failed.");
       } finally {
@@ -243,8 +248,17 @@ export default function ReviewPage({
           <div className="nx-grid nx-stagger">
             {shown.slice(0, limit).map((i) => (
               <article className={`nx-card ${picked.has(i.id) ? "nx-sel" : ""}`} key={i.id}>
-                <button className="nx-pic" onClick={() => setOpenId(i.id)} aria-label={`Open ${sku(i.name)}`}>
-                  <img src={result(i)} alt={`Result for ${sku(i.name)}`} loading="lazy" decoding="async" />
+                <button
+                  className="nx-pic"
+                  onClick={() => setOpenId(i.id)}
+                  aria-label={`Open ${sku(i.name)}`}
+                >
+                  <img
+                    src={thumb(i)}
+                    alt={`Result for ${sku(i.name)}`}
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </button>
                 <button
                   className="nx-tick"
@@ -290,7 +304,11 @@ export default function ReviewPage({
             <b>{selected.length}</b> selected
           </span>
           {filter !== "approved" && (
-            <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve(selected)}>
+            <button
+              className="nx-btn nx-primary"
+              disabled={busy}
+              onClick={() => void approve(selected)}
+            >
               Approve
             </button>
           )}
@@ -307,7 +325,12 @@ export default function ReviewPage({
       )}
       {open && (
         <div className="nx-scrim" onClick={(e) => e.target === e.currentTarget && setOpenId(null)}>
-          <section className="nx-sheet" role="dialog" aria-modal="true" aria-label={`Review ${sku(open.name)}`}>
+          <section
+            className="nx-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Review ${sku(open.name)}`}
+          >
             <header>
               <h2 className="nx-mono">{sku(open.name)}</h2>
               <span className="nx-chip">{title(open.skill)}</span>
@@ -330,7 +353,7 @@ export default function ReviewPage({
                 <figcaption className="nx-chip">Original</figcaption>
               </figure>
               <figure>
-                <img src={result(open)} alt="Generated result" />
+                <img src={large(open)} alt="Generated result" />
                 <figcaption className="nx-chip">Result</figcaption>
               </figure>
             </div>
@@ -351,7 +374,11 @@ export default function ReviewPage({
               {note === null ? (
                 <div className="nx-row">
                   {open.status !== "approved" && (
-                    <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve([open])}>
+                    <button
+                      className="nx-btn nx-primary"
+                      disabled={busy}
+                      onClick={() => void approve([open])}
+                    >
                       Approve <kbd>A</kbd>
                     </button>
                   )}

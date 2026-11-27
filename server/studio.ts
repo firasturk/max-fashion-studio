@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { thumbResponse, thumbWidth } from "./thumbs";
 import {
   advanceClips,
   approveClip,
@@ -1601,6 +1602,12 @@ studioRoutes.get("/file", async (c) => {
     key = row?.output ?? null;
   }
   if (!key) throw new StudioError("Image not found.", 404);
+  // Grids and viewers ask for a small copy; downloads and the ZIP take the file as stored.
+  const width = thumbWidth(c.req.query("w"));
+  if (width) {
+    const small = await thumbResponse(c.env, key, width);
+    if (small) return small;
+  }
   const obj = await c.env.BUCKET.get(key);
   if (!obj) throw new StudioError("Image not found.", 404);
   return new Response(obj.body, {

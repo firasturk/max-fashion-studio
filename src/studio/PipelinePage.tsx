@@ -21,7 +21,7 @@ function Thumbs({ b }: { b: Batch }) {
       {(b.thumbs ?? []).map((t) => (
         <img
           key={t}
-          src={`/api/studio/file?batch=${b.id}&id=${t}&kind=result`}
+          src={`/api/studio/file?batch=${b.id}&id=${t}&kind=result&w=160`}
           alt=""
           loading="lazy"
         />

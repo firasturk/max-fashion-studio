@@ -385,7 +385,7 @@ export default function ResultsTab({
               >
                 {t.output ? (
                   <img
-                    src={outputUrl(t)}
+                    src={`${outputUrl(t)}&w=640`}
                     alt={`AI result for ${s?.name}, card ${t.card}`}
                     loading="lazy"
                   />

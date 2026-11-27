@@ -42,6 +42,7 @@
     },
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "max-fashion-studio" }],
+  "images": { "binding": "PHOTOS" },
   // One Durable Object per image generation: a batch's whole width starts at once.
   "durable_objects": { "bindings": [{ "name": "RUNNER", "class_name": "ImageRunner" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ImageRunner"] }],

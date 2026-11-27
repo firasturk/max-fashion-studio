@@ -23,6 +23,8 @@ export interface Env {
   IMAGES?: Queue<ImageJob>;
   /** One object per image generation (see server/runner.ts); preferred over the queue. */
   RUNNER?: DurableObjectNamespace;
+  /** Cloudflare Images, used to make small copies of stored images. */
+  PHOTOS?: ImagesBinding;
 }
 
 /** True when generations run outside the driver's invocation (an object or a queue message each). */
