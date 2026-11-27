@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByBoard, originKey, parsePinterestLink, pinImage, readPins } from "@shared/pinterest";
+import { isShopBoard, parsePinterestLink, pinImage, readPins } from "@shared/pinterest";
 
 describe("Pinterest links", () => {
   it("reads a board link, with or without a country site", () => {
@@ -77,26 +77,46 @@ describe("Pinterest pictures", () => {
         image: "https://i.pinimg.com/736x/dc/59/c7/dc59c78056607f0250deb7611d387731.jpg",
         note: "Wide trousers",
         board: "",
+        boardUrl: "",
+        twin: "pin|1",
       },
     ]);
   });
 });
 
-describe("looks to propose", () => {
-  it("sorts an account's pins into its boards, biggest first", () => {
-    const pin = (id: string, board: string) => ({ id, thumb: "t", image: id, note: "", board });
-    const groups = groupByBoard(
-      [pin("1", "Denim"), pin("2", "Tailoring"), pin("3", "Denim"), pin("4", "")],
-      "Zara",
-    );
-    expect(groups.map((g) => [g.board, g.pins.length])).toEqual([
-      ["Denim", 2],
-      ["Tailoring", 1],
-      ["Zara", 1],
-    ]);
+describe("the Pinterest library", () => {
+  const url = "https://i.pinimg.com/236x/dc/59/c7/dc59c78056607f0250deb7611d387731.jpg";
+  const raw = (id: string, file: string, color: string) => ({
+    id,
+    dominant_color: color,
+    board: { name: "New in Woman", url: "/shop/new-in-woman/" },
+    images: {
+      "236x": {
+        url: url.replace("dc59c78056607f0250deb7611d387731", file),
+        width: 236,
+        height: 354,
+      },
+    },
   });
 
-  it("names a board the same way every time", () => {
-    expect(originKey("ZaraOfficial", "Autumn / Winter '26")).toBe("zaraofficial/autumn-winter-26");
+  it("marks the same picture posted again with other text as a twin", () => {
+    const pins = readPins([
+      raw("1", "aa59c78056607f0250deb7611d387731", "#373737"),
+      raw("2", "bb59c78056607f0250deb7611d387731", "#373737"),
+      raw("3", "cc59c78056607f0250deb7611d387731", "#bdb7ae"),
+    ]);
+    expect(pins.map((p) => p.twin)).toEqual([
+      "/shop/new-in-woman/|#373737|236x354",
+      "/shop/new-in-woman/|#373737|236x354",
+      "/shop/new-in-woman/|#bdb7ae|236x354",
+    ]);
+    expect(pins[0].boardUrl).toBe("/shop/new-in-woman/");
+  });
+
+  it("leaves out product feeds and advert boards", () => {
+    expect(isShopBoard("Products", "/massimodutti/_products/")).toBe(true);
+    expect(isShopBoard("Pin exclusivamente publicitario", "/massimodutti/pin-x/")).toBe(true);
+    expect(isShopBoard("New in Woman", "/massimodutti/new-in-woman/")).toBe(false);
+    expect(isShopBoard("Street style", "")).toBe(false);
   });
 });

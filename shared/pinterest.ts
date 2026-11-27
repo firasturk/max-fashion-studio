@@ -50,6 +50,10 @@ export interface Pin {
   note: string;
   /** The board the pin sits on, when the feed says so. */
   board: string;
+  /** That board's own page ("/account/board/"), to read more of it. */
+  boardUrl: string;
+  /** Marks near-copies: the same picture posted again with other text over it. */
+  twin: string;
 }
 
 const PINIMG =
@@ -62,7 +66,8 @@ export function pinImage(url: string, size: "236x" | "736x"): string | null {
 }
 
 interface RawPin {
-  board?: { name?: unknown };
+  board?: { name?: unknown; url?: unknown };
+  dominant_color?: unknown;
   id?: unknown;
   is_video?: unknown;
   description?: unknown;
@@ -75,9 +80,9 @@ export function readPins(raw: unknown): Pin[] {
   const seen = new Set<string>();
   for (const p of (Array.isArray(raw) ? raw : []) as RawPin[]) {
     const id = typeof p?.id === "string" ? p.id : "";
-    const url = Object.values(p?.images ?? {})
-      .map((i) => i?.url)
-      .find((v): v is string => typeof v === "string");
+    const first = Object.values(p?.images ?? {}).find((i) => typeof i?.url === "string") as
+      { url: string; width?: unknown; height?: unknown } | undefined;
+    const url = first?.url;
     const thumb = url ? pinImage(url, "236x") : null;
     const image = url ? pinImage(url, "736x") : null;
     if (!id || !thumb || !image || p.is_video === true || seen.has(image)) continue;
@@ -88,31 +93,26 @@ export function readPins(raw: unknown): Pin[] {
       image,
       note: typeof p.description === "string" ? p.description.trim().slice(0, 140) : "",
       board: typeof p.board?.name === "string" ? p.board.name.trim().slice(0, 60) : "",
+      boardUrl: typeof p.board?.url === "string" ? p.board.url : "",
+      twin:
+        typeof p.dominant_color === "string" && first?.width && first?.height
+          ? `${typeof p.board?.url === "string" ? p.board.url : ""}|${p.dominant_color}|${String(first.width)}x${String(first.height)}`
+          : `pin|${id}`,
     });
   }
   return out;
 }
 
-/** Pins sorted into their boards, biggest first: each board is one candidate look. */
-export function groupByBoard(pins: Pin[], fallback: string): { board: string; pins: Pin[] }[] {
-  const groups = new Map<string, Pin[]>();
-  for (const p of pins) {
-    const name = p.board || fallback;
-    groups.set(name, [...(groups.get(name) ?? []), p]);
-  }
-  return [...groups.entries()]
-    .map(([board, list]) => ({ board, pins: list }))
-    .sort((a, b) => b.pins.length - a.pins.length);
-}
-
-/** A stable name for "this board of this account", so a look is proposed only once. */
-export function originKey(account: string, board: string): string {
-  const norm = (v: string) =>
-    v
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  return `${norm(account)}/${norm(board)}`;
+/**
+ * Boards that are not mood boards: the product feed a shop publishes ("/shop/_products/") and
+ * boards of adverts. Their pictures are packshots and sale banners, useless as references.
+ */
+export function isShopBoard(name: string, url: string): boolean {
+  const slug = url.split("/").filter(Boolean)[1] ?? "";
+  return (
+    slug.startsWith("_") ||
+    /publicit|promot|advert|sponsor|\bads?\b|\bsale\b|^products?$/i.test(name.trim())
+  );
 }
 
 /** The accounts the studio watches until the team chooses its own. */

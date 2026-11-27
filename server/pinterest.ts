@@ -14,8 +14,8 @@ import {
 
 const FEED = "https://widgets.pinterest.com/v3/pidgets";
 const AGENT = "Mozilla/5.0 (compatible; studio-mood-board/1.0)";
-/** How many pictures one skill takes: the skill's text is written from the first ten. */
-export const PIN_LIMIT = 12;
+/** How many pictures one go may add to a skill. The skill's text is written from its first ten. */
+export const PIN_LIMIT = 24;
 
 async function feed(path: string): Promise<Record<string, unknown>> {
   const r = await fetch(`${FEED}${path}`, {

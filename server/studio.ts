@@ -1,20 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { PIN_LIMIT, pinterestPhotos, pinterestPins, type PinPhoto } from "./pinterest";
 import {
-  PIN_LIMIT,
-  downloadPins,
-  pinterestPhotos,
-  pinterestPins,
-  type PinPhoto,
-} from "./pinterest";
-import {
-  closeSuggestion,
-  listSuggestions,
-  refreshSuggestions,
-  setSuggestionSources,
-  suggestionRow,
-  suggestionSources,
-} from "./suggest";
+  librarySources,
+  listLibrary,
+  markPins,
+  refreshLibrary,
+  setLibrarySources,
+} from "./library";
 import { thumbResponse, thumbWidth } from "./thumbs";
 import {
   advanceClips,
@@ -805,6 +798,7 @@ studioRoutes.post("/skills/pinterest", async (c) => {
   const user = c.get("user");
   const photos = await pinterestPhotos(d.pins);
   const made = await createSkillFromPhotos(c.env, user.id, d.title, d.caption ?? "", photos);
+  await markPins(c.env, d.pins, "used");
   return c.json({ ...made, skills: await listSkills(c.env, user.id) });
 });
 
@@ -848,45 +842,46 @@ async function createSkillFromPhotos(
   return { id, photos: photos.length, warning };
 }
 
-/* Suggested skills: proposed by the studio from the Pinterest accounts it watches. */
-studioRoutes.get("/suggestions", async (c) =>
-  c.json({
-    items: await listSuggestions(c.env),
-    sources: await suggestionSources(c.env),
-  }),
+/* The Pinterest library: pictures gathered from the watched accounts, picked by people. */
+studioRoutes.get("/library", async (c) => {
+  const offset = Math.max(0, Number(c.req.query("offset")) || 0);
+  return c.json({
+    ...(await listLibrary(
+      c.env,
+      c.req.query("account") || null,
+      c.req.query("board") || null,
+      offset,
+      60,
+    )),
+    sources: await librarySources(c.env),
+    limit: PIN_LIMIT,
+  });
+});
+
+studioRoutes.post("/library/sources", async (c) => {
+  if (c.get("user").role !== "admin")
+    throw new StudioError("Only an admin can change the accounts to gather from.", 403);
+  const { links } = await body(c, z.object({ links: z.array(z.string().max(300)).max(40) }));
+  const sources = await setLibrarySources(c.env, links);
+  const added = await refreshLibrary(c.env, true);
+  return c.json({ sources, added });
+});
+
+studioRoutes.post("/library/refresh", async (c) =>
+  c.json({ added: await refreshLibrary(c.env, true) }),
 );
 
-studioRoutes.post("/suggestions/sources", async (c) => {
-  if (c.get("user").role !== "admin")
-    throw new StudioError("Only an admin can change the accounts to watch.", 403);
-  const { links } = await body(c, z.object({ links: z.array(z.string().max(300)).max(40) }));
-  const sources = await setSuggestionSources(c.env, links);
-  return c.json({ sources });
-});
-
-studioRoutes.post("/suggestions/refresh", async (c) => {
-  if (c.get("user").role !== "admin")
-    throw new StudioError("Only an admin can start a search for new ideas.", 403);
-  const made = await refreshSuggestions(c.env, true);
-  return c.json({ made, items: await listSuggestions(c.env) });
-});
-
-studioRoutes.post("/suggestions/approve", async (c) => {
-  const d = await body(
+studioRoutes.post("/library/hide", async (c) => {
+  const { pins } = await body(
     c,
-    z.object({ id: z.string().min(1), title: z.string().trim().min(2).max(60).optional() }),
+    z.object({
+      pins: z
+        .array(z.string().regex(/^\d{6,24}$/))
+        .min(1)
+        .max(200),
+    }),
   );
-  const user = c.get("user");
-  const s = await suggestionRow(c.env, d.id);
-  const photos = await downloadPins(s.pins);
-  const made = await createSkillFromPhotos(c.env, user.id, d.title ?? s.title, s.caption, photos);
-  await closeSuggestion(c.env, s.id, "approved", made.id);
-  return c.json({ ...made, skills: await listSkills(c.env, user.id) });
-});
-
-studioRoutes.post("/suggestions/dismiss", async (c) => {
-  const { id } = await body(c, z.object({ id: z.string().min(1) }));
-  await closeSuggestion(c.env, (await suggestionRow(c.env, id)).id, "dismissed");
+  await markPins(c.env, pins, "hidden");
   return c.json({ ok: true });
 });
 
@@ -1057,6 +1052,7 @@ studioRoutes.post("/references/pinterest", async (c) => {
   const photos = await pinterestPhotos(d.pins);
   const added: string[] = [];
   for (const p of photos) added.push(await addReference(c.env, d.skill, p.bytes, p.mime, p.name));
+  await markPins(c.env, d.pins, "used");
   return c.json({ ok: true, added });
 });
 

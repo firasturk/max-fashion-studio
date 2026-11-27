@@ -6,7 +6,7 @@ import type { SkillInfo } from "@shared/types";
 const SkillDialog = lazy(() => import("./SkillDialog"));
 const PinterestDialog = lazy(() => import("./PinterestDialog"));
 const ReferenceLibrary = lazy(() => import("./ReferenceLibrary"));
-const SuggestedSkills = lazy(() => import("./SuggestedSkills"));
+const PinLibrary = lazy(() => import("./PinLibrary"));
 
 /** The skill library: what each skill shoots and how it poses. One skill drives a whole folder. */
 export default function SkillsPage({
@@ -23,6 +23,8 @@ export default function SkillsPage({
     skill: null,
   });
   const [pinterest, setPinterest] = useState(false);
+  const [tab, setTab] = useState<"skills" | "library">("skills");
+  const [waiting, setWaiting] = useState<number | null>(null);
   /** The skill whose reference photos are open, and whether Pinterest is adding to it. */
   const [photos, setPhotos] = useState<SkillInfo | null>(null);
   const [photosKey, setPhotosKey] = useState(0);
@@ -52,8 +54,8 @@ export default function SkillsPage({
         <div>
           <h1>Skills</h1>
           <p>
-            A skill is the look of a whole delivery: the scene, the light and the pose. The Inbox
-            suggests one for every new folder.
+            A skill is the look of a whole delivery: the scene, the light and the pose. Build one
+            from the Pinterest library, from links you paste, or by hand.
           </p>
         </div>
         <div className="nx-right">
@@ -65,10 +67,35 @@ export default function SkillsPage({
           </button>
         </div>
       </div>
-      <Suspense fallback={null}>
-        <SuggestedSkills admin={admin} onCreated={onSaved} />
-      </Suspense>
-      {skills.length ? (
+      <div className="nx-row">
+        <div className="nx-seg" role="group" aria-label="View">
+          <button aria-pressed={tab === "skills"} onClick={() => setTab("skills")}>
+            Skills <span className="nx-mono">{skills.length}</span>
+          </button>
+          <button aria-pressed={tab === "library"} onClick={() => setTab("library")}>
+            Pinterest library {waiting !== null && <span className="nx-mono">{waiting}</span>}
+          </button>
+        </div>
+        {tab === "library" && (
+          <span className="nx-muted">
+            Tick the pictures you like, then make a skill from them or add them to one.
+          </span>
+        )}
+      </div>
+      {tab === "library" ? (
+        <Suspense fallback={null}>
+          <PinLibrary
+            admin={admin}
+            skills={skills}
+            onCount={setWaiting}
+            onCreated={(list, id) => {
+              onSaved(list, id);
+              setTab("skills");
+            }}
+            onAddedTo={libraryChanged}
+          />
+        </Suspense>
+      ) : skills.length ? (
         <div className="nx-skills nx-stagger">
           {skills.map((s) => (
             <article className="nx-skill" key={s.id}>
