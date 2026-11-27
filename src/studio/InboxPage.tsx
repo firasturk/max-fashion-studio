@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { del, get, post } from "@/api";
 import type { SkillInfo } from "@shared/types";
 import { skillTone } from "./tone";
+
+const FolderPhotos = lazy(() => import("./FolderPhotos"));
 
 interface Guess {
   skill: string | null;
@@ -17,6 +19,8 @@ interface Folder {
   /** Photos that will be generated: the first two views of every product. 0 until counted. */
   files: number;
   products: number;
+  /** Photos somebody gave a choice of their own (a skill, added, or left out). */
+  choices: number;
   thumbs: string[];
   state: "waiting" | "importing" | "imported" | "failed" | "skipped" | "gone";
   batch: string | null;
@@ -88,6 +92,9 @@ export default function InboxPage({
   const [editClient, setEditClient] = useState(false);
   /** The month (top folder) being looked at; empty shows every month. */
   const [only, setOnly] = useState("");
+  /** The folder whose photos are open. */
+  const [looking, setLooking] = useState<{ id: string; name: string; skill: string } | null>(null);
+  const stopLooking = useCallback(() => setLooking(null), []);
 
   const load = useCallback(async () => {
     try {
@@ -528,7 +535,16 @@ export default function InboxPage({
                       <div>
                         <div className="nx-name">{f.name}</div>
                       </div>
-                      <div className="nx-strip">
+                      <div
+                        className="nx-strip nx-open"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`See all photos in ${f.name}`}
+                        onClick={() => setLooking({ id: f.id, name: f.name, skill })}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && setLooking({ id: f.id, name: f.name, skill })
+                        }
+                      >
                         {f.thumbs.map((t) => (
                           <img
                             key={t}
@@ -582,6 +598,12 @@ export default function InboxPage({
                             }
                           >
                             Import only
+                          </button>
+                          <button
+                            className="nx-btn"
+                            onClick={() => setLooking({ id: f.id, name: f.name, skill })}
+                          >
+                            See all photos
                           </button>
                           <button
                             className="nx-btn nx-quiet"
@@ -665,8 +687,11 @@ export default function InboxPage({
                         <dt>Photos</dt>
                         <dd className="nx-mono">
                           {f.files || "–"}
-                          {f.products > 0 && f.files > 0 && (
-                            <span className="nx-muted"> · front and back</span>
+                          {f.choices > 0 ? (
+                            <span className="nx-chip nx-ok">{f.choices} with your own choice</span>
+                          ) : (
+                            f.products > 0 &&
+                            f.files > 0 && <span className="nx-muted"> · front and back</span>
                           )}
                         </dd>
                       </dl>
@@ -678,6 +703,17 @@ export default function InboxPage({
             </div>
           </details>
         ))
+      )}
+      {looking && (
+        <Suspense fallback={null}>
+          <FolderPhotos
+            folder={looking}
+            skills={skills}
+            folderSkill={looking.skill}
+            onClose={stopLooking}
+            onSaved={() => void load()}
+          />
+        </Suspense>
       )}
     </div>
   );

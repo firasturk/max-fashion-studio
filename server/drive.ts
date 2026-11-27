@@ -8,6 +8,7 @@ import { StudioError, errorMessage } from "./errors";
 import { all, first, now, run, uuid } from "./db";
 import { deleteSetting, getSetting, resolveEngineModel, setSetting } from "./settings";
 import { insertSource } from "./sources";
+import { signValue } from "./signed";
 import { DEFAULT_CONFIG, validateConfig, type Config } from "@shared/config";
 import { stemKey, isValidSourceName } from "@shared/naming";
 import {
@@ -15,8 +16,13 @@ import {
   guessSkill,
   importName,
   isDeliveryName,
+  isTagPhoto,
   learnRule,
   pickProductPhotos,
+  plannedPhotos,
+  tidyPlan,
+  viewNumber,
+  type FolderPlan,
   type DriveRules,
   type SkillGuess,
 } from "@shared/drive";
@@ -65,6 +71,18 @@ export interface DriveFolderRow {
   products: number;
   walked: number;
   scanned: number;
+  /** A person's choices for this delivery, as JSON (see FolderPlan); null when there are none. */
+  plan?: string | null;
+}
+
+/** The choices saved on a delivery. */
+export function planOf(row: { plan?: string | null }): FolderPlan {
+  if (!row.plan) return {};
+  try {
+    return JSON.parse(row.plan) as FolderPlan;
+  } catch {
+    return {};
+  }
 }
 
 export interface ImportJob {
@@ -766,7 +784,7 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
     for (const d of unread) {
       if (now() - started > 50_000) break;
       const every = await scanDelivery(creds, d.id, fetch, driveId);
-      const photos = pickProductPhotos(every);
+      const photos = plannedPhotos(every, planOf(d)).map((x) => x.photo);
       const bytes = photos.reduce((n, p) => n + Number(p.size ?? 0), 0);
       const thumbs = JSON.stringify(photos.slice(0, 4).map((p) => p.id));
       const products = new Set(
@@ -832,9 +850,11 @@ export async function driveRules(env: Env): Promise<DriveRules> {
   return rules;
 }
 
-export interface InboxFolder extends Omit<DriveFolderRow, "thumbs"> {
+export interface InboxFolder extends Omit<DriveFolderRow, "thumbs" | "plan"> {
   thumbs: string[];
   guess: SkillGuess;
+  /** How many photos somebody gave a choice of their own (a skill, added, or left out). */
+  choices: number;
 }
 
 export async function inboxFolders(env: Env): Promise<InboxFolder[]> {
@@ -844,11 +864,94 @@ export async function inboxFolders(env: Env): Promise<InboxFolder[]> {
     now() - 24 * 3600 * 1000,
   );
   const rules = await driveRules(env);
-  return rows.map((r) => ({
+  return rows.map(({ plan, ...r }) => ({
     ...r,
     thumbs: JSON.parse(r.thumbs || "[]") as string[],
     guess: guessSkill(r.name, rules),
+    choices: Object.keys(planOf({ plan })).length,
   }));
+}
+
+export interface FolderPhoto {
+  id: string;
+  /** Proof for the thumbnail address that this server listed the photo. */
+  token: string;
+  name: string;
+  /** The product folder it sits in ("" for a photo straight in the delivery). */
+  product: string;
+  view: number | null;
+  tag: boolean;
+  /** Generated when nobody says otherwise: one of the first two views of its product. */
+  usual: boolean;
+}
+
+/** Every photo in a delivery, for looking through before approving it, with the saved choices. */
+export async function folderPhotos(
+  env: Env,
+  folderId: string,
+): Promise<{ id: string; name: string; path: string; photos: FolderPhoto[]; plan: FolderPlan }> {
+  const row = await first<DriveFolderRow>(
+    env.DB,
+    "SELECT * FROM drive_folders WHERE id = ? AND state != 'group'",
+    folderId,
+  );
+  const creds = await resolveDriveAuth(env);
+  if (!row) throw new StudioError("That folder is no longer in the inbox.", 404);
+  if (!creds) throw new StudioError("Sign in with Google first.", 428);
+  const every = await scanDelivery(creds, row.id, fetch, (await driveInbox(env))?.driveId ?? "");
+  const usual = new Set(pickProductPhotos(every).map((p) => p.id));
+  const photos: FolderPhoto[] = [];
+  for (const p of every) {
+    const cut = p.relative.lastIndexOf("/");
+    photos.push({
+      id: p.id,
+      token: await signValue(env, p.id),
+      name: p.relative.slice(cut + 1),
+      product: cut < 0 ? "" : p.relative.slice(0, cut),
+      view: viewNumber(p.relative),
+      tag: isTagPhoto(p.relative),
+      usual: usual.has(p.id),
+    });
+  }
+  return { id: row.id, name: row.name, path: row.path, photos, plan: tidyPlan(every, planOf(row)) };
+}
+
+/** Saves which photos of a waiting delivery get generated and with which skill. */
+export async function saveFolderPlan(
+  env: Env,
+  folderId: string,
+  plan: FolderPlan,
+  skills: string[],
+): Promise<{ files: number; choices: number }> {
+  const row = await first<DriveFolderRow>(
+    env.DB,
+    "SELECT * FROM drive_folders WHERE id = ?",
+    folderId,
+  );
+  const creds = await resolveDriveAuth(env);
+  if (!row) throw new StudioError("That folder is no longer in the inbox.", 404);
+  if (row.state !== "waiting" && row.state !== "failed")
+    throw new StudioError("This folder was already approved; change skills inside its batch.", 409);
+  if (!creds) throw new StudioError("Sign in with Google first.", 428);
+  for (const choice of Object.values(plan))
+    if (choice !== "" && choice !== "*" && !skills.includes(choice))
+      throw new StudioError(`There is no skill called "${choice.slice(0, 40)}".`);
+  const every = await scanDelivery(creds, row.id, fetch, (await driveInbox(env))?.driveId ?? "");
+  const tidy = tidyPlan(every, plan);
+  const photos = plannedPhotos(every, tidy).map((x) => x.photo);
+  if (!photos.length) throw new StudioError("Keep at least one photo to generate.");
+  await run(
+    env.DB,
+    "UPDATE drive_folders SET plan = ?, files = ?, bytes = ?, thumbs = ?, scanned = ?, updated = ? WHERE id = ?",
+    Object.keys(tidy).length ? JSON.stringify(tidy) : null,
+    photos.length,
+    photos.reduce((n, p) => n + Number(p.size ?? 0), 0),
+    JSON.stringify(photos.slice(0, 4).map((p) => p.id)),
+    now(),
+    now(),
+    row.id,
+  );
+  return { files: photos.length, choices: Object.keys(tidy).length };
 }
 
 /** The settings a delivery starts with: the last batch that used this skill, else the defaults. */
@@ -1045,9 +1148,12 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
     if (!batch) return (void (await fail("The batch for this folder was deleted.")), false);
     if (!creds) return (void (await fail("Nobody is signed in to Google Drive any more.")), false);
     const config = JSON.parse(batch.config) as Config;
-    const photos = pickProductPhotos(
+    const planned = plannedPhotos(
       await scanDelivery(creds, job.folder, fetch, (await driveInbox(env))?.driveId ?? ""),
+      planOf(row),
     );
+    const ownSkill = new Map(planned.map((x) => [x.photo.id, x.skill]));
+    const photos = planned.map((x) => x.photo);
     const have = new Set(
       (
         await all<{ stem: string }>(env.DB, "SELECT stem FROM sources WHERE batch = ?", batch.id)
@@ -1102,6 +1208,7 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
             mime: photo.mimeType,
             size: bytes.byteLength,
             role: "lead",
+            skill: ownSkill.get(photo.id) ?? null,
           });
         } catch (e) {
           await env.BUCKET.delete([key, ...(referenceKey ? [referenceKey] : [])]);
@@ -1144,13 +1251,20 @@ export async function importFolder(env: Env, job: ImportJob): Promise<boolean> {
   }
 }
 
-/** A small preview of one photo, only for photos the inbox itself lists. */
-export async function driveThumb(env: Env, fileId: string): Promise<Response> {
-  const listed = await first(
-    env.DB,
-    "SELECT id FROM drive_folders WHERE instr(thumbs, ?) > 0 LIMIT 1",
-    `"${fileId}"`,
-  );
+/** A preview of one photo, only for photos the inbox itself listed (or handed a token for). */
+export async function driveThumb(
+  env: Env,
+  fileId: string,
+  token = "",
+  large = false,
+): Promise<Response> {
+  const listed =
+    (token && token === (await signValue(env, fileId))) ||
+    (await first(
+      env.DB,
+      "SELECT id FROM drive_folders WHERE instr(thumbs, ?) > 0 LIMIT 1",
+      `"${fileId}"`,
+    ));
   const creds = await resolveDriveAuth(env);
   if (!listed || !creds) return new Response(null, { status: 404 });
   const meta = (await (
@@ -1160,9 +1274,10 @@ export async function driveThumb(env: Env, fileId: string): Promise<Response> {
     )
   ).json()) as DriveFile;
   if (!meta.thumbnailLink) return new Response(null, { status: 404 });
-  const token = await creds.token();
-  const r = await fetch(meta.thumbnailLink.replace(/=s\d+(-[a-z0-9-]+)?$/i, "=s240"), {
-    headers: { Authorization: `Bearer ${token}` },
+  const bearer = await creds.token();
+  const size = large ? "=s1600" : "=s240";
+  const r = await fetch(meta.thumbnailLink.replace(/=s\d+(-[a-z0-9-]+)?$/i, size), {
+    headers: { Authorization: `Bearer ${bearer}` },
     signal: AbortSignal.timeout(20_000),
   });
   if (!r.ok) return new Response(null, { status: 404 });

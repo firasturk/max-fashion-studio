@@ -6746,3 +6746,176 @@ body {
 .nx-group > .nx-folders {
   padding-bottom: 14px;
 }
+
+/* Inbox: looking through one folder's photos and choosing a skill for single photos. */
+.nx-strip.nx-open {
+  cursor: pointer;
+}
+.nx-sheet.nx-photos {
+  width: min(1180px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+}
+.nx-sheet.nx-photos .nx-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.nx-phbar,
+.nx-phfoot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.nx-phfoot {
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+.nx-phfoot .nx-muted {
+  margin-right: auto;
+}
+.nx-phbar select,
+.nx-product select {
+  height: 32px;
+  max-width: 220px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12.5px;
+}
+.nx-product {
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.nx-product:last-child {
+  border-bottom: 0;
+}
+.nx-product > .nx-row .nx-right {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.nx-phbar select,
+.nx-product select {
+  width: auto;
+  flex: 0 1 220px;
+  min-width: 0;
+}
+.nx-phgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.nx-ph {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--grid-line);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  transition:
+    outline-color 0.12s ease,
+    opacity 0.12s ease;
+}
+.nx-ph.nx-on {
+  outline-color: var(--pop);
+}
+.nx-ph.nx-off img {
+  opacity: 0.32;
+  filter: grayscale(1);
+}
+.nx-phpick {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.nx-phpick img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+.nx-phzoom {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.nx-ph:hover .nx-phzoom,
+.nx-phzoom:focus-visible {
+  opacity: 1;
+}
+.nx-phname {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10.5px;
+  pointer-events: none;
+}
+.nx-phtag {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.nx-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.86);
+  color: #fff;
+  cursor: zoom-out;
+}
+.nx-lightbox img {
+  max-width: min(100%, 1100px);
+  max-height: calc(100dvh - 90px);
+  border-radius: 10px;
+}
+@media (max-width: 640px) {
+  .nx-phzoom {
+    opacity: 1;
+  }
+  .nx-phgrid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  }
+}

@@ -109,7 +109,9 @@ import {
   connectInbox,
   driveStatus,
   driveThumb,
+  folderPhotos,
   inboxFolders,
+  saveFolderPlan,
   skipFolder,
   skipUnder,
   skippedCount,
@@ -1562,7 +1564,32 @@ studioRoutes.post("/drive/unskip", async (c) =>
   c.json({ ok: true, restored: await unskipAll(c.env) }),
 );
 
-studioRoutes.get("/drive/thumb", async (c) => driveThumb(c.env, c.req.query("id") ?? ""));
+studioRoutes.get("/drive/thumb", async (c) =>
+  driveThumb(
+    c.env,
+    c.req.query("id") ?? "",
+    c.req.query("t") ?? "",
+    c.req.query("size") === "large",
+  ),
+);
+
+/* Looking through a folder before approving it, and choosing a skill for single photos. */
+studioRoutes.get("/drive/photos", async (c) =>
+  c.json(await folderPhotos(c.env, c.req.query("folder") ?? "")),
+);
+
+studioRoutes.post("/drive/plan", async (c) => {
+  const { folder, plan } = await body(
+    c,
+    z.object({
+      folder: z.string().min(5),
+      plan: z.record(z.string().regex(/^[A-Za-z0-9_-]{10,}$/), z.string().max(60)),
+    }),
+  );
+  if (Object.keys(plan).length > 4000) throw new StudioError("Too many choices for one folder.");
+  const skills = (await listSkills(c.env, c.get("user").id)).map((s) => s.id);
+  return c.json(await saveFolderPlan(c.env, folder, plan, skills));
+});
 
 studioRoutes.post("/batch", async (c) => {
   const user = c.get("user");

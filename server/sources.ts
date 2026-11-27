@@ -14,20 +14,34 @@ export interface NewSource {
   mime: string;
   size: number;
   role: "lead" | "supporting";
+  /** This photo's own skill; left out, it runs on the batch's skill. */
+  skill?: string | null;
 }
 
 export async function insertSource(env: Env, config: Config, s: NewSource): Promise<void> {
   const statements = [
     env.DB.prepare(
-      "INSERT INTO sources (id, batch, name, stem, key, reference_key, mime, size, role, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).bind(s.id, s.batch, s.name, s.stem, s.key, s.referenceKey, s.mime, s.size, s.role, now()),
+      "INSERT INTO sources (id, batch, name, stem, key, reference_key, mime, size, role, skill, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(
+      s.id,
+      s.batch,
+      s.name,
+      s.stem,
+      s.key,
+      s.referenceKey,
+      s.mime,
+      s.size,
+      s.role,
+      s.skill ?? null,
+      now(),
+    ),
   ];
   if (createsTasks(config, s.role)) {
     for (let card = 1; card <= cardsPerSource(config); card++) {
       statements.push(
         env.DB.prepare(
           "INSERT INTO tasks (id, batch, source, card, status, prompt, updated) VALUES (?, ?, ?, ?, 'queued', ?, ?)",
-        ).bind(uuid(), s.batch, s.id, card, buildPrompt(config, card), now()),
+        ).bind(uuid(), s.batch, s.id, card, s.skill ? "" : buildPrompt(config, card), now()),
       );
     }
   }

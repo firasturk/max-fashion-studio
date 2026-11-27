@@ -171,3 +171,43 @@ export function pickProductPhotos<T extends { relative: string }>(photos: T[], v
   }
   return out;
 }
+
+/**
+ * A person's choices for a delivery before it is approved, by Drive photo id: a skill id gives
+ * the photo that skill, "*" generates it with the folder's skill, "" leaves it out. A photo
+ * without a choice follows the usual rule (the first two views of its product).
+ */
+export type FolderPlan = Record<string, string>;
+
+/** The photos that will be generated, each with its own skill or null for the folder's. */
+export function plannedPhotos<T extends { id: string; relative: string }>(
+  photos: T[],
+  plan: FolderPlan = {},
+): { photo: T; skill: string | null }[] {
+  const usual = new Set(pickProductPhotos(photos).map((p) => p.id));
+  const out: { photo: T; skill: string | null }[] = [];
+  for (const photo of photos) {
+    const choice = plan[photo.id];
+    if (choice === "") continue;
+    if (choice === undefined && !usual.has(photo.id)) continue;
+    out.push({ photo, skill: choice && choice !== "*" ? choice : null });
+  }
+  return out;
+}
+
+/** Keeps only the choices that differ from the usual rule, so a plan stays small. */
+export function tidyPlan<T extends { id: string; relative: string }>(
+  photos: T[],
+  plan: FolderPlan,
+): FolderPlan {
+  const usual = new Set(pickProductPhotos(photos).map((p) => p.id));
+  const known = new Set(photos.map((p) => p.id));
+  const out: FolderPlan = {};
+  for (const [id, choice] of Object.entries(plan)) {
+    if (!known.has(id)) continue;
+    if (choice === "*" && usual.has(id)) continue;
+    if (choice === "" && !usual.has(id)) continue;
+    out[id] = choice;
+  }
+  return out;
+}

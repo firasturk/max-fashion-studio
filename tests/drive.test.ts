@@ -3,6 +3,8 @@ import {
   classifyFolder,
   isProductName,
   pickProductPhotos,
+  plannedPhotos,
+  tidyPlan,
   viewNumber,
   deliveryKey,
   driveFolderId,
@@ -143,5 +145,36 @@ describe("the client's Drive layout", () => {
       "Looks/side.jpg",
       "loose_05.jpg",
     ]);
+  });
+
+  it("lets a person give photos their own skill, add a view and leave one out", () => {
+    const photos = ["01", "02", "03", "07_tag"].flatMap((v) =>
+      ["170374972", "170469681"].map((p) => ({ id: `${p}-${v}`, relative: `${p}/${p}_${v}.jpg` })),
+    );
+    const plan = {
+      "170374972-01": "studio-white", // its own skill
+      "170374972-02": "", // left out
+      "170469681-03": "*", // an extra view, with the folder's skill
+      "170469681-01": "*", // the usual choice, said out loud
+      "170374972-07_tag": "", // was never going to be generated
+      "gone-file": "editorial",
+    };
+    expect(plannedPhotos(photos, plan).map((x) => [x.photo.id, x.skill])).toEqual([
+      ["170374972-01", "studio-white"],
+      ["170469681-01", null],
+      ["170469681-02", null],
+      ["170469681-03", null],
+    ]);
+    expect(plannedPhotos(photos).map((x) => x.photo.id)).toEqual([
+      "170374972-01",
+      "170469681-01",
+      "170374972-02",
+      "170469681-02",
+    ]);
+    expect(tidyPlan(photos, plan)).toEqual({
+      "170374972-01": "studio-white",
+      "170374972-02": "",
+      "170469681-03": "*",
+    });
   });
 });

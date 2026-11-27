@@ -54,3 +54,8 @@ export async function verifyObjectToken(
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
   return diff === 0;
 }
+
+/** A token that proves this server handed out a value (a Drive photo id), without a lookup. */
+export async function signValue(env: Env, value: string): Promise<string> {
+  return (await sign(env, `value:${value}`)).slice(0, 32);
+}
