@@ -101,6 +101,7 @@ import {
   skipFolder,
   syncDrive,
   DRIVE_INBOX_SETTING,
+  ensureDriveApi,
 } from "./drive";
 import { driveFolderId } from "@shared/drive";
 import type { Batch, LookInfo, ModeOverride, Preset, Source, Task, User } from "@shared/types";
@@ -1260,6 +1261,10 @@ studioRoutes.get("/drive", async (c) => {
     [1],
   ).total;
   return c.json({ ...status, folders, pricePerImage: price });
+});
+
+studioRoutes.post("/drive/check", async (c) => {
+  return c.json({ api: await ensureDriveApi(c.env, true) });
 });
 
 studioRoutes.post("/drive/inbox", async (c) => {

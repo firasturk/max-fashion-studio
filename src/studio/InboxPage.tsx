@@ -26,6 +26,7 @@ interface DriveState {
   account: string | null;
   /** Whether the Drive API is switched on in the studio's Google Cloud project. */
   api?: "on" | "off" | "unknown";
+  project?: string | null;
   inbox: { id: string; name: string } | null;
   lastSync: number;
   error: string | null;
@@ -160,9 +161,27 @@ export default function InboxPage({
               <li>
                 <b>Switch on the Drive API</b>
                 <span>
-                  The studio tried to switch it on by itself and was not allowed to. Open Cloud
-                  Shell in the studio's Google Cloud project and run this once.
+                  The studio tried to switch it on by itself and Google did not allow it. Open this
+                  page with the Google account that owns the project and press Enable. It takes
+                  about a minute to take effect.
                 </span>
+                <div className="nx-row">
+                  <a
+                    className="nx-btn nx-primary"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://console.cloud.google.com/apis/library/drive.googleapis.com${state.project ? `?project=${encodeURIComponent(state.project)}` : ""}`}
+                  >
+                    Open the Drive API page
+                  </a>
+                  <button
+                    className="nx-btn"
+                    disabled={busy === "sync"}
+                    onClick={() => void act("sync", () => post("/api/studio/drive/check"))}
+                  >
+                    I pressed Enable, check again
+                  </button>
+                </div>
                 <div className="nx-code">
                   <code>{ENABLE_API}</code>
                   <Copy text={ENABLE_API} label="Command" />

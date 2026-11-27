@@ -280,6 +280,8 @@ export async function driveStatus(env: Env): Promise<{
   lastSync: number;
   error: string | null;
   api: DriveApiState;
+  /** The Google Cloud project the service account lives in: where the Drive API is switched on. */
+  project: string | null;
 }> {
   const creds = await resolveVertex(env);
   const inbox = await driveInbox(env);
@@ -289,6 +291,7 @@ export async function driveStatus(env: Env): Promise<{
     lastSync: Number((await getSetting(env, DRIVE_SYNC_SETTING)) ?? 0),
     error: (await getSetting(env, DRIVE_ERROR_SETTING)) || null,
     api: inbox ? "on" : await ensureDriveApi(env).catch(() => "unknown" as const),
+    project: creds?.projectId ?? null,
   };
 }
 
