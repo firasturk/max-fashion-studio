@@ -73,6 +73,19 @@ export interface DriveFolderRow {
   scanned: number;
   /** A person's choices for this delivery, as JSON (see FolderPlan); null when there are none. */
   plan?: string | null;
+  /** What the client's tracker says: "delivered", "working", or null when it is not listed. */
+  tracker_state?: string | null;
+  tracker_info?: string | null;
+}
+
+/** The tracker line behind a folder's state. */
+export interface TrackerInfo {
+  state: "delivered" | "working";
+  line: string;
+  received: string;
+  sent: string;
+  upload: string;
+  published: string;
 }
 
 /** The choices saved on a delivery. */
@@ -118,7 +131,7 @@ async function driveError(r: Response, creds: DriveAuth): Promise<StudioError> {
   return new StudioError(`Google Drive answered ${r.status}: ${text}`, 502);
 }
 
-async function driveGet(
+export async function driveGet(
   creds: DriveAuth,
   path: string,
   fetchImpl: typeof fetch = fetch,
@@ -779,7 +792,12 @@ export async function syncDrive(env: Env, force = false): Promise<void> {
           r.state === "waiting" &&
           (r.scanned === 0 || (now() - r.modified < FRESH_MS && now() - r.scanned > RECOUNT_MS)),
       )
-      .sort((a, b) => Number(a.scanned > 0) - Number(b.scanned > 0) || b.modified - a.modified)
+      .sort(
+        (a, b) =>
+          Number(a.scanned > 0) - Number(b.scanned > 0) ||
+          Number(a.tracker_state === "delivered") - Number(b.tracker_state === "delivered") ||
+          b.modified - a.modified,
+      )
       .slice(0, SCANS_PER_SYNC);
     for (const d of unread) {
       if (now() - started > 50_000) break;
@@ -850,9 +868,14 @@ export async function driveRules(env: Env): Promise<DriveRules> {
   return rules;
 }
 
-export interface InboxFolder extends Omit<DriveFolderRow, "thumbs" | "plan"> {
+export interface InboxFolder extends Omit<
+  DriveFolderRow,
+  "thumbs" | "plan" | "tracker_state" | "tracker_info"
+> {
   thumbs: string[];
   guess: SkillGuess;
+  /** What the client's tracker says about this folder; null when it is not listed there. */
+  tracker: TrackerInfo | null;
   /** How many photos somebody gave a choice of their own (a skill, added, or left out). */
   choices: number;
 }
@@ -864,12 +887,23 @@ export async function inboxFolders(env: Env): Promise<InboxFolder[]> {
     now() - 24 * 3600 * 1000,
   );
   const rules = await driveRules(env);
-  return rows.map(({ plan, ...r }) => ({
-    ...r,
-    thumbs: JSON.parse(r.thumbs || "[]") as string[],
-    guess: guessSkill(r.name, rules),
-    choices: Object.keys(planOf({ plan })).length,
-  }));
+  return rows.map(({ plan, tracker_state, tracker_info, ...r }) => {
+    let tracker: TrackerInfo | null = null;
+    if (tracker_state === "delivered" || tracker_state === "working") {
+      try {
+        tracker = { ...(JSON.parse(tracker_info || "{}") as TrackerInfo), state: tracker_state };
+      } catch {
+        tracker = null;
+      }
+    }
+    return {
+      ...r,
+      thumbs: JSON.parse(r.thumbs || "[]") as string[],
+      guess: guessSkill(r.name, rules),
+      choices: Object.keys(planOf({ plan })).length,
+      tracker,
+    };
+  });
 }
 
 export interface FolderPhoto {

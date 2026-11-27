@@ -15,6 +15,7 @@ import {
 } from "./engine";
 import { LEARN_LAST_RUN, learnDue } from "./memory";
 import { connectInbox, driveCallback, driveInbox, ensureDriveApi, syncDrive } from "./drive";
+import { syncTracker } from "./tracker";
 import { advanceClips, videoCallback } from "./video";
 import { libraryWork } from "./library";
 import { logEvent, pruneEvents } from "./events";
@@ -239,6 +240,8 @@ export default {
           console.log("[drive] inbox is now", inbox.name);
         }
         await syncDrive(env);
+        // The tracker is read after the folders, so new folders get their state the same minute.
+        await syncTracker(env).catch((e) => console.error("[tracker]", errorMessage(e)));
       })().catch((e) => console.error("[drive]", errorMessage(e))),
     );
     // Brand memory: one learning run a week over the event stream, plus pruning of old events.

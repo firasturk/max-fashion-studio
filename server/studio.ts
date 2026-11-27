@@ -104,6 +104,7 @@ import { configSchema } from "@shared/config-schema";
 import { buildPrompt } from "@shared/prompts";
 import { stemOf, stemKey, isValidSourceName, relativeUploadName } from "@shared/naming";
 import { insertSource } from "./sources";
+import { syncTracker, trackerView } from "./tracker";
 import {
   approveFolder,
   connectInbox,
@@ -1354,7 +1355,7 @@ studioRoutes.get("/counts", async (c) => {
   );
   const inbox = await first<{ n: number }>(
     c.env.DB,
-    "SELECT COUNT(*) AS n FROM drive_folders WHERE state = 'waiting'",
+    "SELECT COUNT(*) AS n FROM drive_folders WHERE state = 'waiting' AND COALESCE(tracker_state, '') != 'delivered'",
   );
   const drive = await driveStatus(c.env);
   return c.json({
@@ -1526,6 +1527,7 @@ studioRoutes.delete("/drive/inbox", async (c) => {
 
 studioRoutes.post("/drive/sync", async (c) => {
   await syncDrive(c.env, true);
+  await syncTracker(c.env, true).catch((e) => console.error("[tracker]", errorMessage(e)));
   return c.json({ ok: true });
 });
 
@@ -1572,6 +1574,14 @@ studioRoutes.get("/drive/thumb", async (c) =>
     c.req.query("size") === "large",
   ),
 );
+
+/* The client's tracker sheet, as the studio last read it. Read only. */
+studioRoutes.get("/tracker", async (c) => c.json(await trackerView(c.env)));
+
+studioRoutes.post("/tracker/sync", async (c) => {
+  await syncTracker(c.env, true);
+  return c.json(await trackerView(c.env));
+});
 
 /* Looking through a folder before approving it, and choosing a skill for single photos. */
 studioRoutes.get("/drive/photos", async (c) =>

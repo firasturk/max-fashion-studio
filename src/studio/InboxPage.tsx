@@ -21,6 +21,14 @@ interface Folder {
   products: number;
   /** Photos somebody gave a choice of their own (a skill, added, or left out). */
   choices: number;
+  /** What the client's tracker says about this folder; null when it is not listed there. */
+  tracker: {
+    state: "delivered" | "working";
+    line: string;
+    sent: string;
+    upload: string;
+    published: string;
+  } | null;
   thumbs: string[];
   state: "waiting" | "importing" | "imported" | "failed" | "skipped" | "gone";
   batch: string | null;
@@ -92,6 +100,8 @@ export default function InboxPage({
   const [editClient, setEditClient] = useState(false);
   /** The month (top folder) being looked at; empty shows every month. */
   const [only, setOnly] = useState("");
+  /** Folders the tracker marks as delivered stay out of the way unless asked for. */
+  const [delivered, setDelivered] = useState(false);
   /** The folder whose photos are open. */
   const [looking, setLooking] = useState<{ id: string; name: string; skill: string } | null>(null);
   const stopLooking = useCallback(() => setLooking(null), []);
@@ -100,7 +110,9 @@ export default function InboxPage({
     try {
       const s = await get<DriveState>("/api/studio/drive");
       setState(s);
-      onCount(s.folders.filter((f) => f.state === "waiting").length);
+      onCount(
+        s.folders.filter((f) => f.state === "waiting" && f.tracker?.state !== "delivered").length,
+      );
       window.clearTimeout(timer.current);
       timer.current = window.setTimeout(
         () => void load(),
@@ -376,7 +388,11 @@ export default function InboxPage({
       </div>
     );
 
-  const every = state.folders.filter((f) => f.state !== "skipped" && f.state !== "gone");
+  const present = state.folders.filter((f) => f.state !== "skipped" && f.state !== "gone");
+  // Delivered per the client's tracker and not being worked on here: nothing left to do with it.
+  const isDone = (f: Folder) => f.tracker?.state === "delivered" && f.state === "waiting";
+  const doneCount = present.filter(isDone).length;
+  const every = present.filter((f) => delivered === isDone(f));
   const monthOf = (f: Folder) => f.path.split(" / ")[0] || "Top level";
   const months = [...new Set(every.map(monthOf))];
   const shown = only && months.includes(only) ? every.filter((f) => monthOf(f) === only) : every;
@@ -432,7 +448,7 @@ export default function InboxPage({
         </div>
       </div>
       {state.error && <div className="nx-alert">{state.error}</div>}
-      {(months.length > 1 || state.skipped > 0) && (
+      {(months.length > 1 || state.skipped > 0 || doneCount > 0) && (
         <div className="nx-row">
           {months.length > 1 && (
             <div className="nx-seg" role="group" aria-label="Month">
@@ -449,7 +465,17 @@ export default function InboxPage({
           )}
           <span className="nx-muted">
             {shown.length} folders · {sum(shown, "products")} products
+            {delivered ? " already delivered" : ""}
           </span>
+          {doneCount > 0 && (
+            <button
+              className="nx-btn nx-sm"
+              aria-pressed={delivered}
+              onClick={() => setDelivered((v) => !v)}
+            >
+              {delivered ? "Back to what is waiting" : `Show ${doneCount} delivered`}
+            </button>
+          )}
           <span className="nx-right">
             {only && months.includes(only) && (
               <button className="nx-btn nx-sm nx-quiet" onClick={() => skipAll(only, shown.length)}>
@@ -534,6 +560,21 @@ export default function InboxPage({
                     <div className="nx-a">
                       <div>
                         <div className="nx-name">{f.name}</div>
+                        {f.tracker?.state === "delivered" ? (
+                          <span className="nx-chip nx-ok" title={`Tracker line: ${f.tracker.line}`}>
+                            Delivered
+                            {f.tracker.sent
+                              ? ` ${f.tracker.sent.slice(8, 10)}/${f.tracker.sent.slice(5, 7)}`
+                              : ""}
+                            {f.tracker.upload ? ` · uploaded in ${f.tracker.upload}` : ""}
+                          </span>
+                        ) : f.tracker ? (
+                          <span className="nx-chip" title={`Tracker line: ${f.tracker.line}`}>
+                            In the tracker · still open
+                          </span>
+                        ) : (
+                          <span className="nx-chip nx-warn">Not in the tracker</span>
+                        )}
                       </div>
                       <div
                         className="nx-strip nx-open"

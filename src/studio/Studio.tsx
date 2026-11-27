@@ -66,6 +66,7 @@ const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
 const PipelinePage = lazyScreen(() => import("./PipelinePage"));
 const SkillsPage = lazyScreen(() => import("./SkillsPage"));
+const TrackerPage = lazyScreen(() => import("./TrackerPage"));
 const VideoPage = lazyScreen(() => import("./VideoPage"));
 const AskPalette = lazyScreen(() => import("./AskPalette"));
 const InboxPage = lazyScreen(() => import("./InboxPage"));
@@ -122,7 +123,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState<
-    "studio" | "running" | "delivered" | "skills" | "video" | "admin" | "chat" | "inbox" | "review"
+    | "studio"
+    | "running"
+    | "delivered"
+    | "skills"
+    | "tracker"
+    | "video"
+    | "admin"
+    | "chat"
+    | "inbox"
+    | "review"
   >("inbox");
   const [drive, setDrive] = useState<{
     connected: boolean;
@@ -813,6 +823,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "skills" ? "active" : ""} onClick={() => setPage("skills")}>
             <i>S</i>Skills<em>{skills.length}</em>
           </button>
+          <button className={page === "tracker" ? "active" : ""} onClick={() => setPage("tracker")}>
+            <i>T</i>Tracker
+          </button>
         </nav>
         {batch && (
           <>
@@ -978,6 +991,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               onReview={() => setPage("review")}
               onRefresh={loadState}
             />
+          </Suspense>
+        ) : page === "tracker" ? (
+          <Suspense fallback={null}>
+            <TrackerPage />
           </Suspense>
         ) : page === "skills" ? (
           <Suspense fallback={null}>

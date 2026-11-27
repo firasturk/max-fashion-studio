@@ -6919,3 +6919,37 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
 }
+
+
+/* Tracker preview: the month's totals. */
+.nx-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+.nx-tile {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--stage);
+}
+.nx-tile span {
+  font-size: 12px;
+  color: var(--ink-400);
+}
+.nx-tile b {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.nx-tile em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-400);
+}
+.nx-tile.nx-hot b {
+  color: var(--nx-warn);
+}
