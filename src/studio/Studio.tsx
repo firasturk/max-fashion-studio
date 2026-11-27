@@ -8,10 +8,12 @@ import {
   KeyRound,
   LoaderCircle,
   LogOut,
+  MessageCircle,
   Moon,
   Pause,
   Play,
   RotateCcw,
+  Settings2,
   SlidersHorizontal,
   Sparkles,
   Sun,
@@ -67,6 +69,7 @@ const AdminView = lazyScreen(() => import("./AdminView"));
 import type { PickedFile } from "@/lib/files";
 const BatchesView = lazyScreen(() => import("./BatchesView"));
 const InboxPage = lazyScreen(() => import("./InboxPage"));
+const ReviewPage = lazyScreen(() => import("./ReviewPage"));
 import { ACCEPTED_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 import { useBatch } from "./useBatch";
 import ModeCards, { applyModeOverrides } from "./ModeCards";
@@ -112,8 +115,24 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [connection, setConnection] = useState(false);
   const [theme, toggleTheme] = useTheme();
-  const [page, setPage] = useState<"studio" | "batches" | "admin" | "chat" | "inbox">("studio");
+  const [page, setPage] = useState<
+    "studio" | "batches" | "admin" | "chat" | "inbox" | "review"
+  >("studio");
   const [inboxCount, setInboxCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+  // The numbers on the rail: images waiting for a decision and folders waiting in the inbox.
+  useEffect(() => {
+    const load = () =>
+      get<{ review: number; inbox: number }>("/api/studio/counts")
+        .then((c) => {
+          setReviewCount(c.review);
+          setInboxCount(c.inbox);
+        })
+        .catch(() => {});
+    load();
+    const t = window.setInterval(load, 60_000);
+    return () => window.clearInterval(t);
+  }, []);
   /** The image the user opened last: what "this image" means in the chat. */
   const [lastTask, setLastTask] = useState<Task | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -707,65 +726,71 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         : `Generate ${queued.length || ""}`.trim()) + costTag;
 
   return (
-    <div className={`studio ${settingsOpen ? "settings-open" : ""}`}>
+    <div className={`studio shell ${settingsOpen ? "settings-open" : ""}`}>
       <BootScreen done={booted} />
-      <header className="topbar">
-        <a href="/" className="brand" aria-label="Max Fashion Studio">
+      <aside className="rail">
+        <a href="/" className="rail-brand" aria-label="Max Fashion Studio">
           <img className="max-logo" src="/logo-mark.png" alt="Max" width={96} height={32} />
-          <span className="brand-divider" />
-          <span className="studio-title">
-            IMAGE STUDIO<span>CREATIVE OPERATIONS</span>
-          </span>
+          <span>Image Studio</span>
         </a>
-        <nav className="nav-tabs" aria-label="Pages">
-          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
-            Studio
-          </button>
+        <h6>Production line</h6>
+        <nav className="rail-nav" aria-label="Production line">
           <button className={page === "inbox" ? "active" : ""} onClick={() => setPage("inbox")}>
-            Inbox {inboxCount > 0 ? <span>{inboxCount}</span> : <span className="nav-badge">New</span>}
+            <i>1</i>Inbox{inboxCount > 0 && <em className="hot">{inboxCount}</em>}
+          </button>
+          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
+            <i>2</i>Create
           </button>
           <button className={page === "batches" ? "active" : ""} onClick={() => setPage("batches")}>
-            Batches <span>{batches.length}</span>
+            <i>3</i>Batches<em>{batches.length}</em>
           </button>
+          <button className={page === "review" ? "active" : ""} onClick={() => setPage("review")}>
+            <i>4</i>Review{reviewCount > 0 && <em className="hot">{reviewCount}</em>}
+          </button>
+          <button disabled title="Clips from approved images, rendered by Kling. Coming next.">
+            <i>5</i>Video<em className="soon">Soon</em>
+          </button>
+        </nav>
+        <h6>Tools</h6>
+        <nav className="rail-nav" aria-label="Tools">
           <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
-            Chat <span className="nav-badge">New</span>
+            <MessageCircle size={15} />
+            Ask the studio
           </button>
           {user.role === "admin" && (
             <button className={page === "admin" ? "active" : ""} onClick={() => setPage("admin")}>
+              <Settings2 size={15} />
               Admin
             </button>
           )}
         </nav>
-        <div className="top-actions">
-          <span className="engine-tag">
-            <Sparkles size={15} />{" "}
-            {models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "…"}
+        <div className="rail-grow" />
+        <div className="rail-foot">
+          <span className="rail-engine">
+            <Sparkles size={14} /> {models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "…"}
           </span>
           <button
-            className={`connection-button ${engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "connected" : ""}`}
+            className={`rail-conn ${engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "on" : ""}`}
             onClick={() => setConnection(true)}
           >
-            <KeyRound size={16} />
-            {engine.configured ||
-            engine.openai !== "none" ||
-            engine.google !== "none" ||
-            engine.fal !== "none"
-              ? "Connected"
-              : "Not connected"}
+            <span className="rail-dot" />
+            {engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none" ? "Connected" : "Not connected"}
           </button>
-          <button
-            className="theme-button"
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-          <button className="user-button" onClick={() => void signOut()} title={user.email}>
-            <LogOut size={15} /> {user.name}
-          </button>
+          <div className="rail-user">
+            <button
+              className="rail-icon"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+            <button className="rail-out" onClick={() => void signOut()} title={user.email}>
+              <LogOut size={14} /> {user.name}
+            </button>
+          </div>
         </div>
-      </header>
+      </aside>
 
       <main className={page === "chat" ? "main-chat" : undefined}>
         {page === "chat" ? (
@@ -795,6 +820,14 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               <AdminView me={user.id} />
             </Suspense>
           </>
+        ) : page === "review" ? (
+          <Suspense fallback={null}>
+            <ReviewPage
+              skills={skills}
+              onCount={setReviewCount}
+              onOpenBatch={(id) => void openBatch(id)}
+            />
+          </Suspense>
         ) : page === "inbox" ? (
           <Suspense fallback={null}>
             <InboxPage

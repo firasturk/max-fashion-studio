@@ -1118,6 +1118,30 @@ studioRoutes.delete("/engine/key", async (c) => {
 
 const newBatch = z.object({ name: z.string().max(100).optional(), config: configSchema });
 
+/* Review across batches: every finished image of this user that still needs a decision. */
+studioRoutes.get("/review", async (c) => {
+  const items = await all(
+    c.env.DB,
+    "SELECT t.id, t.batch, t.source, t.status, t.qa, t.output, t.updated, s.name, b.name AS batch_name, COALESCE(s.skill, json_extract(b.config, '$.skill')) AS skill FROM tasks t JOIN sources s ON s.id = t.source JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.output IS NOT NULL AND t.status IN ('ready','review') ORDER BY b.created DESC, s.name, t.card LIMIT 400",
+    c.get("user").id,
+  );
+  return c.json({ items });
+});
+
+/** The numbers on the navigation: images waiting for a decision, folders waiting in the inbox. */
+studioRoutes.get("/counts", async (c) => {
+  const review = await first<{ n: number }>(
+    c.env.DB,
+    "SELECT COUNT(*) AS n FROM tasks t JOIN batches b ON b.id = t.batch WHERE b.owner = ? AND t.output IS NOT NULL AND t.status IN ('ready','review')",
+    c.get("user").id,
+  );
+  const inbox = await first<{ n: number }>(
+    c.env.DB,
+    "SELECT COUNT(*) AS n FROM drive_folders WHERE state = 'waiting'",
+  );
+  return c.json({ review: review?.n ?? 0, inbox: inbox?.n ?? 0 });
+});
+
 /* Google Drive inbox: folders wait for an approval; nothing is generated before it. */
 studioRoutes.get("/drive", async (c) => {
   const status = await driveStatus(c.env);

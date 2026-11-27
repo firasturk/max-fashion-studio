@@ -1,0 +1,366 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { get, post } from "@/api";
+import type { SkillInfo } from "@shared/types";
+
+interface Item {
+  id: string;
+  batch: string;
+  source: string;
+  status: "ready" | "review";
+  qa: string | null;
+  output: string;
+  name: string;
+  batch_name: string;
+  skill: string | null;
+}
+
+const QUICK_NOTES = [
+  "Place the model in the centre of the frame.",
+  "Match the garment exactly to the original photo: colour, print and text.",
+  "Keep the scene, try a different pose.",
+];
+
+const result = (i: Item) =>
+  `/api/studio/file?batch=${i.batch}&id=${i.id}&kind=result&v=${i.output.split("/").at(-1)}`;
+const original = (i: Item) => `/api/studio/file?batch=${i.batch}&id=${i.source}&kind=reference`;
+const sku = (name: string) => (name.split("/").at(-1) ?? name).replace(/\.[a-z0-9]+$/i, "");
+
+/** What the automatic check found, in the reviewer's words. */
+function findings(i: Item): string[] {
+  if (i.status === "ready") return [];
+  try {
+    const q = JSON.parse(i.qa ?? "{}") as {
+      productConcern?: boolean;
+      centered?: boolean;
+      sameFace?: boolean;
+      count?: number;
+      notes?: string;
+    };
+    const out: string[] = [];
+    if (q.productConcern) out.push("Check the product against the original");
+    if (q.centered === false) out.push("Not centred");
+    if (q.sameFace === false) out.push("Face differs from the set");
+    if ((q.count ?? 1) > 1) out.push("More than one person");
+    return out.length ? out : ["Needs a look"];
+  } catch {
+    return ["Needs a look"];
+  }
+}
+
+/** One decision per image, across every batch: approve, or send back with a note. */
+export default function ReviewPage({
+  skills,
+  onOpenBatch,
+  onCount,
+}: {
+  skills: SkillInfo[];
+  onOpenBatch: (id: string) => void;
+  onCount: (n: number) => void;
+}) {
+  const [items, setItems] = useState<Item[] | null>(null);
+  const [filter, setFilter] = useState<"all" | "review" | "ready">("all");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [limit, setLimit] = useState(48);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await get<{ items: Item[] }>("/api/studio/review");
+      setItems(r.items);
+      onCount(r.items.length);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load the review list.");
+    }
+  }, [onCount]);
+  useEffect(() => void load(), [load]);
+
+  const shown = useMemo(
+    () => (items ?? []).filter((i) => filter === "all" || i.status === filter),
+    [items, filter],
+  );
+  const open = shown.find((i) => i.id === openId) ?? null;
+  const count = (s: "ready" | "review") => (items ?? []).filter((i) => i.status === s).length;
+  const title = (id: string | null) => skills.find((s) => s.id === id)?.title ?? id ?? "";
+
+  const drop = useCallback(
+    (ids: string[]) => {
+      setItems((list) => {
+        const next = (list ?? []).filter((i) => !ids.includes(i.id));
+        onCount(next.length);
+        return next;
+      });
+      setPicked((p) => new Set([...p].filter((id) => !ids.includes(id))));
+    },
+    [onCount],
+  );
+
+  const step = useCallback(
+    (d: number) => {
+      if (!shown.length) return setOpenId(null);
+      const k = shown.findIndex((i) => i.id === openId);
+      setNote(null);
+      setOpenId(shown[(k + d + shown.length) % shown.length].id);
+    },
+    [shown, openId],
+  );
+
+  const approve = useCallback(
+    async (list: Item[]) => {
+      if (!list.length || busy) return;
+      setBusy(true);
+      const done: string[] = [];
+      try {
+        for (const i of list) {
+          await post("/api/studio/approve", { batch: i.batch, id: i.id });
+          done.push(i.id);
+        }
+        toast.success(list.length === 1 ? `Approved ${sku(list[0].name)}` : `Approved ${done.length} images`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Approval failed.");
+      } finally {
+        if (open && done.includes(open.id)) {
+          const rest = shown.filter((i) => !done.includes(i.id));
+          const k = shown.findIndex((i) => i.id === open.id);
+          setOpenId(rest.length ? rest[Math.min(k, rest.length - 1)].id : null);
+        }
+        drop(done);
+        setBusy(false);
+      }
+    },
+    [busy, drop, open, shown],
+  );
+
+  const revise = useCallback(
+    async (i: Item, edit: string) => {
+      if (!edit.trim() || busy) return;
+      setBusy(true);
+      try {
+        await post("/api/studio/revise", { batch: i.batch, id: i.id, edit: edit.trim() });
+        toast.success(`Sent back ${sku(i.name)} with your note`);
+        const rest = shown.filter((x) => x.id !== i.id);
+        const k = shown.findIndex((x) => x.id === i.id);
+        setOpenId(rest.length ? rest[Math.min(k, rest.length - 1)].id : null);
+        setNote(null);
+        drop([i.id]);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not send it back.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, drop, shown],
+  );
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const typing = (e.target as HTMLElement).matches?.("input,textarea,select");
+      if (e.key === "Escape") return note !== null ? setNote(null) : setOpenId(null);
+      if (!open || typing) return;
+      const k = e.key.toLowerCase();
+      if (k === "a") void approve([open]);
+      else if (k === "e") {
+        e.preventDefault();
+        setNote("");
+      } else if (e.key === "ArrowRight") step(1);
+      else if (e.key === "ArrowLeft") step(-1);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [open, note, approve, step]);
+
+  const selected = shown.filter((i) => picked.has(i.id));
+  return (
+    <div className="nx nx-enter">
+      <div className="nx-head">
+        <div>
+          <h1>Review</h1>
+          <p>
+            One decision per image, across all your batches. The studio already checked product,
+            face and centring; you only confirm.
+          </p>
+        </div>
+        <div className="nx-right">
+          <button
+            className="nx-btn"
+            disabled={!count("ready") || busy}
+            onClick={() => void approve((items ?? []).filter((i) => i.status === "ready"))}
+          >
+            Approve all that passed QC
+          </button>
+        </div>
+      </div>
+      <div className="nx-row">
+        <div className="nx-seg" role="group" aria-label="Filter">
+          {(
+            [
+              ["all", "To decide", (items ?? []).length],
+              ["review", "Needs a look", count("review")],
+              ["ready", "Passed QC", count("ready")],
+            ] as const
+          ).map(([k, label, n]) => (
+            <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
+              {label} <span className="nx-mono">{n}</span>
+            </button>
+          ))}
+        </div>
+        <span className="nx-muted nx-keys">
+          Open an image, then <kbd>A</kbd> approve <kbd>E</kbd> send back with a note
+        </span>
+      </div>
+      {items === null ? null : !shown.length ? (
+        <div className="nx-empty">
+          <b>Nothing waiting for you</b>
+          Finished images appear here as soon as a batch produces them.
+        </div>
+      ) : (
+        <>
+          <div className="nx-grid nx-stagger">
+            {shown.slice(0, limit).map((i) => (
+              <article className={`nx-card ${picked.has(i.id) ? "nx-sel" : ""}`} key={i.id}>
+                <button className="nx-pic" onClick={() => setOpenId(i.id)} aria-label={`Open ${sku(i.name)}`}>
+                  <img src={result(i)} alt={`Result for ${sku(i.name)}`} loading="lazy" decoding="async" />
+                </button>
+                <button
+                  className="nx-tick"
+                  aria-pressed={picked.has(i.id)}
+                  aria-label={`Select ${sku(i.name)}`}
+                  onClick={() =>
+                    setPicked((p) => {
+                      const n = new Set(p);
+                      if (n.has(i.id)) n.delete(i.id);
+                      else n.add(i.id);
+                      return n;
+                    })
+                  }
+                >
+                  {picked.has(i.id) ? "✓" : ""}
+                </button>
+                <span className="nx-state">
+                  {i.status === "ready" ? (
+                    <span className="nx-chip nx-ok">Passed QC</span>
+                  ) : (
+                    <span className="nx-chip nx-warn">Needs a look</span>
+                  )}
+                </span>
+                <div className="nx-meta">
+                  <span className="nx-mono nx-sku">{sku(i.name)}</span>
+                  <span className="nx-muted">{title(i.skill)}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+          {shown.length > limit && (
+            <button className="nx-btn nx-more-btn" onClick={() => setLimit((n) => n + 48)}>
+              Show 48 more of {shown.length - limit}
+            </button>
+          )}
+        </>
+      )}
+      {selected.length > 0 && !open && (
+        <div className="nx-bulk">
+          <span>
+            <b>{selected.length}</b> selected
+          </span>
+          <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve(selected)}>
+            Approve
+          </button>
+          <button className="nx-btn" onClick={() => setPicked(new Set())}>
+            Clear
+          </button>
+        </div>
+      )}
+      {open && (
+        <div className="nx-scrim" onClick={(e) => e.target === e.currentTarget && setOpenId(null)}>
+          <section className="nx-sheet" role="dialog" aria-modal="true" aria-label={`Review ${sku(open.name)}`}>
+            <header>
+              <h2 className="nx-mono">{sku(open.name)}</h2>
+              <span className="nx-chip">{title(open.skill)}</span>
+              <span className="nx-muted">{open.batch_name}</span>
+              <span className="nx-right">
+                <button className="nx-btn nx-sm" onClick={() => step(-1)}>
+                  Previous
+                </button>
+                <button className="nx-btn nx-sm" onClick={() => step(1)}>
+                  Next
+                </button>
+                <button className="nx-btn nx-sm nx-quiet" onClick={() => setOpenId(null)}>
+                  Close
+                </button>
+              </span>
+            </header>
+            <div className="nx-pair">
+              <figure>
+                <img src={original(open)} alt="Original studio photo" />
+                <figcaption className="nx-chip">Original</figcaption>
+              </figure>
+              <figure>
+                <img src={result(open)} alt="Generated result" />
+                <figcaption className="nx-chip">Result</figcaption>
+              </figure>
+            </div>
+            <div className="nx-body">
+              <div className="nx-row">
+                {findings(open).length ? (
+                  findings(open).map((f) => (
+                    <span className="nx-chip nx-warn" key={f}>
+                      {f}
+                    </span>
+                  ))
+                ) : (
+                  <span className="nx-chip nx-ok">Product, face and centring passed</span>
+                )}
+              </div>
+              {note === null ? (
+                <div className="nx-row">
+                  <button className="nx-btn nx-primary" disabled={busy} onClick={() => void approve([open])}>
+                    Approve <kbd>A</kbd>
+                  </button>
+                  <button className="nx-btn" onClick={() => setNote("")}>
+                    Send back with a note <kbd>E</kbd>
+                  </button>
+                  <button className="nx-btn nx-quiet" onClick={() => onOpenBatch(open.batch)}>
+                    Open the batch
+                  </button>
+                </div>
+              ) : (
+                <div className="nx-note">
+                  <div className="nx-row">
+                    {QUICK_NOTES.map((q) => (
+                      <button className="nx-btn nx-sm" key={q} onClick={() => setNote(q)}>
+                        {q.replace(/\.$/, "")}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    id="review-note"
+                    autoFocus
+                    rows={2}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="What should change in this image?"
+                    aria-label="Note for the new version"
+                  />
+                  <div className="nx-row">
+                    <button
+                      className="nx-btn nx-primary"
+                      disabled={!note.trim() || busy}
+                      onClick={() => void revise(open, note)}
+                    >
+                      Generate again with this note
+                    </button>
+                    <button className="nx-btn nx-quiet" onClick={() => setNote(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}

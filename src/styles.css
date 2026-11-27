@@ -4789,3 +4789,638 @@ main.main-chat {
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------
+   Shell: the side rail is the production line (Inbox, Create, Batches,
+   Review, Video); the workspace shows one stage at a time.
+   ------------------------------------------------------------------ */
+.studio.shell {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  align-items: start;
+  min-height: 100vh;
+  background: var(--surface);
+}
+.studio.shell > main {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 30px 36px 0;
+  min-width: 0;
+}
+.studio.shell > main.main-chat {
+  min-height: 100vh;
+}
+.rail {
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 12px 16px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--line);
+  color: var(--ink-900);
+  z-index: 5;
+}
+.rail > * {
+  flex: none;
+}
+.rail > .rail-grow {
+  flex: 1;
+}
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px 6px;
+  text-decoration: none;
+  color: var(--ink-900);
+}
+.rail-brand .max-logo {
+  height: 20px;
+  width: auto;
+  filter: invert(1);
+}
+:root[data-theme="dark"] .rail-brand .max-logo {
+  filter: none;
+}
+.rail-brand span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-400);
+  border-left: 1px solid var(--line-strong);
+  padding-left: 12px;
+  white-space: nowrap;
+}
+.rail h6 {
+  margin: 4px 0 -8px;
+  padding: 0 12px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 100px;
+  padding: 9px 12px;
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.16s ease;
+}
+.rail-nav button:hover:enabled {
+  background: var(--surface-3);
+}
+.rail-nav button:active:enabled {
+  transform: translate(1px, 1px);
+}
+.rail-nav button.active,
+.rail-nav button.active:hover:enabled {
+  background: var(--ink-900);
+  color: var(--surface);
+}
+.rail-nav button:disabled {
+  color: var(--ink-400);
+  cursor: default;
+}
+.rail-nav i {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-400);
+  flex: none;
+}
+.rail-nav button.active i {
+  border-color: transparent;
+  color: var(--surface);
+  opacity: 0.7;
+}
+.rail-nav svg {
+  width: 20px;
+  flex: none;
+  color: var(--ink-400);
+}
+.rail-nav button.active svg {
+  color: var(--surface);
+}
+.rail-nav em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+.rail-nav button.active em {
+  color: var(--surface);
+}
+.rail-nav em.hot,
+.rail-nav button.active em.hot {
+  background: var(--blue);
+  color: var(--on-fill);
+  border-radius: 100px;
+  padding: 1px 8px;
+}
+.rail-nav em.soon {
+  border: 1px solid var(--line-strong);
+  border-radius: 100px;
+  padding: 0 7px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rail-grow {
+  flex: 1;
+}
+.rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 14px 6px 0;
+}
+.rail-engine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-500);
+  padding: 0 6px;
+  min-width: 0;
+}
+.rail-conn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-900);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.1);
+  transition:
+    box-shadow 0.4s ease-in-out,
+    transform 0.16s ease;
+}
+.rail-conn:hover {
+  box-shadow: 0 4px 15px rgb(0 0 0 / 0.15);
+}
+.rail-conn:active {
+  transform: translate(1px, 1px);
+}
+.rail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex: none;
+}
+.rail-conn.on .rail-dot {
+  background: var(--success);
+}
+.rail-user {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rail-icon,
+.rail-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  cursor: pointer;
+  min-width: 0;
+}
+.rail-out {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rail-icon:hover,
+.rail-out:hover {
+  background: var(--surface-3);
+}
+
+/* The existing pages, in the new language: ink headings, pill actions, wide corners. */
+.shell .page-heading h1,
+.shell .hero-content h1 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+}
+.shell .page-heading h1,
+:root[data-theme="dark"] .shell .page-heading h1 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ink-900);
+  font-size: 44px;
+}
+.shell .eyebrow {
+  color: var(--ink-400);
+  letter-spacing: 0.09em;
+}
+.shell .primary,
+.shell .secondary,
+.shell .hero-cta,
+.shell .text-input,
+.shell .tabs-list {
+  border-radius: 100px;
+}
+.shell .primary,
+.shell .secondary {
+  padding-inline: 18px;
+  font-weight: 600;
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.16s ease;
+}
+.shell .primary:active:enabled,
+.shell .secondary:active:enabled {
+  transform: translate(1px, 1px);
+}
+.shell textarea.text-input,
+.shell .prompt {
+  border-radius: 14px;
+}
+.shell .mode-card,
+.shell .config-panel,
+.shell .media-panel,
+.shell .dropzone,
+.shell .hero-banner {
+  border-radius: 20px;
+}
+.shell .mode-card {
+  overflow: hidden;
+  transition:
+    transform 0.4s ease-in-out,
+    box-shadow 0.4s ease-in-out,
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.shell .mode-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.15);
+}
+.shell .image-card,
+.shell .photo-frame {
+  border-radius: 16px;
+}
+.shell .step {
+  border-radius: 50%;
+  border-color: var(--line-strong);
+  color: var(--ink-500);
+}
+.shell .workflow-label h2,
+.shell .panel-section-head {
+  color: var(--ink-900);
+}
+
+.shell .batches-page .panel-heading > svg {
+  margin-left: 0;
+  color: var(--blue);
+}
+@media (min-width: 901px) {
+  .shell .batches-table:not(.admin-table) .batches-head,
+  .shell .batches-table:not(.admin-table) .batches-row {
+    grid-template-columns: 2fr 1.2fr 1.4fr 0.7fr 1.1fr 160px;
+  }
+  .shell .batches-table:not(.admin-table) .row-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Review page */
+.nx-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: 3px;
+}
+.nx-seg button {
+  border: 0;
+  background: none;
+  border-radius: 100px;
+  padding: 6px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink-500);
+  cursor: pointer;
+  transition:
+    background-color 0.3s var(--nx-ease),
+    color 0.3s var(--nx-ease);
+}
+.nx-seg button[aria-pressed="true"] {
+  background: var(--ink-900);
+  color: var(--surface);
+}
+.nx kbd {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 0 5px;
+  margin: 0 2px 0 6px;
+  color: var(--ink-400);
+}
+.nx-btn.nx-primary kbd {
+  border-color: rgb(255 255 255 / 0.45);
+  color: inherit;
+}
+.nx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.nx-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition:
+    transform 0.4s ease-in-out,
+    box-shadow 0.4s ease-in-out,
+    border-color 0.3s var(--nx-ease);
+}
+.nx-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.15);
+}
+.nx-card.nx-sel {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue-soft);
+}
+.nx-pic {
+  display: block;
+  border: 0;
+  padding: 0;
+  background: var(--surface-2);
+  aspect-ratio: 1;
+  width: 100%;
+  overflow: hidden;
+  cursor: pointer;
+}
+.nx-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.6s var(--nx-glide);
+}
+.nx-card:hover .nx-pic img {
+  transform: scale(1.04);
+}
+.nx-tick {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  background: rgb(29 29 31 / 0.35);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.nx-card.nx-sel .nx-tick {
+  background: var(--blue);
+  border-color: var(--blue);
+  transform: scale(1.12);
+}
+.nx-state {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.nx-meta {
+  padding: 9px 12px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nx-sku {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-700);
+}
+.nx-more-btn {
+  align-self: center;
+}
+.nx-bulk {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 20px;
+  background: var(--ink-900);
+  color: var(--surface);
+  border-radius: 28px;
+  padding: 8px 8px 8px 20px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  z-index: 30;
+}
+.nx-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.6);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.nx-sheet {
+  background: var(--surface);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 1080px;
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  animation: nx-rise 0.45s var(--nx-glide) both;
+}
+.nx-sheet header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.nx-sheet h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+.nx-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+.nx-pair figure {
+  margin: 0;
+  position: relative;
+  background: var(--surface-2);
+}
+.nx-pair img {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 62vh;
+  object-fit: contain;
+  display: block;
+}
+.nx-pair figcaption {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+.nx-body,
+.nx-note {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.nx-body {
+  padding: 14px 16px 16px;
+}
+.nx-note textarea {
+  font: inherit;
+  color: var(--ink-900);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  width: 100%;
+  resize: vertical;
+}
+@media (max-width: 900px) {
+  .studio.shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .studio.shell > main {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 18px 16px 0;
+  }
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .rail h6,
+  .rail-grow,
+  .rail-engine,
+  .rail-brand span,
+  .rail-nav i {
+    display: none;
+  }
+  .rail-nav,
+  .rail-foot {
+    flex-direction: row;
+    border: 0;
+    padding: 0;
+  }
+  .rail-nav button,
+  .rail-conn {
+    white-space: nowrap;
+    width: auto;
+  }
+  .shell .page-heading h1 {
+    font-size: 32px;
+  }
+  /* A transformed ancestor would pin the settings sheet to the workbench instead of the screen. */
+  .shell .workbench {
+    animation: none;
+    transform: none;
+  }
+  .studio.shell:not(.settings-open) .config-panel {
+    animation: none;
+    transform: translateY(102%);
+  }
+  .nx-keys {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-card,
+  .nx-pic img,
+  .nx-tick,
+  .rail-nav button,
+  .shell .mode-card,
+  .nx-sheet {
+    transition: none;
+    animation: none;
+  }
+}
