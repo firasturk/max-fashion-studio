@@ -165,6 +165,13 @@ export default function InboxPage({
                   page with the Google account that owns the project and press Enable. It takes
                   about a minute to take effect.
                 </span>
+                {state.project && (
+                  <span>
+                    If Google asks you to select a project, choose <b className="nx-mono">{state.project}</b>.
+                    If it is not in the list, switch to the Google account that created it (top
+                    right corner).
+                  </span>
+                )}
                 <div className="nx-row">
                   <a
                     className="nx-btn nx-primary"

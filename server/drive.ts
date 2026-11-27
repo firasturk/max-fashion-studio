@@ -265,6 +265,7 @@ export async function ensureDriveApi(env: Env, force = false): Promise<DriveApiS
           signal: AbortSignal.timeout(30_000),
         },
       );
+      console.log("[drive] the Drive API is off in project", creds.projectId);
       console.log("[drive] switching the Drive API on:", e.status, e.ok ? "accepted" : (await e.text()).slice(0, 200));
     } else console.log("[drive] api check", r.status, text);
   } catch (e) {
