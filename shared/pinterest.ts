@@ -139,6 +139,7 @@ export function profileBoards(html: string, user: string): string[] {
  * their followers' snapshots, which are no use as references.)
  */
 export const STARTER_SOURCES = [
+  // Women's editorials and campaigns
   "https://www.pinterest.com/anneclairerohe/campaigns-editorial/",
   "https://www.pinterest.com/simaoa/editorial-fashion-photography/",
   "https://www.pinterest.com/lefashion/editorials/",
@@ -153,4 +154,60 @@ export const STARTER_SOURCES = [
   "https://www.pinterest.com/magdotj/location-photo-shoots/",
   "https://www.pinterest.com/mattpaxton750/full-body-street/",
   "https://www.pinterest.com/straightastyle/street-style-fashion/",
+  // Kids
+  "https://www.pinterest.com/kidsfashionphotography/kids-fashion-campaign/",
+  "https://www.pinterest.com/samiamphoto/children-editorials/",
+  "https://www.pinterest.com/ddrice1992/kids-editorial/",
+  "https://www.pinterest.com/meganbreukelman/fashion-editorial-kids/",
+  "https://www.pinterest.com/sohostoryphoto/kids-commercial/",
+  "https://www.pinterest.com/jmejme/children-fashion-editorial/",
+  // Lingerie, sleepwear and loungewear
+  "https://www.pinterest.com/everydayfolly/lingerie-editorial-style/",
+  "https://www.pinterest.com/mawuenam/lingerie-shoot-ideas/",
+  "https://www.pinterest.com/seanmdo/lingerie-editorial/",
+  "https://www.pinterest.com/irispan927/sleepwear-editorial/",
+  "https://www.pinterest.com/geritorresphoto/loungewear-shoot/",
+  // Activewear
+  "https://www.pinterest.com/asandaphoto/editorial-sportswear/",
+  "https://www.pinterest.com/abowserphoto/athletic-shoots/",
+  "https://www.pinterest.com/mjd82/activewear-photoshoot/",
+  // Menswear
+  "https://www.pinterest.com/eggelhoffer/mens-fashion-editorial-photography/",
+  "https://www.pinterest.com/michaelasays/mens-fashion-editorial/",
+  "https://www.pinterest.com/brittbendabout/mens-editorial-shoot/",
+  "https://www.pinterest.com/alexandrafolster/mens-editorial/",
+  // Modest wear
+  "https://www.pinterest.com/thestylist_bosaina/hijab-editorial/",
+  "https://www.pinterest.com/eimgmt/muslim-model-mood-board-inspiration/",
+  "https://www.pinterest.com/mfpristantyo/hijab-editorial/",
 ];
+
+export const LIBRARY_SHELVES = [
+  "Kids",
+  "Lingerie & sleepwear",
+  "Activewear",
+  "Modest wear",
+  "Menswear",
+  "Editorial",
+] as const;
+export type LibraryShelf = (typeof LIBRARY_SHELVES)[number];
+
+/**
+ * The shelf a board's pictures go on, read from the board's name. Kids come first on purpose:
+ * a board about children is always treated as one, whatever else its name says.
+ */
+export function boardShelf(name: string): LibraryShelf {
+  const n = name.replace(/[-_]+/g, " ");
+  if (/\b(kids?|child(ren)?s?|junior|toddlers?|bab(y|ies)|teens?)\b/i.test(n)) return "Kids";
+  if (
+    /lingerie|intimates?\b|underwear|sleepwear|nightwear|loungewear|lounge wear|pyjama|pajama/i.test(
+      n,
+    )
+  )
+    return "Lingerie & sleepwear";
+  if (/active ?wear|sports? ?wear|athlet|athleisure|fitness|\bgym\b|\byoga\b/i.test(n))
+    return "Activewear";
+  if (/hijab|modest|muslim|abaya/i.test(n)) return "Modest wear";
+  if (/\bmen(['\u2019]?s)?\b|menswear|\bmale\b/i.test(n)) return "Menswear";
+  return "Editorial";
+}

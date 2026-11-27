@@ -11,6 +11,7 @@ import { accountBoards, decodeEntities, downloadPins, pinterestPins } from "./pi
 import { askVision, buildSkillFromReferences } from "./skillbuilder";
 import {
   STARTER_SOURCES,
+  boardShelf,
   isOffTopicBoard,
   isShopBoard,
   parsePinterestLink,
@@ -93,9 +94,17 @@ async function keep(env: Env, account: string, pins: Pin[], chosen = false): Pro
 async function gather(env: Env, link: string): Promise<number> {
   const target = parsePinterestLink(link);
   const source = await pinterestPins(link).catch(() => null);
-  const account = decodeEntities(source?.title ?? (target?.kind === "user" ? target.user : link));
+  const title = decodeEntities(source?.title ?? (target?.kind === "user" ? target.user : link));
+  const chosen = target?.kind === "board";
+  // A listed board goes on the shelf its name says (Kids, Activewear, ...); an account keeps its name.
+  const account = chosen ? boardShelf(title) : title;
   let added = source
-    ? await keep(env, account, source.pins.slice(0, PINS_PER_BOARD * 2), target?.kind === "board")
+    ? await keep(
+        env,
+        account,
+        source.pins.slice(0, PINS_PER_BOARD * 2).map((p) => (chosen ? { ...p, board: title } : p)),
+        chosen,
+      )
     : 0;
   if (target?.kind !== "user") return added;
   const fromFeed = (source?.pins ?? []).filter((p) => p.boardUrl).map((p) => p.boardUrl);
@@ -241,8 +250,9 @@ const LOOK_SCHEMA = {
           text: { type: "boolean" },
           child: { type: "boolean" },
           editorial: { type: "boolean" },
+          covered: { type: "boolean" },
         },
-        required: ["n", "model", "body", "text", "child", "editorial"],
+        required: ["n", "model", "body", "text", "child", "editorial", "covered"],
       },
     },
   },
@@ -251,21 +261,75 @@ const LOOK_SCHEMA = {
 
 function lookInstruction(count: number): string {
   return [
-    `${count} numbered pictures are attached, in order (1 to ${count}). A fashion studio wants to know which can serve as references for background, pose and light. Judge every picture on its own and answer five yes/no questions for each.`,
-    "model: true only when it is a real photograph in which exactly one adult fashion model is the subject. False when two or more people share the frame, and for empty rooms, shops, buildings, objects, food, products on their own, flat lays, illustrations, screenshots, collages and split frames.",
+    `${count} numbered pictures are attached, in order (1 to ${count}). A fashion studio wants to know which can serve as references for background, pose and light. Judge every picture on its own and answer six yes/no questions for each.`,
+    "model: true only when it is a real photograph in which exactly one fashion model, of any age, is the subject. False when two or more people share the frame, and for empty rooms, shops, buildings, objects, food, products on their own, flat lays, illustrations, screenshots, collages and split frames.",
     "body: true only when most of the model's body is in view (at least from the knees or the waist up to the head). False for close-ups of a face, eyes, hands, feet or a detail of a garment.",
     "text: true when any words, prices, percentages, logos or graphic shapes are printed over the picture, anywhere. A sign that is physically part of the scene does not count.",
     "child: true when a person in the picture looks under 16.",
     "editorial: true only when it looks like a professionally made fashion editorial or campaign photograph: the model is posed on purpose, the light and the composition are considered, and the place was chosen for the picture. False for candid street snapshots, paparazzi, red-carpet and event photos, selfies and mirror photos, phone snapshots, influencer outfit posts, and catalogue cut-outs on a blank white background.",
-    "Return ONLY a JSON object: { pictures: [ { n, model, body, text, child, editorial }, ... ] } with one entry per picture.",
+    "covered: true only when the person is fully dressed in day clothes or sportswear. False for underwear, lingerie, swimwear, nightwear, a bare torso or a see-through garment.",
+    "Return ONLY a JSON object: { pictures: [ { n, model, body, text, child, editorial, covered }, ... ] } with one entry per picture.",
   ].join("\n\n");
+}
+
+interface Look {
+  n: number;
+  model: boolean;
+  body: boolean;
+  text: boolean;
+  child: boolean;
+  editorial: boolean;
+  covered: boolean;
+}
+type Photo = Awaited<ReturnType<typeof downloadPins>>[number];
+
+/**
+ * Whether a picture goes into the library. Everywhere it must be an editorial of one model, most
+ * of the body in view, nothing printed over it. A child is kept only on the Kids shelf and only
+ * fully dressed in day clothes; every other shelf is adults only.
+ */
+export function isUsable(look: Omit<Look, "n">, board: string): boolean {
+  if (!look.model || !look.body || !look.editorial || look.text) return false;
+  if (boardShelf(board) === "Kids") {
+    // A board that mixes children with underwear or swimwear is never a source.
+    if (/lingerie|underwear|intimate|swim|bikini/i.test(board)) return false;
+    return look.child && look.covered;
+  }
+  return !look.child;
+}
+
+/**
+ * Asks about a pile of pictures. When the whole pile is refused or the answer cannot be read, the
+ * pile is asked again in halves, so one picture the model will not look at costs only itself.
+ */
+async function lookAt(env: Env, photos: Photo[]): Promise<Map<Photo, Look>> {
+  const found = new Map<Photo, Look>();
+  if (!photos.length) return found;
+  try {
+    const answer = JSON.parse(
+      await askVision(env, lookInstruction(photos.length), photos, LOOK_SCHEMA),
+    ) as { pictures?: Look[] };
+    for (const p of answer.pictures ?? []) if (photos[p.n - 1]) found.set(photos[p.n - 1], p);
+  } catch (e) {
+    if (photos.length === 1) {
+      console.log("[library] not looked at", photos[0].name, errorMessage(e));
+      return found;
+    }
+    const half = Math.ceil(photos.length / 2);
+    for (const part of await Promise.all([
+      lookAt(env, photos.slice(0, half)),
+      lookAt(env, photos.slice(half)),
+    ]))
+      for (const [photo, look] of part) found.set(photo, look);
+  }
+  return found;
 }
 
 /** Looks at the next few pictures nobody has checked yet. Returns how many it looked at. */
 export async function checkPins(env: Env, batch = 12): Promise<number> {
-  const rows = await all<{ id: string; thumb: string }>(
+  const rows = await all<{ id: string; thumb: string; board: string }>(
     env.DB,
-    "SELECT id, thumb FROM pin_library WHERE state = 'new' AND usable IS NULL ORDER BY seen DESC, id DESC LIMIT ?",
+    "SELECT id, thumb, board FROM pin_library WHERE state = 'new' AND usable IS NULL ORDER BY seen DESC, id DESC LIMIT ?",
     batch,
   );
   if (!rows.length) return 0;
@@ -273,24 +337,11 @@ export async function checkPins(env: Env, batch = 12): Promise<number> {
     rows.map((r) => ({ id: r.id, image: r.thumb })),
     "236x",
   ).catch(() => []);
-  const order = photos.map((ph) => /pinterest-(\d+)\./.exec(ph.name)?.[1] ?? "");
+  const boards = new Map(rows.map((r) => [r.id, r.board]));
   const good = new Set<string>();
-  if (photos.length) {
-    const answer = JSON.parse(
-      await askVision(env, lookInstruction(photos.length), photos, LOOK_SCHEMA),
-    ) as {
-      pictures?: {
-        n: number;
-        model: boolean;
-        body: boolean;
-        text: boolean;
-        child: boolean;
-        editorial: boolean;
-      }[];
-    };
-    for (const p of answer.pictures ?? [])
-      if (p.model && p.body && p.editorial && !p.text && !p.child && order[p.n - 1])
-        good.add(order[p.n - 1]);
+  for (const [photo, look] of await lookAt(env, photos)) {
+    const id = /pinterest-(\d+)\./.exec(photo.name)?.[1] ?? "";
+    if (boards.has(id) && isUsable(look, boards.get(id) ?? "")) good.add(id);
   }
   // A picture that could not be fetched or was not answered for is left out, not asked again.
   for (const r of rows)

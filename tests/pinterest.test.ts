@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isOffTopicBoard,
+  boardShelf,
   isShopBoard,
   parsePinterestLink,
   pinImage,
@@ -118,6 +119,21 @@ describe("the Pinterest library", () => {
     expect(pins[0].boardUrl).toBe("/shop/new-in-woman/");
   });
 
+  it("puts a board on the shelf its name says", () => {
+    expect(boardShelf("Kids Fashion Campaign")).toBe("Kids");
+    expect(boardShelf("Children Fashion & Editorial")).toBe("Kids");
+    expect(boardShelf("kids lingerie")).toBe("Kids");
+    expect(boardShelf("Lingerie Editorial Style")).toBe("Lingerie & sleepwear");
+    expect(boardShelf("Loungewear shoot")).toBe("Lingerie & sleepwear");
+    expect(boardShelf("Editorial Sportswear")).toBe("Activewear");
+    expect(boardShelf("athletic shoots")).toBe("Activewear");
+    expect(boardShelf("hijab editorial")).toBe("Modest wear");
+    expect(boardShelf("Men\u2019s Fashion Editorial Photography")).toBe("Menswear");
+    expect(boardShelf("mens editorial")).toBe("Menswear");
+    expect(boardShelf("Women editorial")).toBe("Editorial");
+    expect(boardShelf("Campaigns + Editorial")).toBe("Editorial");
+  });
+
   it("leaves out product feeds and advert boards", () => {
     expect(isShopBoard("Products", "/massimodutti/_products/")).toBe(true);
     expect(isShopBoard("Pin exclusivamente publicitario", "/massimodutti/pin-x/")).toBe(true);
@@ -155,5 +171,21 @@ describe("an account's boards", () => {
       "editorials-calvin-klein",
     ])
       expect(isOffTopicBoard(name)).toBe(false);
+  });
+
+  it("keeps a child only on the Kids shelf and only fully dressed", async () => {
+    const { isUsable } = await import("../server/library");
+    const ok = { model: true, body: true, text: false, editorial: true };
+    expect(isUsable({ ...ok, child: false, covered: true }, "Campaigns + Editorial")).toBe(true);
+    expect(isUsable({ ...ok, child: true, covered: true }, "Campaigns + Editorial")).toBe(false);
+    expect(isUsable({ ...ok, child: false, covered: false }, "Lingerie Editorial Style")).toBe(
+      true,
+    );
+    expect(isUsable({ ...ok, child: true, covered: true }, "Lingerie Editorial Style")).toBe(false);
+    expect(isUsable({ ...ok, child: true, covered: true }, "kids editorial")).toBe(true);
+    expect(isUsable({ ...ok, child: true, covered: false }, "kids editorial")).toBe(false);
+    expect(isUsable({ ...ok, child: false, covered: true }, "kids editorial")).toBe(false);
+    expect(isUsable({ ...ok, child: true, covered: true }, "kids lingerie")).toBe(false);
+    expect(isUsable({ ...ok, child: false, covered: true, text: true }, "Editorial")).toBe(false);
   });
 });
