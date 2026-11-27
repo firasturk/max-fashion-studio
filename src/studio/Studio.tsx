@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   Download,
   FolderOpen,
-  ImagePlus,
   KeyRound,
   LoaderCircle,
   LogOut,
@@ -125,9 +124,11 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [page, setPage] = useState<
     "studio" | "running" | "delivered" | "skills" | "video" | "admin" | "chat" | "inbox" | "review"
   >("inbox");
-  const [drive, setDrive] = useState<{ connected: boolean; lastSync: number; error: boolean } | null>(
-    null,
-  );
+  const [drive, setDrive] = useState<{
+    connected: boolean;
+    lastSync: number;
+    error: boolean;
+  } | null>(null);
   const [inboxCount, setInboxCount] = useState(0);
   const [video, setVideo] = useState({ connected: false, open: 0 });
   // Coming back from a sign-in (Higgsfield for video, Google for Drive): say how it went.
@@ -139,7 +140,8 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     window.history.replaceState(null, "", window.location.pathname);
     if (drive) {
       setPage("inbox");
-      if (drive === "connected") toast.success("Signed in to Google Drive. Now paste the folder link.");
+      if (drive === "connected")
+        toast.success("Signed in to Google Drive. Now paste the folder link.");
       else toast.error("The Google sign-in did not complete. Try again from the Inbox.");
       return;
     }
@@ -189,25 +191,12 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [zaidDirection, setZaidDirection] = useState("");
   const [moodBoard, setMoodBoard] = useState<MoodBoardInfo | null>(null);
   const [modeOverrides, setModeOverrides] = useState<Record<string, ModeOverride>>({});
-  const [hero, setHero] = useState("");
-  // Boot screen: wait for the first state load, the approach pictures and the hero video (or a timeout).
+  // Boot screen: wait for the first state load (or a timeout). The landing page is the Inbox,
+  // so nothing heavier has to be ready first.
   const [stateReady, setStateReady] = useState(false);
-  const [imagesReady, setImagesReady] = useState(false);
-  const [heroReady, setHeroReady] = useState(false);
   const [bootTimedOut, setBootTimedOut] = useState(false);
-  const booted = bootTimedOut || (stateReady && imagesReady && (heroReady || !hero));
+  const booted = bootTimedOut || stateReady;
   useEffect(() => {
-    let left = MODES.length;
-    const settle = () => {
-      left -= 1;
-      if (left <= 0) setImagesReady(true);
-    };
-    for (const id of MODES) {
-      const img = new Image();
-      img.onload = settle;
-      img.onerror = settle;
-      img.src = `/modes/${id}.jpg`;
-    }
     const t = setTimeout(() => setBootTimedOut(true), 7000);
     return () => clearTimeout(t);
   }, []);
@@ -216,7 +205,7 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
   const [draft, setDraft] = useState<Config | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
-  const { batch, sources, tasks, active, open, close, action, remove } = useBatch();
+  const { batch, sources, tasks, active, open, action, remove } = useBatch();
 
   const loadState = useCallback(async () => {
     try {
@@ -228,7 +217,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
       if (d.moodBoard) setMoodBoard(d.moodBoard);
       const ov = d.modes ?? {};
       setModeOverrides(ov);
-      setHero(d.hero ?? "");
       // A hidden approach must not stay selected for new batches.
       setConfig((c) => {
         if (!ov[c.mode]?.hidden) return c;
@@ -432,13 +420,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
     }
   }
 
-  function newBatch() {
-    if (uploading) return;
-    setDraft(null);
-    close();
-    setSelection(new Set());
-    setTab("sources");
-  }
+  // The workbench only shows an open batch: photos come in through the Drive inbox.
+  useEffect(() => {
+    if (page === "studio" && !batch && !openingId) setPage("running");
+  }, [page, batch, openingId]);
 
   async function saveBatch() {
     if (!pending.length || uploading) return;
@@ -766,7 +751,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
 
   const runningCount = batches.filter((b) => !isFinished(b)).length;
   const connected =
-    engine.configured || engine.openai !== "none" || engine.google !== "none" || engine.fal !== "none";
+    engine.configured ||
+    engine.openai !== "none" ||
+    engine.google !== "none" ||
+    engine.fal !== "none";
 
   return (
     <div className={`studio shell ${settingsOpen ? "settings-open" : ""}`}>
@@ -790,7 +778,10 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           <button className={page === "video" ? "active" : ""} onClick={() => setPage("video")}>
             <i>4</i>Video{video.open > 0 && <em>{video.open}</em>}
           </button>
-          <button className={page === "delivered" ? "active" : ""} onClick={() => setPage("delivered")}>
+          <button
+            className={page === "delivered" ? "active" : ""}
+            onClick={() => setPage("delivered")}
+          >
             <i>5</i>Delivered<em>{batches.length - runningCount}</em>
           </button>
         </nav>
@@ -802,10 +793,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
         </nav>
         <h6>Tools</h6>
         <nav className="rail-nav" aria-label="Tools">
-          <button className={page === "studio" ? "active" : ""} onClick={() => setPage("studio")}>
-            <Upload size={15} />
-            {batch ? "Open batch" : "Upload manually"}
-          </button>
+          {batch && (
+            <button
+              className={page === "studio" ? "active" : ""}
+              onClick={() => setPage("studio")}
+              title={batch.name}
+            >
+              <FolderOpen size={15} />
+              <span className="rail-clip">{batch.name}</span>
+            </button>
+          )}
           <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}>
             <MessageCircle size={15} />
             Ask the studio
@@ -836,7 +833,9 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               <b>Images</b>
               <span>
                 {connected
-                  ? (models.find((m) => m.slug === engine.model)?.name ?? engine.model ?? "connected")
+                  ? (models.find((m) => m.slug === engine.model)?.name ??
+                    engine.model ??
+                    "connected")
                   : "not connected"}
               </span>
             </button>
@@ -914,10 +913,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               admin={user.role === "admin"}
               onCount={setInboxCount}
               onOpenBatch={(id) => void openBatch(id)}
-              onUpload={() => {
-                newBatch();
-                setPage("studio");
-              }}
             />
           </Suspense>
         ) : page === "running" || page === "delivered" ? (
@@ -932,10 +927,6 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
               onDelete={(b) => void deleteBatchById(b)}
               onReview={() => setPage("review")}
               onRefresh={loadState}
-              onUpload={() => {
-                newBatch();
-                setPage("studio");
-              }}
             />
           </Suspense>
         ) : page === "skills" ? (
@@ -944,48 +935,16 @@ export default function Studio({ user, onSignedOut }: { user: User; onSignedOut:
           </Suspense>
         ) : (
           <>
-            {hero ? (
-              <div className="hero-banner hero-with-title">
-                <video
-                  key={hero}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  preload="auto"
-                  onCanPlay={() => setHeroReady(true)}
-                  onError={() => {
-                    setHero("");
-                    setHeroReady(true);
-                  }}
-                >
-                  <source src={`/api/studio/hero?f=webm&v=${hero}`} type="video/webm" />
-                  <source src={`/api/studio/hero?v=${hero}`} type="video/mp4" />
-                </video>
-                <div className="hero-veil" />
-                <div className="hero-content">
-                  <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
-                  <h1>From prompt to lifestyle.</h1>
-                  <p>One collection. Every image. Your creative direction.</p>
-                </div>
-                <button className="secondary hero-cta" onClick={newBatch} disabled={uploading}>
-                  <ImagePlus size={17} />
-                  New batch
-                </button>
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">BATCH</div>
+                <h1>{batch?.name ?? "Batch"}</h1>
+                <p>
+                  {sources.length} original{sources.length === 1 ? "" : "s"} · {tasks.length} image
+                  {tasks.length === 1 ? "" : "s"}
+                </p>
               </div>
-            ) : (
-              <div className="page-heading">
-                <div>
-                  <div className="eyebrow">PRODUCT PHOTOGRAPHY / WORKSPACE</div>
-                  <h1>From prompt to lifestyle.</h1>
-                  <p>One collection. Every image. Your creative direction.</p>
-                </div>
-                <button className="secondary" onClick={newBatch} disabled={uploading}>
-                  <ImagePlus size={17} />
-                  New batch
-                </button>
-              </div>
-            )}
+            </div>
 
             <ModeCards
               value={viewConfig.mode}

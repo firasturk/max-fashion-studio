@@ -19,7 +19,12 @@ function Thumbs({ b }: { b: Batch }) {
   return (
     <span className="nx-thumbs" aria-hidden="true">
       {(b.thumbs ?? []).map((t) => (
-        <img key={t} src={`/api/studio/file?batch=${b.id}&id=${t}&kind=result`} alt="" loading="lazy" />
+        <img
+          key={t}
+          src={`/api/studio/file?batch=${b.id}&id=${t}&kind=result`}
+          alt=""
+          loading="lazy"
+        />
       ))}
     </span>
   );
@@ -36,7 +41,6 @@ export default function PipelinePage({
   onDelete,
   onReview,
   onRefresh,
-  onUpload,
 }: {
   view: "running" | "delivered";
   batches: Batch[];
@@ -47,20 +51,25 @@ export default function PipelinePage({
   onDelete: (b: Batch) => void;
   onReview: () => void;
   onRefresh: () => Promise<void> | void;
-  onUpload: () => void;
 }) {
   const [acting, setActing] = useState<string | null>(null);
   const label = (b: Batch) => {
     const cfg = JSON.parse(b.config) as Config;
     if (isSkillCampaign(cfg.mode) || cfg.mode === "7")
-      return skills.find((s) => s.id === cfg.skill)?.title ?? modes.find((m) => m.id === cfg.mode)?.title ?? cfg.skill;
+      return (
+        skills.find((s) => s.id === cfg.skill)?.title ??
+        modes.find((m) => m.id === cfg.mode)?.title ??
+        cfg.skill
+      );
     return modes.find((m) => m.id === cfg.mode)?.title ?? cfg.mode;
   };
 
   async function toggle(b: Batch) {
     setActing(b.id);
     try {
-      await post(b.state === "running" ? "/api/studio/pause" : "/api/studio/start", { batch: b.id });
+      await post(b.state === "running" ? "/api/studio/pause" : "/api/studio/start", {
+        batch: b.id,
+      });
       await onRefresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "That did not work. Try again.");
@@ -76,7 +85,9 @@ export default function PipelinePage({
         <div className="nx-head">
           <div>
             <h1>Delivered</h1>
-            <p>Finished batches. Open one to download its ZIP or send an image back for another try.</p>
+            <p>
+              Finished batches. Open one to download its ZIP or send an image back for another try.
+            </p>
           </div>
         </div>
         {done.length ? (
@@ -118,7 +129,11 @@ export default function PipelinePage({
                     <td className="nx-muted">{when(b.updated)}</td>
                     <td>
                       <span className="nx-row nx-end">
-                        <button className="nx-btn nx-sm" disabled={busyId === b.id} onClick={() => onOpen(b.id)}>
+                        <button
+                          className="nx-btn nx-sm"
+                          disabled={busyId === b.id}
+                          onClick={() => onOpen(b.id)}
+                        >
                           {busyId === b.id ? "Opening…" : "Open"}
                         </button>
                         <button
@@ -137,8 +152,8 @@ export default function PipelinePage({
           </div>
         ) : (
           <div className="nx-empty">
-            <b>Nothing delivered yet</b>
-            A batch moves here when every image in it has been generated.
+            <b>Nothing delivered yet</b>A batch moves here when every image in it has been
+            generated.
           </div>
         )}
       </div>
@@ -155,11 +170,6 @@ export default function PipelinePage({
             Live batches. The studio retries rate limits and refusals by itself and only stops for
             billing problems.
           </p>
-        </div>
-        <div className="nx-right">
-          <button className="nx-btn" onClick={onUpload}>
-            Upload from your computer
-          </button>
         </div>
       </div>
       {open.length ? (
@@ -186,8 +196,16 @@ export default function PipelinePage({
                   )}
                   <span className="nx-row nx-end">
                     {total > 0 && (
-                      <button className="nx-btn nx-sm" disabled={acting === b.id} onClick={() => void toggle(b)}>
-                        {b.state === "running" ? "Pause" : b.state === "paused" ? "Resume" : "Start"}
+                      <button
+                        className="nx-btn nx-sm"
+                        disabled={acting === b.id}
+                        onClick={() => void toggle(b)}
+                      >
+                        {b.state === "running"
+                          ? "Pause"
+                          : b.state === "paused"
+                            ? "Resume"
+                            : "Start"}
                       </button>
                     )}
                     {ok + review > 0 && (
@@ -195,15 +213,25 @@ export default function PipelinePage({
                         Open in Review
                       </button>
                     )}
-                    <button className="nx-btn nx-sm" disabled={busyId === b.id} onClick={() => onOpen(b.id)}>
+                    <button
+                      className="nx-btn nx-sm"
+                      disabled={busyId === b.id}
+                      onClick={() => onOpen(b.id)}
+                    >
                       {busyId === b.id ? "Opening…" : "Open batch"}
                     </button>
-                    <button className="nx-btn nx-sm nx-quiet" disabled={b.state === "running"} onClick={() => onDelete(b)}>
+                    <button
+                      className="nx-btn nx-sm nx-quiet"
+                      disabled={b.state === "running"}
+                      onClick={() => onDelete(b)}
+                    >
                       Delete
                     </button>
                   </span>
                 </div>
-                {b.state === "paused" && b.last_error && <div className="nx-alert">{b.last_error}</div>}
+                {b.state === "paused" && b.last_error && (
+                  <div className="nx-alert">{b.last_error}</div>
+                )}
                 <div
                   className="nx-stack"
                   role="img"
@@ -235,7 +263,7 @@ export default function PipelinePage({
       ) : (
         <div className="nx-empty">
           <b>Nothing is running</b>
-          Approve a folder in the Inbox to start a batch, or upload photos from your computer.
+          Approve a folder in the Inbox to start a batch.
         </div>
       )}
     </div>

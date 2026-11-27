@@ -5837,3 +5837,9 @@ a.nx-btn {
 .nx-steps li.nx-sub::before {
   content: none;
 }
+.rail-clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
